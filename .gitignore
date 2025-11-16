@@ -14,7 +14,7 @@ venv/
 .env.*/
 
 # Data & logs
-data/
+/data/
 logs/
 
 # Node / frontend
