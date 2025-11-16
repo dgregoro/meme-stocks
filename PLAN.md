@@ -60,6 +60,16 @@ A web application for analyzing meme stocks using social sentiment (Reddit) and 
     - `GET /api/stocks/{symbol}/prices` using stored price data.
   - Later slices: analysis summary endpoint, notifications API, and paper trading API, plus WebSocket notifications.
 
+- **Milestone 5 – Frontend MVP (next)**  
+  - Set up React + Vite frontend scaffold.  
+  - Pages:  
+    - Dashboard: show `/api/analysis/daily` ranked list.  
+    - Stocks: list + simple detail (sentiment and latest prices).  
+    - Notifications: list unread from `/api/notifications`.  
+    - Paper trading: simple create trade form + portfolio summary.  
+  - API client: centralize backend calls, handle errors visibly (no silent failures).  
+  - Keep UI minimal but clean; prioritize clarity and error surfacing.
+
 - **Milestone 5 – Frontend MVP**
   Dashboard, stock detail views, notifications panel, and paper trading UI.
 

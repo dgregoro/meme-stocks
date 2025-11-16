@@ -26,6 +26,18 @@ uvicorn backend.app.main:app --reload
 
 Then open `http://127.0.0.1:8000/health` to confirm the service is running.
 
+### Frontend (Milestone 5 MVP)
+
+1. Configure API base if not default:
+   - Create `frontend/.env` with `VITE_API_BASE_URL=http://127.0.0.1:8000`
+2. Install and run dev server:
+```bash
+cd frontend
+npm install
+npm run dev
+```
+Open the printed URL (default `http://127.0.0.1:5173`).
+
 ## Meme Stocks Trading Application
 
 A Python backend for analyzing meme stocks using Reddit sentiment and price patterns.
