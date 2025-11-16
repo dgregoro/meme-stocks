@@ -19,6 +19,11 @@ class Settings(BaseSettings):
 
     database_url: str = "sqlite:///../data/app.db"
 
+    # Reddit API credentials
+    reddit_client_id: str | None = None
+    reddit_client_secret: str | None = None
+    reddit_user_agent: str = "meme-stocks-app/0.1"
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

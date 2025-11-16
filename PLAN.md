@@ -39,6 +39,18 @@ A web application for analyzing meme stocks using social sentiment (Reddit) and 
 - **Technology**: Python backend, web frontend
 - **No Broker Integration**: All trading is manual/external
 
+## Milestones
+
+- **Milestone 0 – Foundations & Test Framework**: FastAPI skeleton, config module, pytest + basic tests (**completed**).
+- **Milestone 1 – Data Layer & Models**: SQLAlchemy models and repositories with DB tests (**completed**).
+- **Milestone 2 – Data Ingestion (current)**:
+  - Implement Reddit and Yahoo data services (no direct DB coupling).
+  - Add tests with mocked external APIs.
+- **Milestone 3 – Analysis Engine**: Sentiment and price pattern analysis.
+- **Milestone 4 – API & Backend**: REST endpoints and WebSocket notifications.
+- **Milestone 5 – Frontend MVP**: Dashboard, stock details, notifications, paper trading UI.
+- **Milestone 6 – Background Jobs & Refinement**: Schedulers, performance, UX polish.
+
 ## Architecture
 
 ### High-Level Architecture
