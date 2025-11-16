@@ -18,6 +18,7 @@ venv/
 logs/
 test_api.db
 test_api_analysis.db
+test_notifications.db
 
 # Node / frontend
 node_modules/
