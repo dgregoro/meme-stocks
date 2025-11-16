@@ -50,13 +50,15 @@ A web application for analyzing meme stocks using social sentiment (Reddit) and 
 - **Milestone 2 – Data Ingestion** (**completed**)  
   Reddit and Yahoo data services (no direct DB coupling) with mocked external API tests.
 
-- **Milestone 3 – Analysis Engine (current)**  
-  - Implement sentiment analyzer as pure functions (keyword-based, weighted, time-decayed).  
-  - Implement price pattern / trend analyzer using historical OHLCV data.  
-  - Implement unusual activity detector (volume spikes, price moves, sentiment shifts) driven by configurable thresholds.
+- **Milestone 3 – Analysis Engine** (**completed**)  
+  Sentiment analyzer, price trend analyzer, and unusual activity detector implemented as pure, testable functions with configurable thresholds.
 
-- **Milestone 4 – API & Backend**  
-  REST endpoints for stocks, sentiment, price, analysis, notifications, and paper trading; WebSocket notifications.
+- **Milestone 4 – API & Backend (current)**  
+  - First slice:  
+    - `GET /api/stocks` and `GET /api/stocks/{symbol}` using repositories.  
+    - `GET /api/stocks/{symbol}/sentiment` using Reddit posts + sentiment analyzer.  
+    - `GET /api/stocks/{symbol}/prices` using stored price data.  
+  - Later slices: analysis summary endpoint, notifications API, and paper trading API, plus WebSocket notifications.
 
 - **Milestone 5 – Frontend MVP**  
   Dashboard, stock detail views, notifications panel, and paper trading UI.
@@ -764,6 +766,32 @@ All thresholds should be configurable via environment variables or config file:
 
 5. **Scalability**: SQLite may not scale for large datasets
    - Solution: Design for easy migration to PostgreSQL later
+
+## Tech Debt & Future Improvements
+
+This section tracks intentional shortcuts and areas to revisit later. Items here should be turned into concrete tasks when we enter the relevant milestone.
+
+### Current Tech Debt
+
+- **Sentiment analysis (Milestone 3)**  
+  - Uses a simple, hard-coded keyword list for positive/negative terms and only analyzes the post title.  
+  - Future work: move keywords into configuration, incorporate post body where available, and optionally plug in a more robust ML-based sentiment model.
+
+- **Price pattern analysis (Milestone 3)**  
+  - Currently only uses short/long simple moving averages on closing prices to classify trends.  
+  - Future work: add additional indicators (RSI, volume-based confirmation) and more nuanced pattern recognition.
+
+- **Unusual activity detection (Milestone 3)**  
+  - Only considers volume ratio, simple price move percent, and scalar sentiment shift; does not yet combine signals into a single composite alert.  
+  - Future work: implement combined-signal alerts as described in the Trading Strategies & Business Logic section, and expose per-signal thresholds more granularly if needed.
+
+- **Time handling & UTC (tests and services)**  
+  - Some components still use `datetime.utcnow()` either in code or tests, which raises deprecation warnings and mixes naive vs timezone-aware datetimes.  
+  - Future work: standardize on timezone-aware `datetime.now(datetime.UTC)` throughout services and tests, and ensure DB models and external data are consistent.
+
+- **Reddit ticker extraction**  
+  - `RedditPostData.stock_symbol` is currently left as an empty string in the ingestion service; actual ticker extraction logic is not yet implemented.  
+  - Future work: implement a dedicated ticker extraction module with clear rules and tests (e.g., regex-based detection, allowed-ticker lists).
 
 ## Next Steps
 

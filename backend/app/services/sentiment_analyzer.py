@@ -66,12 +66,17 @@ def calculate_weighted_sentiment(
     """
 
     if now is None:
+        # Use a timezone-aware UTC timestamp; if stored datetimes are naive,
+        # comparisons may fail and should be normalized at the persistence layer.
         now = datetime.now(timezone.utc)
 
     relevant_posts: list[HasRedditFields] = []
     cutoff = now - window
     for post in posts:
-        if post.collected_at >= cutoff:
+        collected_at = post.collected_at
+        if collected_at.tzinfo is None:
+            collected_at = collected_at.replace(tzinfo=timezone.utc)
+        if collected_at >= cutoff:
             relevant_posts.append(post)
 
     if not relevant_posts:
@@ -89,7 +94,10 @@ def calculate_weighted_sentiment(
     for post in relevant_posts:
         post_sentiment = analyze_post_sentiment(post.title)
         engagement_weight = log10(post.upvotes + post.comments + 1)
-        hours_old = max(0.0, (now - post.collected_at).total_seconds() / 3600.0)
+        collected_at = post.collected_at
+        if collected_at.tzinfo is None:
+            collected_at = collected_at.replace(tzinfo=timezone.utc)
+        hours_old = max(0.0, (now - collected_at).total_seconds() / 3600.0)
         time_weight = exp(-hours_old / 24.0)
         weight = engagement_weight * time_weight
 
