@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from .config import get_settings
 from .api import stocks as stocks_api
@@ -29,6 +30,16 @@ def create_app() -> FastAPI:
         """
 
         return {"status": "ok", "env": "local", "log_level": settings.log_level}
+
+    # CORS
+    origins = [o.strip() for o in settings.cors_allowed_origins.split(",") if o.strip()]
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=origins or ["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
     # API routers
     app.include_router(stocks_api.router)

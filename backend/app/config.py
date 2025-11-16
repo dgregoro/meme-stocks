@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     price_movement_threshold_pct: float = 5.0
     sentiment_shift_threshold: float = 0.3
 
+    # CORS
+    cors_allowed_origins: str = "http://127.0.0.1:5173,http://localhost:5173"
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
