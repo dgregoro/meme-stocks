@@ -1,0 +1,5 @@
+data/
+logs/
+dist/
+build/
+node_modules/

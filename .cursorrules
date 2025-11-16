@@ -1,0 +1,45 @@
+# High-level goals
+- Always keep work aligned with PLAN.md and the defined milestones.
+- Prefer explicit failures over silent behavior.
+- Always add or update tests when adding or changing backend logic.
+
+# Planning & scope
+- Before implementing features, read PLAN.md and identify the current milestone and subtask.
+- Do not add new features or endpoints that are not part of the current milestone unless:
+  - PLAN.md is updated to include them, and
+  - The change is clearly documented in a commit/description.
+- When unsure about scope, prefer asking the user to clarify rather than assuming behavior.
+
+# Testing
+- For each new service, repository, or API endpoint, add at least one corresponding test in backend/tests.
+- Do not remove tests without an explicit reason and a replacement or refactor.
+- Prefer small, deterministic units that are easy to test.
+- Use pytest as the default test framework.
+
+# Error handling
+- Never swallow exceptions silently; log and surface meaningful errors to the caller.
+- For external APIs (Reddit, Yahoo, etc.), handle:
+  - network failures,
+  - invalid/malformed responses,
+  - rate limiting,
+  explicitly and consistently.
+- When data is missing or incomplete, return a clear error or “no data” signal instead of fabricating defaults.
+
+# Configuration & thresholds
+- Do not hard-code API keys, secrets, or environment-dependent values.
+- Expose thresholds (e.g., sentiment, volume spike, price move) via configuration/constants, not magic numbers scattered in code.
+- Use environment variables (with sane defaults) read through a single config module.
+
+# Code organization & refactoring
+- Keep modules small and focused: services, repositories, models, and API routes should be clearly separated.
+- Avoid mixing business logic directly inside API route functions; instead, delegate to services.
+- Prefer pure functions for analysis logic (sentiment, indicators, scoring) to improve testability and refactorability.
+- If a change requires substantial restructuring, update PLAN.md or add a short “Refactor notes” section before proceeding.
+
+# Logging & observability
+- Log at least at error and warning levels for failures in external API calls and background jobs.
+- Do not log secrets or sensitive configuration values.
+
+# Frontend (when added)
+- Keep frontend API calls centralized in a dedicated client/service layer.
+- Handle API errors visibly in the UI; do not fail silently.
