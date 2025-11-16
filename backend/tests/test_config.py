@@ -20,6 +20,12 @@ def test_get_settings_uses_defaults_when_env_not_set(monkeypatch: pytest.MonkeyP
     assert settings.api_port == 8000
     assert settings.log_level == "INFO"
     assert settings.database_url.startswith("sqlite:///")
+    # Analysis thresholds should have sane defaults
+    assert settings.sentiment_positive_threshold == 0.3
+    assert settings.sentiment_negative_threshold == -0.2
+    assert settings.volume_spike_threshold == 2.0
+    assert settings.price_movement_threshold_pct == 5.0
+    assert settings.sentiment_shift_threshold == 0.3
 
 
 def test_settings_can_be_overridden_via_environment(monkeypatch: pytest.MonkeyPatch) -> None:

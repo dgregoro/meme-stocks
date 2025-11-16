@@ -24,6 +24,13 @@ class Settings(BaseSettings):
     reddit_client_secret: str | None = None
     reddit_user_agent: str = "meme-stocks-app/0.1"
 
+    # Analysis thresholds (can be tuned via environment)
+    sentiment_positive_threshold: float = 0.3
+    sentiment_negative_threshold: float = -0.2
+    volume_spike_threshold: float = 2.0
+    price_movement_threshold_pct: float = 5.0
+    sentiment_shift_threshold: float = 0.3
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

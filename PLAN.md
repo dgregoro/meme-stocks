@@ -41,15 +41,28 @@ A web application for analyzing meme stocks using social sentiment (Reddit) and 
 
 ## Milestones
 
-- **Milestone 0 – Foundations & Test Framework**: FastAPI skeleton, config module, pytest + basic tests (**completed**).
-- **Milestone 1 – Data Layer & Models**: SQLAlchemy models and repositories with DB tests (**completed**).
-- **Milestone 2 – Data Ingestion (current)**:
-  - Implement Reddit and Yahoo data services (no direct DB coupling).
-  - Add tests with mocked external APIs.
-- **Milestone 3 – Analysis Engine**: Sentiment and price pattern analysis.
-- **Milestone 4 – API & Backend**: REST endpoints and WebSocket notifications.
-- **Milestone 5 – Frontend MVP**: Dashboard, stock details, notifications, paper trading UI.
-- **Milestone 6 – Background Jobs & Refinement**: Schedulers, performance, UX polish.
+- **Milestone 0 – Foundations & Test Framework** (**completed**)  
+  FastAPI skeleton, config module, pytest + basic tests.
+
+- **Milestone 1 – Data Layer & Models** (**completed**)  
+  SQLAlchemy models (Stock, RedditPost, PriceData) and repositories with DB tests.
+
+- **Milestone 2 – Data Ingestion** (**completed**)  
+  Reddit and Yahoo data services (no direct DB coupling) with mocked external API tests.
+
+- **Milestone 3 – Analysis Engine (current)**  
+  - Implement sentiment analyzer as pure functions (keyword-based, weighted, time-decayed).  
+  - Implement price pattern / trend analyzer using historical OHLCV data.  
+  - Implement unusual activity detector (volume spikes, price moves, sentiment shifts) driven by configurable thresholds.
+
+- **Milestone 4 – API & Backend**  
+  REST endpoints for stocks, sentiment, price, analysis, notifications, and paper trading; WebSocket notifications.
+
+- **Milestone 5 – Frontend MVP**  
+  Dashboard, stock detail views, notifications panel, and paper trading UI.
+
+- **Milestone 6 – Background Jobs & Refinement**  
+  Schedulers for data collection and EOD analysis, performance optimizations, and UX polish.
 
 ## Architecture
 
