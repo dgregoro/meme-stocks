@@ -45,7 +45,9 @@ def test_list_and_get_stocks() -> None:
     client, db = build_test_app_with_db()
 
     # Seed one stock
-    stock = Stock(symbol="GME", name="GameStop", sector="Retail", market_cap=1_000_000_000)
+    stock = Stock(
+        symbol="GME", name="GameStop", sector="Retail", market_cap=1_000_000_000
+    )
     db.add(stock)
     db.commit()
 
@@ -121,5 +123,3 @@ def test_get_sentiment_and_prices_for_stock() -> None:
     assert isinstance(p_data, list)
     assert len(p_data) == 1
     assert p_data[0]["close"] == 11.5
-
-

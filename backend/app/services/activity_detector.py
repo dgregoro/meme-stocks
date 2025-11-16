@@ -1,10 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import timedelta
 
 from backend.app.config import get_settings
-from backend.app.services.pattern_analyzer import PriceTrend
 from backend.app.services.sentiment_analyzer import SentimentSummary
 
 
@@ -78,5 +76,3 @@ def detect_sentiment_shift(
         severity=severity,
         message=f"Sentiment shifted {direction} by {delta:.2f}",
     )
-
-

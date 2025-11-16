@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from typing import List
 
 from sqlalchemy.orm import Session
@@ -47,9 +47,7 @@ def build_price_bars_for_stock(
     return bars
 
 
-def compute_composite_score(
-    sentiment: SentimentSummary, trend: PriceTrend
-) -> float:
+def compute_composite_score(sentiment: SentimentSummary, trend: PriceTrend) -> float:
     """Combine sentiment and trend into a simple composite score [0, 1].
 
     This is intentionally simple and transparent:
@@ -116,5 +114,3 @@ def run_daily_analysis(
     # Sort by composite_score descending
     rows.sort(key=lambda r: r.composite_score, reverse=True)
     return rows
-
-

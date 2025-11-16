@@ -11,7 +11,6 @@ from backend.app.data.database import get_session
 from backend.app.data.repositories.price_data_repo import PriceDataRepository
 from backend.app.data.repositories.reddit_post_repo import RedditPostRepository
 from backend.app.data.repositories.stock_repo import StockRepository
-from backend.app.models.price_data import PriceData
 from backend.app.services.sentiment_analyzer import (
     SentimentSummary,
     calculate_weighted_sentiment,
@@ -43,12 +42,18 @@ class PricePointResponse(BaseModel):
 
 
 @router.get("/{symbol}/sentiment", response_model=SentimentResponse)
-def get_stock_sentiment(symbol: str, db: Session = Depends(get_session)) -> SentimentResponse:
+def get_stock_sentiment(
+    symbol: str, db: Session = Depends(get_session)
+) -> SentimentResponse:
     # Ensure stock exists; keep behavior explicit.
     if StockRepository(db).get(symbol) is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail={"error": True, "error_type": "NotFoundError", "message": "Stock not found"},
+            detail={
+                "error": True,
+                "error_type": "NotFoundError",
+                "message": "Stock not found",
+            },
         )
 
     reddit_repo = RedditPostRepository(db)
@@ -70,11 +75,17 @@ def get_stock_sentiment(symbol: str, db: Session = Depends(get_session)) -> Sent
 
 
 @router.get("/{symbol}/prices", response_model=List[PricePointResponse])
-def get_stock_prices(symbol: str, db: Session = Depends(get_session)) -> List[PricePointResponse]:
+def get_stock_prices(
+    symbol: str, db: Session = Depends(get_session)
+) -> List[PricePointResponse]:
     if StockRepository(db).get(symbol) is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail={"error": True, "error_type": "NotFoundError", "message": "Stock not found"},
+            detail={
+                "error": True,
+                "error_type": "NotFoundError",
+                "message": "Stock not found",
+            },
         )
 
     price_repo = PriceDataRepository(db)
@@ -90,5 +101,3 @@ def get_stock_prices(symbol: str, db: Session = Depends(get_session)) -> List[Pr
         )
         for p in prices
     ]
-
-

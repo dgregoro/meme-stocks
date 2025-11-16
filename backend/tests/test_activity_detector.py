@@ -65,5 +65,3 @@ def test_detect_sentiment_shift_requires_previous_and_scores() -> None:
     assert isinstance(sig, ActivitySignal)
     assert sig.kind == "sentiment_shift"
     assert sig.severity in {"medium", "high"}
-
-

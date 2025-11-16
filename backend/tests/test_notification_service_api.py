@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timezone
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -107,5 +107,3 @@ def test_generate_notifications_and_list_via_api() -> None:
     assert isinstance(data, list)
     assert len(data) == len(notifs)
     assert {n["stock_symbol"] for n in data} == {symbol}
-
-

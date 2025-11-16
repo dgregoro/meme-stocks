@@ -7,4 +7,3 @@ class DataAccessError(RuntimeError):
 
 class ExternalAPIError(RuntimeError):
     """Raised when an external API call (Reddit, Yahoo, etc.) fails."""
-

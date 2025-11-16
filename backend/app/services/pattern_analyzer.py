@@ -50,5 +50,3 @@ def analyze_price_trend(
         direction = "sideways"
 
     return PriceTrend(direction=direction, sma_short=sma_s, sma_long=sma_l)
-
-

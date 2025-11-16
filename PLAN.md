@@ -41,29 +41,29 @@ A web application for analyzing meme stocks using social sentiment (Reddit) and 
 
 ## Milestones
 
-- **Milestone 0 – Foundations & Test Framework** (**completed**)  
+- **Milestone 0 – Foundations & Test Framework** (**completed**)
   FastAPI skeleton, config module, pytest + basic tests.
 
-- **Milestone 1 – Data Layer & Models** (**completed**)  
+- **Milestone 1 – Data Layer & Models** (**completed**)
   SQLAlchemy models (Stock, RedditPost, PriceData) and repositories with DB tests.
 
-- **Milestone 2 – Data Ingestion** (**completed**)  
+- **Milestone 2 – Data Ingestion** (**completed**)
   Reddit and Yahoo data services (no direct DB coupling) with mocked external API tests.
 
-- **Milestone 3 – Analysis Engine** (**completed**)  
+- **Milestone 3 – Analysis Engine** (**completed**)
   Sentiment analyzer, price trend analyzer, and unusual activity detector implemented as pure, testable functions with configurable thresholds.
 
-- **Milestone 4 – API & Backend (current)**  
-  - First slice:  
-    - `GET /api/stocks` and `GET /api/stocks/{symbol}` using repositories.  
-    - `GET /api/stocks/{symbol}/sentiment` using Reddit posts + sentiment analyzer.  
-    - `GET /api/stocks/{symbol}/prices` using stored price data.  
+- **Milestone 4 – API & Backend (current)**
+  - First slice:
+    - `GET /api/stocks` and `GET /api/stocks/{symbol}` using repositories.
+    - `GET /api/stocks/{symbol}/sentiment` using Reddit posts + sentiment analyzer.
+    - `GET /api/stocks/{symbol}/prices` using stored price data.
   - Later slices: analysis summary endpoint, notifications API, and paper trading API, plus WebSocket notifications.
 
-- **Milestone 5 – Frontend MVP**  
+- **Milestone 5 – Frontend MVP**
   Dashboard, stock detail views, notifications panel, and paper trading UI.
 
-- **Milestone 6 – Background Jobs & Refinement**  
+- **Milestone 6 – Background Jobs & Refinement**
   Schedulers for data collection and EOD analysis, performance optimizations, and UX polish.
 
 ## Architecture
@@ -190,12 +190,12 @@ The application will identify trading opportunities using three primary strategi
   - Weight by engagement: `weight = log(upvotes + comments + 1)`
   - Score range: -1 (very negative) to +1 (very positive)
   - Formula: `sentiment_score = weighted_average(post_sentiments)`
-  
+
 - **Momentum Detection**:
   - Track sentiment change over time windows (1h, 4h, 24h)
   - Calculate momentum: `momentum = (current_sentiment - previous_sentiment) / time_delta`
   - Identify accelerating momentum: `acceleration = momentum_change_rate`
-  
+
 - **Signal Generation**:
   - **Bullish Signal**: Sentiment > 0.3 AND momentum > 0.1 AND mention_count increasing
   - **Bearish Signal**: Sentiment < -0.2 AND momentum < -0.1
@@ -210,13 +210,13 @@ The application will identify trading opportunities using three primary strategi
   - **RSI (Relative Strength Index)**: 14-period
   - **Volume Analysis**: Compare current volume to 20-day average
   - **Price Channels**: Identify support/resistance levels
-  
+
 - **Pattern Detection**:
   - **Breakout Above Resistance**: Price breaks above recent high with volume > 1.5x average
   - **Breakdown Below Support**: Price breaks below recent low with volume > 1.5x average
   - **RSI Divergence**: Price makes new high/low but RSI doesn't (potential reversal)
   - **Volume Spike**: Volume > 2x average (potential accumulation/distribution)
-  
+
 - **Signal Generation**:
   - **Bullish**: Price > SMA20 > SMA50 AND RSI > 50 AND volume increasing
   - **Bearish**: Price < SMA20 < SMA50 AND RSI < 50 AND volume increasing
@@ -229,12 +229,12 @@ The application will identify trading opportunities using three primary strategi
 - **Alignment Scoring**:
   - Calculate alignment score: `alignment = sentiment_score * price_trend`
   - Where `price_trend` = +1 (uptrend), -1 (downtrend), 0 (sideways)
-  
+
 - **Signal Strength**:
   - **Strong Buy**: Positive sentiment + bullish price pattern + high volume
   - **Strong Sell**: Negative sentiment + bearish price pattern + high volume
   - **Weak Signal**: Sentiment and price patterns conflict
-  
+
 - **Confidence Score**:
   ```
   confidence = (sentiment_strength * 0.4) + (price_pattern_strength * 0.4) + (volume_confirmation * 0.2)
@@ -252,12 +252,12 @@ The application will identify trading opportunities using three primary strategi
    - Positive keywords: "buy", "moon", "hold", "bullish", "gains", "profit"
    - Negative keywords: "sell", "crash", "bearish", "loss", "dump", "scam"
    - Neutral: Default if no strong indicators
-   
+
 2. **Engagement Weighting**:
    - Higher engagement = more reliable signal
    - Formula: `weight = log10(upvotes + comments + 1)`
    - Prevents single high-engagement post from dominating
-   
+
 3. **Time Decay**:
    - Recent posts weighted more heavily
    - Decay factor: `weight *= exp(-hours_old / 24)`
@@ -267,25 +267,25 @@ The application will identify trading opportunities using three primary strategi
 ```python
 def calculate_sentiment_score(stock_symbol, time_window='24h'):
     posts = get_posts_in_window(stock_symbol, time_window)
-    
+
     if not posts:
         return None  # Explicit: no data = no score
-    
+
     total_weighted_sentiment = 0
     total_weight = 0
-    
+
     for post in posts:
         post_sentiment = analyze_post_sentiment(post.text)
         engagement_weight = log10(post.upvotes + post.comments + 1)
         time_weight = exp(-post.hours_old / 24)
         weight = engagement_weight * time_weight
-        
+
         total_weighted_sentiment += post_sentiment * weight
         total_weight += weight
-    
+
     if total_weight == 0:
         return 0.0  # Explicit: avoid division by zero
-    
+
     return total_weighted_sentiment / total_weight
 ```
 
@@ -296,7 +296,7 @@ def calculate_sentiment_score(stock_symbol, time_window='24h'):
    - SMA20: Average of last 20 closing prices
    - Used to identify trend direction
    - Price above SMA = uptrend, below = downtrend
-   
+
 2. **RSI Calculation**:
    ```
    RSI = 100 - (100 / (1 + RS))
@@ -322,22 +322,22 @@ def detect_price_pattern(price_data):
     sma50 = calculate_sma(price_data, 50)
     rsi = calculate_rsi(price_data, 14)
     volume_ratio = current_volume / avg_volume_20d
-    
+
     # Breakout pattern
     if price > resistance_level and volume_ratio > 1.5:
         return "breakout", 0.8, "bullish"
-    
+
     # Breakdown pattern
     if price < support_level and volume_ratio > 1.5:
         return "breakdown", 0.8, "bearish"
-    
+
     # Trend continuation
     if price > sma20 > sma50 and rsi > 50:
         return "uptrend", 0.6, "bullish"
-    
+
     if price < sma20 < sma50 and rsi < 50:
         return "downtrend", 0.6, "bearish"
-    
+
     return "sideways", 0.3, "neutral"
 ```
 
@@ -360,7 +360,7 @@ def detect_price_pattern(price_data):
 2. **Price Movement Alert**:
    ```python
    price_change_pct = (current_price - previous_close) / previous_close * 100
-   
+
    if abs(price_change_pct) > PRICE_MOVEMENT_THRESHOLD:
        create_notification(
            type="price_movement",
@@ -374,7 +374,7 @@ def detect_price_pattern(price_data):
 3. **Sentiment Shift Alert**:
    ```python
    sentiment_change = current_sentiment - sentiment_24h_ago
-   
+
    if abs(sentiment_change) > SENTIMENT_SHIFT_THRESHOLD:
        direction = "positive" if sentiment_change > 0 else "negative"
        create_notification(
@@ -405,24 +405,24 @@ def detect_price_pattern(price_data):
    ```python
    def rank_stocks(stocks, date):
        rankings = []
-       
+
        for stock in stocks:
            # Get latest data
            sentiment = get_latest_sentiment(stock.symbol)
            price_data = get_price_data(stock.symbol, date)
            patterns = detect_price_pattern(price_data)
-           
+
            # Calculate composite score
            sentiment_score = normalize(sentiment.score, -1, 1)  # 0-1 range
            price_score = calculate_price_score(patterns)  # 0-1 range
            volume_score = normalize(volume_ratio, 0, 3)  # 0-1 range
-           
+
            composite_score = (
                sentiment_score * 0.4 +
                price_score * 0.4 +
                volume_score * 0.2
            )
-           
+
            rankings.append({
                'symbol': stock.symbol,
                'score': composite_score,
@@ -430,7 +430,7 @@ def detect_price_pattern(price_data):
                'price_trend': patterns.direction,
                'confidence': calculate_confidence(sentiment, patterns)
            })
-       
+
        return sorted(rankings, key=lambda x: x['score'], reverse=True)
    ```
 
@@ -773,24 +773,24 @@ This section tracks intentional shortcuts and areas to revisit later. Items here
 
 ### Current Tech Debt
 
-- **Sentiment analysis (Milestone 3)**  
-  - Uses a simple, hard-coded keyword list for positive/negative terms and only analyzes the post title.  
+- **Sentiment analysis (Milestone 3)**
+  - Uses a simple, hard-coded keyword list for positive/negative terms and only analyzes the post title.
   - Future work: move keywords into configuration, incorporate post body where available, and optionally plug in a more robust ML-based sentiment model.
 
-- **Price pattern analysis (Milestone 3)**  
-  - Currently only uses short/long simple moving averages on closing prices to classify trends.  
+- **Price pattern analysis (Milestone 3)**
+  - Currently only uses short/long simple moving averages on closing prices to classify trends.
   - Future work: add additional indicators (RSI, volume-based confirmation) and more nuanced pattern recognition.
 
-- **Unusual activity detection (Milestone 3)**  
-  - Only considers volume ratio, simple price move percent, and scalar sentiment shift; does not yet combine signals into a single composite alert.  
+- **Unusual activity detection (Milestone 3)**
+  - Only considers volume ratio, simple price move percent, and scalar sentiment shift; does not yet combine signals into a single composite alert.
   - Future work: implement combined-signal alerts as described in the Trading Strategies & Business Logic section, and expose per-signal thresholds more granularly if needed.
 
-- **Time handling & UTC (tests and services)**  
-  - Some components still use `datetime.utcnow()` either in code or tests, which raises deprecation warnings and mixes naive vs timezone-aware datetimes.  
+- **Time handling & UTC (tests and services)**
+  - Some components still use `datetime.utcnow()` either in code or tests, which raises deprecation warnings and mixes naive vs timezone-aware datetimes.
   - Future work: standardize on timezone-aware `datetime.now(datetime.UTC)` throughout services and tests, and ensure DB models and external data are consistent.
 
-- **Reddit ticker extraction**  
-  - `RedditPostData.stock_symbol` is currently left as an empty string in the ingestion service; actual ticker extraction logic is not yet implemented.  
+- **Reddit ticker extraction**
+  - `RedditPostData.stock_symbol` is currently left as an empty string in the ingestion service; actual ticker extraction logic is not yet implemented.
   - Future work: implement a dedicated ticker extraction module with clear rules and tests (e.g., regex-based detection, allowed-ticker lists).
 
 ## Next Steps
@@ -803,4 +803,3 @@ This section tracks intentional shortcuts and areas to revisit later. Items here
 ---
 
 **Note**: This plan is designed to be iterative. We can adjust features and priorities as we build and learn.
-

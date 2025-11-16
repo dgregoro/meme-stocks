@@ -24,7 +24,9 @@ class RedditPostRepository:
         except SQLAlchemyError as exc:  # pragma: no cover
             raise DataAccessError("Failed to add reddit post") from exc
 
-    def list_for_stock(self, symbol: str, since: datetime | None = None) -> Sequence[RedditPost]:
+    def list_for_stock(
+        self, symbol: str, since: datetime | None = None
+    ) -> Sequence[RedditPost]:
         stmt = select(RedditPost).where(RedditPost.stock_symbol == symbol)
         if since is not None:
             stmt = stmt.where(RedditPost.collected_at >= since)

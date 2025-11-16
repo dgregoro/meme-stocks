@@ -5,7 +5,6 @@ from datetime import datetime, timedelta, timezone
 from typing import Iterable, List
 
 import praw
-from praw.models import Submission
 
 from backend.app.config import get_settings
 from backend.app.utils.errors import ExternalAPIError
@@ -46,7 +45,9 @@ class RedditService:
                     user_agent=settings.reddit_user_agent,
                     check_for_async=False,
                 )
-            except Exception as exc:  # pragma: no cover - exercised via higher-level tests
+            except (
+                Exception
+            ) as exc:  # pragma: no cover - exercised via higher-level tests
                 raise ExternalAPIError("Failed to initialize Reddit client") from exc
 
         self._client = client
@@ -99,5 +100,3 @@ class RedditService:
                 ) from exc
 
         return results
-
-

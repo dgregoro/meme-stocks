@@ -24,7 +24,9 @@ class NotificationResponse(BaseModel):
 
 
 @router.get("", response_model=List[NotificationResponse])
-def list_notifications(db: Session = Depends(get_session)) -> List[NotificationResponse]:
+def list_notifications(
+    db: Session = Depends(get_session),
+) -> List[NotificationResponse]:
     repo = NotificationRepository(db)
     notifications = repo.list_unread()
     return [
@@ -39,5 +41,3 @@ def list_notifications(db: Session = Depends(get_session)) -> List[NotificationR
         )
         for n in notifications
     ]
-
-

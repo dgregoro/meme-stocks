@@ -4,12 +4,19 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from backend.app.services.reddit_service import RedditPostData, RedditService
+from backend.app.services.reddit_service import RedditService
 from backend.app.utils.errors import ExternalAPIError
 
 
 class DummySubmission:
-    def __init__(self, id: str, created_utc: float, title: str = "t", score: int = 0, num_comments: int = 0):
+    def __init__(
+        self,
+        id: str,
+        created_utc: float,
+        title: str = "t",
+        score: int = 0,
+        num_comments: int = 0,
+    ):
         self.id = id
         self.created_utc = created_utc
         self.title = title
@@ -41,7 +48,9 @@ class DummyRedditClient:
 def test_reddit_service_fetch_recent_posts_filters_by_max_age() -> None:
     # Use a fixed reference time to make this test deterministic.
     now = datetime(2024, 1, 2, 12, 0, tzinfo=timezone.utc)
-    recent = DummySubmission(id="recent", created_utc=(now - timedelta(hours=1)).timestamp())
+    recent = DummySubmission(
+        id="recent", created_utc=(now - timedelta(hours=1)).timestamp()
+    )
     old = DummySubmission(id="old", created_utc=(now - timedelta(days=10)).timestamp())
 
     client = DummyRedditClient({"wallstreetbets": DummySubreddit([recent, old])})
@@ -82,5 +91,3 @@ def test_reddit_service_raises_external_api_error_on_client_failure() -> None:
 
     with pytest.raises(ExternalAPIError):
         service.fetch_recent_posts(["wallstreetbets"])
-
-

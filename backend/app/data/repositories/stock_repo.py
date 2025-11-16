@@ -20,7 +20,9 @@ class StockRepository:
         stmt = select(Stock).where(Stock.symbol == symbol)
         try:
             return self._session.execute(stmt).scalar_one_or_none()
-        except SQLAlchemyError as exc:  # pragma: no cover - exercised via higher-level tests
+        except (
+            SQLAlchemyError
+        ) as exc:  # pragma: no cover - exercised via higher-level tests
             raise DataAccessError("Failed to fetch stock") from exc
 
     def list(self) -> Sequence[Stock]:

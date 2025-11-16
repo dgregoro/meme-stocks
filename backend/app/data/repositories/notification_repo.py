@@ -34,5 +34,3 @@ class NotificationRepository:
             return list(self._session.execute(stmt).scalars().all())
         except SQLAlchemyError as exc:  # pragma: no cover
             raise DataAccessError("Failed to list notifications") from exc
-
-

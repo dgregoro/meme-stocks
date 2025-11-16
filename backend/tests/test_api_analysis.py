@@ -113,5 +113,3 @@ def test_daily_analysis_ranks_stocks_by_composite_score() -> None:
     assert data[0]["symbol"] == "GME"
     assert data[1]["symbol"] == "AMC"
     assert data[0]["composite_score"] >= data[1]["composite_score"]
-
-

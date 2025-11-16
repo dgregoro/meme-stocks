@@ -6,6 +6,7 @@ from .config import get_settings
 from .api import stocks as stocks_api
 from .api import sentiment_price as sentiment_price_api
 from .api import analysis as analysis_api
+from .api import notifications as notifications_api
 
 
 def create_app() -> FastAPI:
@@ -32,6 +33,7 @@ def create_app() -> FastAPI:
     app.include_router(stocks_api.router)
     app.include_router(sentiment_price_api.router)
     app.include_router(analysis_api.router)
+    app.include_router(notifications_api.router)
 
     return app
 

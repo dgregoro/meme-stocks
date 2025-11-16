@@ -39,7 +39,9 @@ class YahooFinanceService:
             ticker = yf.Ticker(symbol)
             history: pd.DataFrame = ticker.history(start=start, end=end)
         except Exception as exc:  # pragma: no cover - network/remote errors
-            raise ExternalAPIError(f"Failed to fetch historical prices for {symbol}") from exc
+            raise ExternalAPIError(
+                f"Failed to fetch historical prices for {symbol}"
+            ) from exc
 
         if history.empty:
             # Explicitly signal "no data" by returning an empty list; callers can decide
@@ -82,5 +84,3 @@ class YahooFinanceService:
             return None
 
         return history[-1]
-
-

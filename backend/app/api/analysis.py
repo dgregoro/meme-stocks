@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from backend.app.data.database import get_session
-from backend.app.services.analysis_service import StockAnalysisRow, run_daily_analysis
+from backend.app.services.analysis_service import run_daily_analysis
 
 
 router = APIRouter(prefix="/api/analysis", tags=["analysis"])
@@ -22,7 +22,9 @@ class StockAnalysisResponse(BaseModel):
 
 
 @router.get("/daily", response_model=List[StockAnalysisResponse])
-def get_daily_analysis(db: Session = Depends(get_session)) -> List[StockAnalysisResponse]:
+def get_daily_analysis(
+    db: Session = Depends(get_session),
+) -> List[StockAnalysisResponse]:
     rows = run_daily_analysis(db)
     return [
         StockAnalysisResponse(
@@ -34,5 +36,3 @@ def get_daily_analysis(db: Session = Depends(get_session)) -> List[StockAnalysis
         )
         for r in rows
     ]
-
-

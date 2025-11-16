@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+import datetime as dt
 
 from sqlalchemy import String, Integer, Date, DateTime, Float, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
@@ -16,13 +16,13 @@ class PriceData(Base):
         String(16), ForeignKey("stocks.symbol"), index=True
     )
 
-    date: Mapped[date] = mapped_column(Date, index=True)
+    date: Mapped[dt.date] = mapped_column(Date, index=True)
     open: Mapped[float] = mapped_column(Float)
     high: Mapped[float] = mapped_column(Float)
     low: Mapped[float] = mapped_column(Float)
     close: Mapped[float] = mapped_column(Float)
     volume: Mapped[int] = mapped_column(Integer)
 
-    timestamp: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=datetime.utcnow
+    timestamp: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), default=dt.datetime.utcnow
     )

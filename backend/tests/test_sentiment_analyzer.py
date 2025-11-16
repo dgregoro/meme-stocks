@@ -66,5 +66,3 @@ def test_classify_sentiment_uses_thresholds() -> None:
     assert classify_sentiment(0.5) == "positive"
     assert classify_sentiment(-0.5) == "negative"
     assert classify_sentiment(0.0) == "neutral"
-
-

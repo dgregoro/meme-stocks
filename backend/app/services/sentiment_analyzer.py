@@ -133,5 +133,3 @@ def classify_sentiment(score: float | None) -> str:
     if score <= settings.sentiment_negative_threshold:
         return "negative"
     return "neutral"
-
-

@@ -38,8 +38,10 @@ def get_stock(symbol: str, db: Session = Depends(get_session)) -> StockResponse:
     if stock is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail={"error": True, "error_type": "NotFoundError", "message": "Stock not found"},
+            detail={
+                "error": True,
+                "error_type": "NotFoundError",
+                "message": "Stock not found",
+            },
         )
     return StockResponse.model_validate(stock)
-
-

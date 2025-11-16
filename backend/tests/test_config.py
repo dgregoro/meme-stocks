@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-import os
-
 import pytest
 
 from backend.app.config import Settings, get_settings
 
 
-def test_get_settings_uses_defaults_when_env_not_set(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_get_settings_uses_defaults_when_env_not_set(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     # Ensure related environment variables are cleared
     monkeypatch.delenv("API_HOST", raising=False)
     monkeypatch.delenv("API_PORT", raising=False)
@@ -28,7 +28,9 @@ def test_get_settings_uses_defaults_when_env_not_set(monkeypatch: pytest.MonkeyP
     assert settings.sentiment_shift_threshold == 0.3
 
 
-def test_settings_can_be_overridden_via_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_settings_can_be_overridden_via_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setenv("API_HOST", "0.0.0.0")
     monkeypatch.setenv("API_PORT", "9000")
     monkeypatch.setenv("LOG_LEVEL", "DEBUG")

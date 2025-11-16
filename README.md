@@ -28,7 +28,7 @@ Then open `http://127.0.0.1:8000/health` to confirm the service is running.
 
 ## Meme Stocks Trading Application
 
-A Python backend for analyzing meme stocks using Reddit sentiment and price patterns.  
+A Python backend for analyzing meme stocks using Reddit sentiment and price patterns.
 The project is organized around milestones defined in `PLAN.md` and aims to surface
 unusual activity and trading signals for manual decision making (no live broker
 integration).
@@ -128,7 +128,7 @@ The server will expose:
 Interactive API docs will be available at `/docs` and `/redoc` once the app is
 running.
 
-### Running tests
+ ### Running tests
 
 The project uses **pytest** with a fairly comprehensive test suite under
 `backend/tests/`.
@@ -147,6 +147,28 @@ Tests include:
 - Analysis logic (sentiment, patterns, activity detection).
 - API endpoints implemented so far.
 
+ ### Git pre-commit hooks
+
+ This repository includes a `.pre-commit-config.yaml` configured with:
+
+ - **Core checks**: large-file detection, merge-conflict markers, whitespace fixes.
+ - **Formatting**: `black` (Python code formatter).
+ - **Linting**: `flake8`.
+ - **Type checking**: `mypy`.
+
+ To enable the hooks locally:
+
+ ```bash
+ pip install pre-commit
+ pre-commit install
+ ```
+
+ You can also run all hooks against the entire codebase manually:
+
+ ```bash
+ pre-commit run --all-files
+ ```
+
 ### Development guidelines
 
 - **Follow `PLAN.md`** for milestones and scope; avoid adding endpoints or
@@ -158,5 +180,3 @@ Tests include:
 
 For more details on trading strategies, thresholds, and future milestones, see
 `PLAN.md`.
-
-

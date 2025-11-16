@@ -22,5 +22,3 @@ class Notification(Base):
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
     read: Mapped[bool] = mapped_column(Boolean, default=False)
-
-

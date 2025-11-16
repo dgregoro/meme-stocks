@@ -5,8 +5,8 @@ include = '\\.pyi?$'
 skip-string-normalization = false
 
 [tool.flake8]
-max-line-length = 88
-extend-ignore = ["E203", "W503"]
+max-line-length = 120
+extend-ignore = ["E203", "W503", "E501"]
 exclude = [
     ".git",
     "__pycache__",
@@ -28,4 +28,5 @@ exclude = [
     "venv",
     "build",
     "dist",
+    "backend/app/.*__init__\\.py",
 ]

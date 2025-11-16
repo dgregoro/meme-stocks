@@ -11,12 +11,14 @@ from backend.app.data.repositories.reddit_post_repo import RedditPostRepository
 from backend.app.data.repositories.stock_repo import StockRepository
 from backend.app.models.notification import Notification
 from backend.app.services.activity_detector import (
-    ActivitySignal,
     detect_price_movement,
     detect_sentiment_shift,
     detect_volume_spike,
 )
-from backend.app.services.sentiment_analyzer import SentimentSummary, calculate_weighted_sentiment
+from backend.app.services.sentiment_analyzer import (
+    SentimentSummary,
+    calculate_weighted_sentiment,
+)
 
 
 def generate_notifications_for_stock(db: Session, symbol: str) -> List[Notification]:
@@ -87,7 +89,6 @@ def generate_notifications_for_stock(db: Session, symbol: str) -> List[Notificat
                 window=current_summary.window,
                 calculated_at=current_summary.calculated_at - current_summary.window,
             )
-            from backend.app.services.activity_detector import detect_sentiment_shift
 
             s_signal = detect_sentiment_shift(current_summary, previous_summary)
             if s_signal is not None:
@@ -101,5 +102,3 @@ def generate_notifications_for_stock(db: Session, symbol: str) -> List[Notificat
                 notifications.append(n)
 
     return notifications
-
-

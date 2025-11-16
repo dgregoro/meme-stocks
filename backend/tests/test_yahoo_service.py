@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date
 
 import pandas as pd
 
@@ -29,7 +29,9 @@ def test_yahoo_service_returns_empty_list_when_no_data(monkeypatch) -> None:
     monkeypatch.setattr(yf, "Ticker", fake_ticker)  # type: ignore[arg-type]
 
     service = YahooFinanceService()
-    prices = service.fetch_historical_prices("GME", start=date(2024, 1, 1), end=date(2024, 1, 2))
+    prices = service.fetch_historical_prices(
+        "GME", start=date(2024, 1, 1), end=date(2024, 1, 2)
+    )
 
     assert prices == []
 
@@ -55,7 +57,9 @@ def test_yahoo_service_parses_valid_history(monkeypatch) -> None:
     monkeypatch.setattr(yf, "Ticker", fake_ticker)  # type: ignore[arg-type]
 
     service = YahooFinanceService()
-    prices = service.fetch_historical_prices("GME", start=date(2024, 1, 1), end=date(2024, 1, 2))
+    prices = service.fetch_historical_prices(
+        "GME", start=date(2024, 1, 1), end=date(2024, 1, 2)
+    )
 
     assert len(prices) == 1
     bar = prices[0]
@@ -75,11 +79,11 @@ def test_yahoo_service_raises_external_api_error_on_failure(monkeypatch) -> None
     service = YahooFinanceService()
 
     try:
-        service.fetch_historical_prices("GME", start=date(2024, 1, 1), end=date(2024, 1, 2))
+        service.fetch_historical_prices(
+            "GME", start=date(2024, 1, 1), end=date(2024, 1, 2)
+        )
     except ExternalAPIError:
         # expected path
         return
 
     assert False, "Expected ExternalAPIError"
-
-

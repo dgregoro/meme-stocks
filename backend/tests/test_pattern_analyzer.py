@@ -44,5 +44,3 @@ def test_analyze_price_trend_downtrend_when_short_sma_below_long() -> None:
     assert trend.sma_short is not None
     assert trend.sma_long is not None
     assert trend.sma_short < trend.sma_long
-
-
