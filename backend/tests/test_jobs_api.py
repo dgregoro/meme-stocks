@@ -44,8 +44,14 @@ def test_trigger_reddit_collection(test_app):
     """Test manual Reddit collection endpoint."""
     app, mock_scheduler = test_app
 
-    # Mock the collection method
-    mock_scheduler._collect_reddit_data = MagicMock()
+    # Mock the collection method to return stats
+    mock_scheduler._collect_reddit_data = MagicMock(
+        return_value={
+            "posts_fetched": 10,
+            "posts_with_tickers": 5,
+            "posts_saved": 3,
+        }
+    )
 
     client = TestClient(app)
     response = client.post("/api/jobs/reddit-collection")
@@ -54,6 +60,11 @@ def test_trigger_reddit_collection(test_app):
     data = response.json()
     assert data["job_name"] == "reddit_collection"
     assert data["status"] == "success"
+    assert data["stats"] == {
+        "posts_fetched": 10,
+        "posts_with_tickers": 5,
+        "posts_saved": 3,
+    }
     mock_scheduler._collect_reddit_data.assert_called_once()
 
 

@@ -76,7 +76,7 @@ class SchedulerService:
             last_reddit = ensure_timezone_aware(job_repo.get_last_run("reddit_collection"))
             if last_reddit is None or (now - last_reddit).total_seconds() > 3600:
                 logger.info("Catching up on Reddit collection...")
-                self._collect_reddit_data(db)
+                self._collect_reddit_data(db)  # Stats logged but not used in catch-up
                 job_repo.record_run("reddit_collection", now)
                 db.commit()
 
@@ -157,7 +157,7 @@ class SchedulerService:
         """Scheduled job wrapper for Reddit collection."""
         db = SessionLocal()
         try:
-            self._collect_reddit_data(db)
+            self._collect_reddit_data(db)  # Stats logged but not used in scheduled job
             job_repo = JobExecutionRepository(db)
             job_repo.record_run("reddit_collection")
             db.commit()
@@ -167,8 +167,18 @@ class SchedulerService:
         finally:
             db.close()
 
-    def _collect_reddit_data(self, db: Session) -> None:
-        """Collect Reddit posts and save them to the database."""
+    def _collect_reddit_data(self, db: Session) -> dict[str, int]:
+        """Collect Reddit posts and save them to the database.
+        
+        Returns:
+            Dictionary with statistics: posts_fetched, posts_with_tickers, posts_saved
+        """
+        stats = {
+            "posts_fetched": 0,
+            "posts_with_tickers": 0,
+            "posts_saved": 0,
+        }
+        
         try:
             subreddits = [
                 s.strip() for s in self._settings.reddit_subreddits.split(",")
@@ -176,13 +186,14 @@ class SchedulerService:
             posts = self._reddit_service.fetch_recent_posts(
                 subreddits, limit_per_subreddit=100, max_age=timedelta(days=2)
             )
+            stats["posts_fetched"] = len(posts)
         except ExternalAPIError as exc:
             logger.error(f"Failed to fetch Reddit posts: {exc}")
-            return
+            return stats
 
         if not posts:
             logger.debug("No Reddit posts fetched")
-            return
+            return stats
 
         # Get list of tracked stocks for ticker matching
         stock_repo = StockRepository(db)
@@ -191,6 +202,7 @@ class SchedulerService:
 
         reddit_repo = RedditPostRepository(db)
         saved_count = 0
+        posts_with_tickers = 0
 
         for post_data in posts:
             # Extract tickers from title
@@ -199,6 +211,8 @@ class SchedulerService:
             # If no ticker found, skip this post
             if not tickers:
                 continue
+
+            posts_with_tickers += 1
 
             # Save post for each matching ticker
             for symbol in tickers:
@@ -225,7 +239,10 @@ class SchedulerService:
                     reddit_repo.add(reddit_post)
                     saved_count += 1
 
-        logger.info(f"Saved {saved_count} Reddit posts")
+        stats["posts_with_tickers"] = posts_with_tickers
+        stats["posts_saved"] = saved_count
+        logger.info(f"Saved {saved_count} Reddit posts (fetched {len(posts)}, {posts_with_tickers} with tickers)")
+        return stats
 
     def _collect_price_data_job(self) -> None:
         """Scheduled job wrapper for price collection."""
