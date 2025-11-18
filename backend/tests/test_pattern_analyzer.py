@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 
 from backend.app.services.pattern_analyzer import PriceTrend, analyze_price_trend
 from backend.app.services.yahoo_service import PriceBar
@@ -15,7 +15,7 @@ def make_bar(symbol: str, d: date, close: float) -> PriceBar:
         low=close,
         close=close,
         volume=1000,
-        source_timestamp=datetime.utcnow(),
+        source_timestamp=datetime.now(timezone.utc),
     )
 
 

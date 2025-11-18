@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta, date, timezone
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
@@ -46,7 +46,7 @@ def test_reddit_post_repository_add_and_list_for_stock() -> None:
 
     repo = RedditPostRepository(session)
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     post = RedditPost(
         id="post1",
         stock_symbol="AMC",
@@ -73,7 +73,7 @@ def test_reddit_post_repository_count_recent_mentions() -> None:
 
     repo = RedditPostRepository(session)
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     old_time = now - timedelta(days=2)
 
     recent_post = RedditPost(

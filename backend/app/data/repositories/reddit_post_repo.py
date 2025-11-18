@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Sequence
 
 from sqlalchemy import select
@@ -38,7 +38,7 @@ class RedditPostRepository:
             raise DataAccessError("Failed to list reddit posts") from exc
 
     def count_recent_mentions(self, symbol: str, window: timedelta) -> int:
-        cutoff = datetime.utcnow() - window
+        cutoff = datetime.now(timezone.utc) - window
         stmt = select(RedditPost).where(
             RedditPost.stock_symbol == symbol,
             RedditPost.collected_at >= cutoff,

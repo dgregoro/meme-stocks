@@ -9,7 +9,6 @@ from sqlalchemy.orm import declarative_base, sessionmaker, Session
 from backend.app.config import get_settings
 
 
-
 Base = declarative_base()
 
 

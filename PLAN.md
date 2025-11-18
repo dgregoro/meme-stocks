@@ -806,9 +806,9 @@ This section tracks intentional shortcuts and areas to revisit later. Items here
   - Only considers volume ratio, simple price move percent, and scalar sentiment shift; does not yet combine signals into a single composite alert.
   - Future work: implement combined-signal alerts as described in the Trading Strategies & Business Logic section, and expose per-signal thresholds more granularly if needed.
 
-- **Time handling & UTC (tests and services)**
-  - Some components still use `datetime.utcnow()` either in code or tests, which raises deprecation warnings and mixes naive vs timezone-aware datetimes.
-  - Future work: standardize on timezone-aware `datetime.now(datetime.UTC)` throughout services and tests, and ensure DB models and external data are consistent.
+- **Time handling & UTC (tests and services)** (**resolved**)
+  - ~~Some components still use `datetime.utcnow()` either in code or tests, which raises deprecation warnings and mixes naive vs timezone-aware datetimes.~~
+  - All `datetime.utcnow()` calls have been replaced with `datetime.now(timezone.utc)` throughout the codebase. Models, repositories, and tests now consistently use timezone-aware datetimes.
 
 - **Reddit ticker extraction**
   - `RedditPostData.stock_symbol` is currently left as an empty string in the ingestion service; actual ticker extraction logic is not yet implemented.

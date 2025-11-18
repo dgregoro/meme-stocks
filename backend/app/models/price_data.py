@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime as dt
+from datetime import timezone
 
 from sqlalchemy import String, Integer, Date, DateTime, Float, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
@@ -24,5 +25,5 @@ class PriceData(Base):
     volume: Mapped[int] = mapped_column(Integer)
 
     timestamp: Mapped[dt.datetime] = mapped_column(
-        DateTime(timezone=True), default=dt.datetime.utcnow
+        DateTime(timezone=True), default=lambda: dt.datetime.now(timezone.utc)
     )
