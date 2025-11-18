@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -155,7 +155,7 @@ class RedditPostResponse(BaseModel):
 
 @router.get("/reddit-collection/recent", response_model=List[RedditPostResponse])
 def get_recent_reddit_posts(
-    limit: int = 20,
+    limit: int = Query(default=20, ge=1, le=100),
     db: Session = Depends(get_session),
 ) -> List[RedditPostResponse]:
     """Get recently collected Reddit posts.
@@ -163,37 +163,37 @@ def get_recent_reddit_posts(
     Args:
         limit: Maximum number of posts to return (default: 20, max: 100)
     """
-    if limit > 100:
-        limit = 100
-    if limit < 1:
-        limit = 1
-
-    reddit_repo = RedditPostRepository(db)
-    # Get posts from all stocks, ordered by collection time
-    from sqlalchemy import select
-    from backend.app.models.reddit_post import RedditPost
-    
-    stmt = (
-        select(RedditPost)
-        .order_by(RedditPost.collected_at.desc())
-        .limit(limit)
-    )
-    
-    posts = list(db.execute(stmt).scalars().all())
-    
-    return [
-        RedditPostResponse(
-            id=post.id,
-            stock_symbol=post.stock_symbol,
-            subreddit=post.subreddit,
-            title=post.title,
-            author=post.author,
-            upvotes=post.upvotes,
-            comments=post.comments,
-            url=post.url,
-            posted_at=post.posted_at.isoformat(),
-            collected_at=post.collected_at.isoformat(),
+    try:
+        from sqlalchemy import select
+        from backend.app.models.reddit_post import RedditPost
+        
+        stmt = (
+            select(RedditPost)
+            .order_by(RedditPost.collected_at.desc())
+            .limit(limit)
         )
-        for post in posts
-    ]
+        
+        posts = list(db.execute(stmt).scalars().all())
+        
+        return [
+            RedditPostResponse(
+                id=post.id,
+                stock_symbol=post.stock_symbol,
+                subreddit=post.subreddit,
+                title=post.title,
+                author=post.author,
+                upvotes=post.upvotes,
+                comments=post.comments,
+                url=post.url,
+                posted_at=post.posted_at.isoformat(),
+                collected_at=post.collected_at.isoformat(),
+            )
+            for post in posts
+        ]
+    except Exception as exc:
+        logger.error(f"Error fetching recent Reddit posts: {exc}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fetch recent Reddit posts: {str(exc)}",
+        ) from exc
 
