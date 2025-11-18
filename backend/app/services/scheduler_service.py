@@ -64,8 +64,16 @@ class SchedulerService:
             job_repo = JobExecutionRepository(db)
             now = datetime.now(timezone.utc)
 
+            def ensure_timezone_aware(dt: datetime | None) -> datetime | None:
+                """Ensure datetime is timezone-aware, converting naive to UTC if needed."""
+                if dt is None:
+                    return None
+                if dt.tzinfo is None:
+                    return dt.replace(tzinfo=timezone.utc)
+                return dt
+
             # Check Reddit collection
-            last_reddit = job_repo.get_last_run("reddit_collection")
+            last_reddit = ensure_timezone_aware(job_repo.get_last_run("reddit_collection"))
             if last_reddit is None or (now - last_reddit).total_seconds() > 3600:
                 logger.info("Catching up on Reddit collection...")
                 self._collect_reddit_data(db)
@@ -73,7 +81,7 @@ class SchedulerService:
                 db.commit()
 
             # Check price collection
-            last_price = job_repo.get_last_run("price_collection")
+            last_price = ensure_timezone_aware(job_repo.get_last_run("price_collection"))
             if last_price is None or (now - last_price).total_seconds() > 900:
                 logger.info("Catching up on price collection...")
                 self._collect_price_data(db)
@@ -81,7 +89,7 @@ class SchedulerService:
                 db.commit()
 
             # Check daily analysis (run if we haven't run one today)
-            last_analysis = job_repo.get_last_run("daily_analysis")
+            last_analysis = ensure_timezone_aware(job_repo.get_last_run("daily_analysis"))
             today_start = datetime.now(timezone.utc).replace(
                 hour=0, minute=0, second=0, microsecond=0
             )
@@ -92,7 +100,7 @@ class SchedulerService:
                 db.commit()
 
             # Check notifications
-            last_notif = job_repo.get_last_run("notification_check")
+            last_notif = ensure_timezone_aware(job_repo.get_last_run("notification_check"))
             if last_notif is None or (now - last_notif).total_seconds() > 1800:
                 logger.info("Catching up on notification checks...")
                 self._check_notifications(db)
