@@ -12,7 +12,9 @@ from .models import (  # noqa: F401
     paper_trade,
     price_data,
     reddit_post,
+    reddit_symbol_mention,
     stock,
+    symbol_universe,
 )
 from .api import stocks as stocks_api
 from .api import sentiment_price as sentiment_price_api
@@ -20,6 +22,7 @@ from .api import analysis as analysis_api
 from .api import notifications as notifications_api
 from .api import paper_trading as paper_trading_api
 from .api import jobs as jobs_api
+from .api import symbol_universe as symbol_universe_api
 from .services.scheduler_service import SchedulerService
 
 
@@ -77,6 +80,7 @@ def create_app() -> FastAPI:
     app.include_router(notifications_api.router)
     app.include_router(paper_trading_api.router)
     app.include_router(jobs_api.router)
+    app.include_router(symbol_universe_api.router)
 
     return app
 

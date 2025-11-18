@@ -7,7 +7,6 @@ from typing import Callable
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 from apscheduler.triggers.cron import CronTrigger
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.app.config import get_settings
@@ -18,6 +17,7 @@ from backend.app.data.repositories.reddit_post_repo import RedditPostRepository
 from backend.app.data.repositories.stock_repo import StockRepository
 from backend.app.models.price_data import PriceData
 from backend.app.models.reddit_post import RedditPost
+from backend.app.models.stock import Stock
 from backend.app.services.analysis_service import run_daily_analysis
 from backend.app.services.notification_service import generate_notifications_for_stock
 from backend.app.services.reddit_service import RedditService
@@ -177,6 +177,7 @@ class SchedulerService:
             "posts_fetched": 0,
             "posts_with_tickers": 0,
             "posts_saved": 0,
+            "stocks_created": 0,
         }
         
         try:
@@ -195,18 +196,22 @@ class SchedulerService:
             logger.debug("No Reddit posts fetched")
             return stats
 
-        # Get list of tracked stocks for ticker matching
-        stock_repo = StockRepository(db)
-        stocks = stock_repo.list()
-        known_symbols = {s.symbol.upper() for s in stocks}
+        # Auto-discover stocks from Reddit posts
+        from backend.app.data.repositories.reddit_symbol_mention_repo import (
+            RedditSymbolMentionRepository,
+        )
+        from backend.app.models.reddit_symbol_mention import RedditSymbolMention
 
+        stock_repo = StockRepository(db)
         reddit_repo = RedditPostRepository(db)
+        mention_repo = RedditSymbolMentionRepository(db)
         saved_count = 0
         posts_with_tickers = 0
+        stocks_created = 0
 
         for post_data in posts:
-            # Extract tickers from title
-            tickers = extract_tickers(post_data.title, known_symbols)
+            # Extract tickers from title (using symbol universe as whitelist if available)
+            tickers = extract_tickers(post_data.title, known_symbols=None, use_symbol_universe=True)
 
             # If no ticker found, skip this post
             if not tickers:
@@ -214,34 +219,57 @@ class SchedulerService:
 
             posts_with_tickers += 1
 
-            # Save post for each matching ticker
-            for symbol in tickers:
-                # Check if we already have this post for this symbol
-                stmt = select(RedditPost).where(
-                    RedditPost.id == post_data.id,
-                    RedditPost.stock_symbol == symbol,
+            # Check if post already exists
+            existing_post = reddit_repo.get(post_data.id)
+            if existing_post is None:
+                # Create the post once (not per symbol)
+                reddit_post = RedditPost(
+                    id=post_data.id,
+                    subreddit=post_data.subreddit,
+                    title=post_data.title,
+                    author=post_data.author,
+                    upvotes=post_data.upvotes,
+                    comments=post_data.comments,
+                    url=post_data.url,
+                    posted_at=post_data.posted_at,
+                    collected_at=post_data.collected_at,
                 )
-                existing = db.execute(stmt).scalar_one_or_none()
+                reddit_repo.add(reddit_post)
+                saved_count += 1
 
-                if existing is None:
-                    reddit_post = RedditPost(
-                        id=post_data.id,
-                        stock_symbol=symbol,
-                        subreddit=post_data.subreddit,
-                        title=post_data.title,
-                        author=post_data.author,
-                        upvotes=post_data.upvotes,
-                        comments=post_data.comments,
-                        url=post_data.url,
-                        posted_at=post_data.posted_at,
-                        collected_at=post_data.collected_at,
+            # For each ticker found, ensure stock exists and create mention
+            for symbol in tickers:
+                # Auto-create stock if it doesn't exist
+                existing_stock = stock_repo.get(symbol)
+                if existing_stock is None:
+                    # Create new stock with minimal info (name will be updated if we fetch from Yahoo)
+                    new_stock = Stock(
+                        symbol=symbol,
+                        name=f"{symbol} (auto-discovered)",
+                        sector=None,
+                        market_cap=None,
                     )
-                    reddit_repo.add(reddit_post)
-                    saved_count += 1
+                    stock_repo.add(new_stock)
+                    stocks_created += 1
+                    logger.debug(f"Auto-created stock: {symbol}")
+
+                # Check if mention already exists
+                existing_mentions = mention_repo.get_symbols_for_post(post_data.id)
+                if symbol not in existing_mentions:
+                    # Create symbol mention
+                    mention = RedditSymbolMention(
+                        post_id=post_data.id,
+                        symbol=symbol,
+                    )
+                    mention_repo.add(mention)
 
         stats["posts_with_tickers"] = posts_with_tickers
         stats["posts_saved"] = saved_count
-        logger.info(f"Saved {saved_count} Reddit posts (fetched {len(posts)}, {posts_with_tickers} with tickers)")
+        stats["stocks_created"] = stocks_created
+        logger.info(
+            f"Saved {saved_count} Reddit posts (fetched {len(posts)}, "
+            f"{posts_with_tickers} with tickers, created {stocks_created} new stocks)"
+        )
         return stats
 
     def _collect_price_data_job(self) -> None:

@@ -164,32 +164,39 @@ def get_recent_reddit_posts(
         limit: Maximum number of posts to return (default: 20, max: 100)
     """
     try:
-        from sqlalchemy import select
-        from backend.app.models.reddit_post import RedditPost
-        
-        stmt = (
-            select(RedditPost)
-            .order_by(RedditPost.collected_at.desc())
-            .limit(limit)
+        from backend.app.data.repositories.reddit_post_repo import RedditPostRepository
+        from backend.app.data.repositories.reddit_symbol_mention_repo import (
+            RedditSymbolMentionRepository,
         )
         
-        posts = list(db.execute(stmt).scalars().all())
+        reddit_repo = RedditPostRepository(db)
+        mention_repo = RedditSymbolMentionRepository(db)
         
-        return [
-            RedditPostResponse(
-                id=post.id,
-                stock_symbol=post.stock_symbol,
-                subreddit=post.subreddit,
-                title=post.title,
-                author=post.author,
-                upvotes=post.upvotes,
-                comments=post.comments,
-                url=post.url,
-                posted_at=post.posted_at.isoformat(),
-                collected_at=post.collected_at.isoformat(),
+        posts = reddit_repo.list_recent(limit=limit)
+        
+        result = []
+        for post in posts:
+            # Get symbols mentioned in this post
+            symbols = mention_repo.get_symbols_for_post(post.id)
+            # For backward compatibility, use first symbol or empty string
+            primary_symbol = symbols[0] if symbols else ""
+            
+            result.append(
+                RedditPostResponse(
+                    id=post.id,
+                    stock_symbol=primary_symbol,
+                    subreddit=post.subreddit,
+                    title=post.title,
+                    author=post.author,
+                    upvotes=post.upvotes,
+                    comments=post.comments,
+                    url=post.url,
+                    posted_at=post.posted_at.isoformat(),
+                    collected_at=post.collected_at.isoformat(),
+                )
             )
-            for post in posts
-        ]
+        
+        return result
     except Exception as exc:
         logger.error(f"Error fetching recent Reddit posts: {exc}", exc_info=True)
         raise HTTPException(

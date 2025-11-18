@@ -72,7 +72,7 @@ def test_job_execution_repository_record_and_get_run(db_session):
 @patch("backend.app.services.scheduler_service.RedditService")
 @patch("backend.app.services.scheduler_service.YahooFinanceService")
 def test_collect_reddit_data_with_tickers(mock_yahoo, mock_reddit_class, db_session, sample_stock):
-    """Test Reddit data collection with ticker extraction."""
+    """Test Reddit data collection with auto-discovery of stocks."""
     # Mock Reddit service
     mock_reddit = MagicMock()
     mock_reddit_class.return_value = mock_reddit
@@ -85,7 +85,7 @@ def test_collect_reddit_data_with_tickers(mock_yahoo, mock_reddit_class, db_sess
             id="post1",
             stock_symbol="",  # Will be extracted
             subreddit="wallstreetbets",
-            title="GME to the moon! $GME",
+            title="GME is going up! $GME",
             author="user1",
             upvotes=100,
             comments=50,
@@ -97,7 +97,7 @@ def test_collect_reddit_data_with_tickers(mock_yahoo, mock_reddit_class, db_sess
             id="post2",
             stock_symbol="",
             subreddit="stocks",
-            title="Just bought some AAPL",
+            title="Just bought some AAPL shares",
             author="user2",
             upvotes=10,
             comments=5,
@@ -111,16 +111,35 @@ def test_collect_reddit_data_with_tickers(mock_yahoo, mock_reddit_class, db_sess
     scheduler = SchedulerService()
     scheduler._reddit_service = mock_reddit
 
-    scheduler._collect_reddit_data(db_session)
+    stats = scheduler._collect_reddit_data(db_session)
     db_session.commit()
 
-    # Check that GME post was saved (AAPL post won't be saved since we don't have AAPL stock)
+    # Check stats
+    assert stats["posts_fetched"] == 2
+    assert stats["posts_with_tickers"] == 2
+    assert stats["posts_saved"] >= 2  # At least GME and AAPL posts
+    assert stats["stocks_created"] == 1  # AAPL should be auto-created (GME already exists)
+
+    # Check that GME post was saved
     from backend.app.data.repositories.reddit_post_repo import RedditPostRepository
+    from backend.app.data.repositories.stock_repo import StockRepository
     reddit_repo = RedditPostRepository(db_session)
+    stock_repo = StockRepository(db_session)
+    
     posts = reddit_repo.list_for_stock("GME")
     assert len(posts) == 1
     assert posts[0].id == "post1"
     assert posts[0].stock_symbol == "GME"
+    
+    # Check that AAPL was auto-created
+    aapl_stock = stock_repo.get("AAPL")
+    assert aapl_stock is not None
+    assert aapl_stock.name == "AAPL (auto-discovered)"
+    
+    # Check that AAPL post was saved
+    aapl_posts = reddit_repo.list_for_stock("AAPL")
+    assert len(aapl_posts) == 1
+    assert aapl_posts[0].id == "post2"
 
 
 @patch("backend.app.services.scheduler_service.YahooFinanceService")

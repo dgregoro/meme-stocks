@@ -9,6 +9,7 @@ praw
 yfinance
 pandas
 numpy
+requests
 
 pytest
 pytest-asyncio

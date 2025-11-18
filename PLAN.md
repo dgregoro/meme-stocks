@@ -84,8 +84,28 @@ A web application for analyzing meme stocks using social sentiment (Reddit) and 
   - Catch-up functionality: on startup, checks for missed jobs and runs them.
   - Job execution tracking in database for catch-up logic.
   - Basic ticker extraction from Reddit post titles.
+  - Auto-discovery: automatically creates Stock records for any tickers found in Reddit posts.
   - All jobs are idempotent and handle errors gracefully.
   - Note: Performance optimizations and UX polish deferred for future work.
+
+- **Milestone 7 – Symbol Universe & Database Normalization** (**completed**)
+  - **Symbol Universe System**:
+    - Created `SymbolUniverse` model to store valid stock symbols from NASDAQ/SEC EDGAR.
+    - `SymbolUniverseService` fetches stock listings from SEC EDGAR company tickers API.
+    - `SymbolUniverseRepository` for database operations with fast lookup via `get_symbols_set()`.
+    - API endpoints: `POST /api/symbol-universe/refresh` and `GET /api/symbol-universe/stats`.
+    - Ticker extractor enhanced to use symbol universe as whitelist (reduces false positives).
+    - Caching mechanism to avoid repeated database queries during ticker extraction.
+    - Falls back to auto-discovery mode if symbol universe is empty.
+  - **Database Normalization Refactor**:
+    - Separated Reddit posts from symbol mentions for better normalization.
+    - `RedditPost` model: now uses `id` as sole primary key (removed composite key).
+    - `RedditSymbolMention` model: new junction table with composite key `(post_id, symbol)`.
+    - Many-to-many relationship: posts can mention multiple symbols, symbols can be mentioned in multiple posts.
+    - Eliminated data duplication: each post stored once, not per symbol.
+    - Updated repositories: `RedditPostRepository` and new `RedditSymbolMentionRepository`.
+    - Updated `SchedulerService` to use normalized structure.
+    - Backward compatibility maintained in API responses.
 
 ## Architecture
 
@@ -119,9 +139,10 @@ A web application for analyzing meme stocks using social sentiment (Reddit) and 
 - **Data Processing**: pandas, numpy
 - **Reddit API**: PRAW (Python Reddit API Wrapper)
 - **Yahoo Finance**: yfinance library
+- **HTTP Client**: requests (for symbol universe fetching from SEC EDGAR)
 - **Database**: SQLite (simple, file-based, no setup needed)
 - **Task Scheduling**: APScheduler (for periodic data collection)
-- **WebSockets**: FastAPI WebSocket support (for real-time notifications)
+- **WebSockets**: FastAPI WebSocket support (for real-time notifications, deferred)
 
 #### Frontend
 - **Framework**: React (or vanilla JS for simplicity)
@@ -147,33 +168,48 @@ meme-stocks/
 │   │   ├── models/              # Data models (Pydantic/SQLAlchemy)
 │   │   │   ├── __init__.py
 │   │   │   ├── stock.py
-│   │   │   ├── sentiment.py
-│   │   │   └── trade.py
+│   │   │   ├── reddit_post.py
+│   │   │   ├── reddit_symbol_mention.py
+│   │   │   ├── symbol_universe.py
+│   │   │   ├── price_data.py
+│   │   │   ├── notification.py
+│   │   │   ├── paper_trade.py
+│   │   │   └── job_execution.py
 │   │   ├── api/                 # API routes
 │   │   │   ├── __init__.py
 │   │   │   ├── stocks.py
-│   │   │   ├── sentiment.py
+│   │   │   ├── sentiment_price.py
 │   │   │   ├── analysis.py
 │   │   │   ├── notifications.py
-│   │   │   └── paper_trading.py
+│   │   │   ├── paper_trading.py
+│   │   │   ├── jobs.py
+│   │   │   └── symbol_universe.py
 │   │   ├── services/            # Business logic
 │   │   │   ├── __init__.py
 │   │   │   ├── reddit_service.py
 │   │   │   ├── yahoo_service.py
 │   │   │   ├── sentiment_analyzer.py
 │   │   │   ├── pattern_analyzer.py
-│   │   │   └── notification_service.py
+│   │   │   ├── notification_service.py
+│   │   │   ├── analysis_service.py
+│   │   │   ├── scheduler_service.py
+│   │   │   └── symbol_universe_service.py
 │   │   ├── data/                # Data access layer
 │   │   │   ├── __init__.py
 │   │   │   ├── database.py
 │   │   │   └── repositories/
 │   │   │       ├── stock_repo.py
-│   │   │       ├── sentiment_repo.py
-│   │   │       └── trade_repo.py
+│   │   │       ├── reddit_post_repo.py
+│   │   │       ├── reddit_symbol_mention_repo.py
+│   │   │       ├── price_data_repo.py
+│   │   │       ├── notification_repo.py
+│   │   │       ├── paper_trade_repo.py
+│   │   │       ├── job_execution_repo.py
+│   │   │       └── symbol_universe_repo.py
 │   │   └── utils/               # Utilities
 │   │       ├── __init__.py
 │   │       ├── errors.py        # Custom exceptions
-│   │       └── validators.py
+│   │       └── ticker_extractor.py  # Ticker extraction from text
 │   ├── tests/
 │   │   ├── __init__.py
 │   │   ├── test_services/
@@ -628,7 +664,6 @@ All thresholds should be configurable via environment variables or config file:
 
 ### RedditPost
 - id (string, primary key)
-- stock_symbol (string, foreign key)
 - subreddit (string)
 - title (string)
 - author (string)
@@ -637,6 +672,23 @@ All thresholds should be configurable via environment variables or config file:
 - url (string)
 - posted_at (datetime)
 - collected_at (datetime)
+
+### RedditSymbolMention
+- post_id (string, foreign key to reddit_posts.id, part of composite primary key)
+- symbol (string, foreign key to stocks.symbol, part of composite primary key)
+- created_at (datetime)
+
+### SymbolUniverse
+- symbol (string, primary key)
+- name (string, nullable)
+- exchange (string, nullable)
+- is_etf (boolean)
+- is_active (boolean)
+- sector (string, nullable)
+- industry (string, nullable)
+- last_seen (datetime, nullable)
+- created_at (datetime)
+- updated_at (datetime)
 
 ### SentimentScore
 - id (integer, primary key)
@@ -810,9 +862,12 @@ This section tracks intentional shortcuts and areas to revisit later. Items here
   - ~~Some components still use `datetime.utcnow()` either in code or tests, which raises deprecation warnings and mixes naive vs timezone-aware datetimes.~~
   - All `datetime.utcnow()` calls have been replaced with `datetime.now(timezone.utc)` throughout the codebase. Models, repositories, and tests now consistently use timezone-aware datetimes.
 
-- **Reddit ticker extraction**
-  - `RedditPostData.stock_symbol` is currently left as an empty string in the ingestion service; actual ticker extraction logic is not yet implemented.
-  - Future work: implement a dedicated ticker extraction module with clear rules and tests (e.g., regex-based detection, allowed-ticker lists).
+- **Reddit ticker extraction** (**resolved**)
+  - ~~`RedditPostData.stock_symbol` is currently left as an empty string in the ingestion service; actual ticker extraction logic is not yet implemented.~~
+  - Ticker extraction implemented in `backend/app/utils/ticker_extractor.py` with regex-based detection.
+  - Symbol universe whitelist integration reduces false positives.
+  - Auto-discovery mode creates Stock records for any valid tickers found.
+  - Common words blacklist filters out non-stock matches.
 
 ## Next Steps
 
