@@ -23,7 +23,7 @@ class PaperTrade(Base):
     )
 
     exit_price: Mapped[float | None] = mapped_column(Float, nullable=True)
-    exit_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    exit_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     notes: Mapped[str | None] = mapped_column(String(512), nullable=True)
-
-

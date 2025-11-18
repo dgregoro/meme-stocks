@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Iterable, List
 
 import praw
+import backoff
 
 from backend.app.config import get_settings
 from backend.app.utils.errors import ExternalAPIError
@@ -52,6 +53,17 @@ class RedditService:
 
         self._client = client
 
+    @staticmethod
+    @backoff.on_exception(
+        backoff.expo,
+        Exception,  # PRAW raises various exceptions; we wrap them upstream
+        max_time=30,
+        jitter=backoff.full_jitter,
+    )
+    def _iter_new(subreddit, limit: int):
+        # Separate method to simplify backoff wrapping and testing
+        return list(subreddit.new(limit=limit))
+
     def fetch_recent_posts(
         self,
         subreddits: Iterable[str],
@@ -71,7 +83,7 @@ class RedditService:
         for subreddit_name in subreddits:
             try:
                 subreddit = self._client.subreddit(subreddit_name)
-                for submission in subreddit.new(limit=limit_per_subreddit):
+                for submission in self._iter_new(subreddit, limit_per_subreddit):
                     created = datetime.fromtimestamp(
                         float(submission.created_utc), tz=timezone.utc
                     )

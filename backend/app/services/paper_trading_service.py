@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import List
-
 from sqlalchemy.orm import Session
 
 from backend.app.data.repositories.paper_trade_repo import PaperTradeRepository
@@ -22,7 +20,13 @@ class PortfolioSummary:
 
 
 def create_trade(
-    db: Session, *, symbol: str, action: str, quantity: int, price: float, notes: str | None = None
+    db: Session,
+    *,
+    symbol: str,
+    action: str,
+    quantity: int,
+    price: float,
+    notes: str | None = None,
 ) -> PaperTrade:
     if quantity <= 0 or price <= 0:
         raise ValueError("quantity and price must be positive")
@@ -54,7 +58,9 @@ def close_trade(db: Session, trade_id: int, *, exit_price: float) -> PaperTrade:
     return trade
 
 
-def compute_portfolio_summary(db: Session, *, current_prices: dict[str, float] | None = None) -> PortfolioSummary:
+def compute_portfolio_summary(
+    db: Session, *, current_prices: dict[str, float] | None = None
+) -> PortfolioSummary:
     repo = PaperTradeRepository(db)
     trades = repo.list()
     realized = 0.0
@@ -80,5 +86,3 @@ def compute_portfolio_summary(db: Session, *, current_prices: dict[str, float] |
         realized_pl=round(realized, 2),
         unrealized_pl=round(unrealized, 2),
     )
-
-

@@ -91,4 +91,3 @@ export const PaperTrading: React.FC = () => {
     </div>
   )
 }
-

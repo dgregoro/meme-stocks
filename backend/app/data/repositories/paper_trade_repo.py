@@ -34,5 +34,3 @@ class PaperTradeRepository:
             return list(self._session.execute(stmt).scalars().all())
         except SQLAlchemyError as exc:  # pragma: no cover
             raise DataAccessError("Failed to list paper trades") from exc
-
-

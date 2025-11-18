@@ -36,5 +36,3 @@ jobs:
       - name: Bandit (security lint)
         run: |
           bandit -r backend -x backend/tests -q
-
-

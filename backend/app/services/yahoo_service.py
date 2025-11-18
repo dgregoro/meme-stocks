@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import List, Optional
 
 import pandas as pd
 import yfinance as yf
+import backoff
 
 from backend.app.utils.errors import ExternalAPIError
 
@@ -27,6 +28,16 @@ class PriceBar:
 class YahooFinanceService:
     """Service for fetching price data from Yahoo Finance via yfinance."""
 
+    @staticmethod
+    @backoff.on_exception(
+        backoff.expo,
+        Exception,  # yfinance raises various exceptions; we wrap into ExternalAPIError
+        max_time=30,
+        jitter=backoff.full_jitter,
+    )
+    def _safe_history(ticker: yf.Ticker, start: date, end: date) -> pd.DataFrame:
+        return ticker.history(start=start, end=end)
+
     def fetch_historical_prices(
         self, symbol: str, start: date, end: date
     ) -> List[PriceBar]:
@@ -37,7 +48,7 @@ class YahooFinanceService:
 
         try:
             ticker = yf.Ticker(symbol)
-            history: pd.DataFrame = ticker.history(start=start, end=end)
+            history: pd.DataFrame = self._safe_history(ticker, start=start, end=end)
         except Exception as exc:  # pragma: no cover - network/remote errors
             raise ExternalAPIError(
                 f"Failed to fetch historical prices for {symbol}"
@@ -61,7 +72,7 @@ class YahooFinanceService:
                         low=float(row["Low"]),
                         close=float(row["Close"]),
                         volume=int(row["Volume"]),
-                        source_timestamp=datetime.utcnow(),
+                        source_timestamp=datetime.now(timezone.utc),
                     )
                 )
             except (KeyError, TypeError, ValueError) as exc:

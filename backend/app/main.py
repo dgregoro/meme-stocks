@@ -4,11 +4,22 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import get_settings
+from .data.database import init_db
+# Import all models so SQLAlchemy knows about them for schema creation
+from .models import (  # noqa: F401
+    job_execution,
+    notification,
+    paper_trade,
+    price_data,
+    reddit_post,
+    stock,
+)
 from .api import stocks as stocks_api
 from .api import sentiment_price as sentiment_price_api
 from .api import analysis as analysis_api
 from .api import notifications as notifications_api
 from .api import paper_trading as paper_trading_api
+from .services.scheduler_service import SchedulerService
 
 
 def create_app() -> FastAPI:
@@ -40,6 +51,21 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    # Initialize scheduler (will be started on startup)
+    scheduler = SchedulerService()
+
+    @app.on_event("startup")
+    async def _startup() -> None:
+        # Initialize schema if missing (dev convenience; not a replacement for migrations)
+        init_db()
+        # Start background scheduler with catch-up
+        scheduler.start()
+
+    @app.on_event("shutdown")
+    async def _shutdown() -> None:
+        # Stop scheduler gracefully
+        scheduler.shutdown()
 
     # API routers
     app.include_router(stocks_api.router)

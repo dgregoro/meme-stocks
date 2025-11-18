@@ -8,7 +8,6 @@ from sqlalchemy.orm import Session
 
 from backend.app.data.database import get_session
 from backend.app.data.repositories.paper_trade_repo import PaperTradeRepository
-from backend.app.models.paper_trade import PaperTrade
 from backend.app.services.paper_trading_service import (
     PortfolioSummary,
     close_trade,
@@ -53,7 +52,9 @@ class PortfolioResponse(BaseModel):
 
 
 @router.post("/trades", response_model=TradeResponse, status_code=201)
-def post_trade(req: CreateTradeRequest, db: Session = Depends(get_session)) -> TradeResponse:
+def post_trade(
+    req: CreateTradeRequest, db: Session = Depends(get_session)
+) -> TradeResponse:
     try:
         trade = create_trade(
             db,
@@ -78,7 +79,9 @@ def list_trades(db: Session = Depends(get_session)) -> List[TradeResponse]:
 
 
 @router.post("/trades/{trade_id}/close", response_model=TradeResponse)
-def post_close_trade(trade_id: int, req: CloseTradeRequest, db: Session = Depends(get_session)) -> TradeResponse:
+def post_close_trade(
+    trade_id: int, req: CloseTradeRequest, db: Session = Depends(get_session)
+) -> TradeResponse:
     try:
         trade = close_trade(db, trade_id, exit_price=req.exit_price)
         db.commit()
@@ -93,5 +96,3 @@ def post_close_trade(trade_id: int, req: CloseTradeRequest, db: Session = Depend
 def get_portfolio(db: Session = Depends(get_session)) -> PortfolioResponse:
     summary: PortfolioSummary = compute_portfolio_summary(db)
     return PortfolioResponse(**summary.__dict__)
-
-

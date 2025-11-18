@@ -94,4 +94,3 @@ export const api = {
     handle(client.post<Trade>(`/api/trades/${id}/close`, { exit_price })),
   getPortfolio: () => handle(client.get<PortfolioSummary>('/api/portfolio')),
 }
-

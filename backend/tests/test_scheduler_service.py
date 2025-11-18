@@ -1,0 +1,229 @@
+from __future__ import annotations
+
+from datetime import date, datetime, timedelta, timezone
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+from backend.app.data.database import Base, SessionLocal, engine
+from backend.app.data.repositories.job_execution_repo import JobExecutionRepository
+from backend.app.data.repositories.stock_repo import StockRepository
+from backend.app.models.job_execution import JobExecution
+from backend.app.models.stock import Stock
+from backend.app.services.scheduler_service import SchedulerService
+
+
+@pytest.fixture
+def db_session():
+    """Create a test database session."""
+    Base.metadata.create_all(engine)
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+        Base.metadata.drop_all(engine)
+
+
+@pytest.fixture
+def sample_stock(db_session):
+    """Create a sample stock for testing."""
+    stock = Stock(
+        symbol="GME",
+        name="GameStop Corp.",
+        sector="Retail",
+        market_cap=1000000000.0,
+    )
+    repo = StockRepository(db_session)
+    repo.add(stock)
+    db_session.commit()
+    return stock
+
+
+def test_scheduler_service_initialization():
+    """Test that scheduler service initializes correctly."""
+    scheduler = SchedulerService()
+    assert scheduler._scheduler is not None
+    assert scheduler._settings is not None
+
+
+def test_job_execution_repository_get_last_run_none(db_session):
+    """Test getting last run time when job has never run."""
+    repo = JobExecutionRepository(db_session)
+    assert repo.get_last_run("test_job") is None
+
+
+def test_job_execution_repository_record_and_get_run(db_session):
+    """Test recording and retrieving job execution."""
+    repo = JobExecutionRepository(db_session)
+    now = datetime.now(timezone.utc)
+
+    repo.record_run("test_job", now)
+    db_session.commit()
+
+    last_run = repo.get_last_run("test_job")
+    assert last_run is not None
+    # Ensure both are timezone-aware for comparison
+    if last_run.tzinfo is None:
+        last_run = last_run.replace(tzinfo=timezone.utc)
+    assert abs((last_run - now).total_seconds()) < 1
+
+
+@patch("backend.app.services.scheduler_service.RedditService")
+@patch("backend.app.services.scheduler_service.YahooFinanceService")
+def test_collect_reddit_data_with_tickers(mock_yahoo, mock_reddit_class, db_session, sample_stock):
+    """Test Reddit data collection with ticker extraction."""
+    # Mock Reddit service
+    mock_reddit = MagicMock()
+    mock_reddit_class.return_value = mock_reddit
+
+    from backend.app.services.reddit_service import RedditPostData
+
+    # Create mock posts with ticker mentions
+    mock_posts = [
+        RedditPostData(
+            id="post1",
+            stock_symbol="",  # Will be extracted
+            subreddit="wallstreetbets",
+            title="GME to the moon! $GME",
+            author="user1",
+            upvotes=100,
+            comments=50,
+            url="https://reddit.com/r/wallstreetbets/post1",
+            posted_at=datetime.now(timezone.utc),
+            collected_at=datetime.now(timezone.utc),
+        ),
+        RedditPostData(
+            id="post2",
+            stock_symbol="",
+            subreddit="stocks",
+            title="Just bought some AAPL",
+            author="user2",
+            upvotes=10,
+            comments=5,
+            url="https://reddit.com/r/stocks/post2",
+            posted_at=datetime.now(timezone.utc),
+            collected_at=datetime.now(timezone.utc),
+        ),
+    ]
+    mock_reddit.fetch_recent_posts.return_value = mock_posts
+
+    scheduler = SchedulerService()
+    scheduler._reddit_service = mock_reddit
+
+    scheduler._collect_reddit_data(db_session)
+    db_session.commit()
+
+    # Check that GME post was saved (AAPL post won't be saved since we don't have AAPL stock)
+    from backend.app.data.repositories.reddit_post_repo import RedditPostRepository
+    reddit_repo = RedditPostRepository(db_session)
+    posts = reddit_repo.list_for_stock("GME")
+    assert len(posts) == 1
+    assert posts[0].id == "post1"
+    assert posts[0].stock_symbol == "GME"
+
+
+@patch("backend.app.services.scheduler_service.YahooFinanceService")
+def test_collect_price_data(mock_yahoo_class, db_session, sample_stock):
+    """Test price data collection."""
+    from backend.app.services.yahoo_service import PriceBar
+
+    mock_yahoo = MagicMock()
+    mock_yahoo_class.return_value = mock_yahoo
+
+    # Mock price bars
+    today = date.today()
+    mock_bars = [
+        PriceBar(
+            stock_symbol="GME",
+            date=today - timedelta(days=1),
+            open=10.0,
+            high=12.0,
+            low=9.0,
+            close=11.0,
+            volume=1000000,
+            source_timestamp=datetime.now(timezone.utc),
+        ),
+        PriceBar(
+            stock_symbol="GME",
+            date=today,
+            open=11.0,
+            high=13.0,
+            low=10.0,
+            close=12.0,
+            volume=1500000,
+            source_timestamp=datetime.now(timezone.utc),
+        ),
+    ]
+    mock_yahoo.fetch_historical_prices.return_value = mock_bars
+
+    scheduler = SchedulerService()
+    scheduler._yahoo_service = mock_yahoo
+
+    scheduler._collect_price_data(db_session)
+    db_session.commit()
+
+    # Check that price data was saved
+    from backend.app.data.repositories.price_data_repo import PriceDataRepository
+    price_repo = PriceDataRepository(db_session)
+    prices = price_repo.list_for_stock("GME")
+    assert len(prices) == 2
+
+
+def test_catch_up_runs_missed_jobs(db_session, sample_stock):
+    """Test that catch-up runs missed jobs."""
+    scheduler = SchedulerService()
+
+    # Mock the collection methods to avoid actual API calls
+    with patch.object(scheduler, "_collect_reddit_data") as mock_reddit, \
+         patch.object(scheduler, "_collect_price_data") as mock_price, \
+         patch.object(scheduler, "_run_daily_analysis") as mock_analysis, \
+         patch.object(scheduler, "_check_notifications") as mock_notif:
+
+        # First run - no previous executions
+        scheduler._run_catch_up()
+
+        # All jobs should have been called
+        mock_reddit.assert_called_once()
+        mock_price.assert_called_once()
+        mock_analysis.assert_called_once()
+        mock_notif.assert_called_once()
+
+        # Record runs
+        job_repo = JobExecutionRepository(db_session)
+        now = datetime.now(timezone.utc)
+        job_repo.record_run("reddit_collection", now)
+        job_repo.record_run("price_collection", now)
+        job_repo.record_run("daily_analysis", now)
+        job_repo.record_run("notification_check", now)
+        db_session.commit()
+
+        # Reset mocks
+        mock_reddit.reset_mock()
+        mock_price.reset_mock()
+        mock_analysis.reset_mock()
+        mock_notif.reset_mock()
+
+        # Second run immediately - should not trigger catch-up (too recent)
+        scheduler._run_catch_up()
+
+        # Jobs should not be called again (too recent)
+        mock_reddit.assert_not_called()
+        mock_price.assert_not_called()
+        mock_analysis.assert_not_called()
+        mock_notif.assert_not_called()
+
+
+def test_scheduler_start_and_shutdown():
+    """Test scheduler start and shutdown."""
+    scheduler = SchedulerService()
+
+    # Mock catch-up and scheduling to avoid actual job execution
+    with patch.object(scheduler, "_run_catch_up"), \
+         patch.object(scheduler, "_schedule_jobs"):
+
+        scheduler.start()
+        assert scheduler._scheduler.running
+
+        scheduler.shutdown()
+        assert not scheduler._scheduler.running

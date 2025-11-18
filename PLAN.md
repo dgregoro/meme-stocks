@@ -53,28 +53,39 @@ A web application for analyzing meme stocks using social sentiment (Reddit) and 
 - **Milestone 3 – Analysis Engine** (**completed**)
   Sentiment analyzer, price trend analyzer, and unusual activity detector implemented as pure, testable functions with configurable thresholds.
 
-- **Milestone 4 – API & Backend (current)**
-  - First slice:
+- **Milestone 4 – API & Backend** (**completed**)
+  - All REST API endpoints implemented:
     - `GET /api/stocks` and `GET /api/stocks/{symbol}` using repositories.
     - `GET /api/stocks/{symbol}/sentiment` using Reddit posts + sentiment analyzer.
     - `GET /api/stocks/{symbol}/prices` using stored price data.
-  - Later slices: analysis summary endpoint, notifications API, and paper trading API, plus WebSocket notifications.
+    - `GET /api/analysis/daily` for end-of-day analysis summary.
+    - `GET /api/notifications` for unread notifications.
+    - Paper trading API: `POST /api/trades`, `GET /api/trades`, `POST /api/trades/{id}/close`, `GET /api/portfolio`.
+  - Note: WebSocket notifications deferred per plan.
+  - Database auto-initialization on startup (creates DB directory and schema if needed).
 
-- **Milestone 5 – Frontend MVP (next)**  
-  - Set up React + Vite frontend scaffold.  
-  - Pages:  
-    - Dashboard: show `/api/analysis/daily` ranked list.  
-    - Stocks: list + simple detail (sentiment and latest prices).  
-    - Notifications: list unread from `/api/notifications`.  
-    - Paper trading: simple create trade form + portfolio summary.  
-  - API client: centralize backend calls, handle errors visibly (no silent failures).  
-  - Keep UI minimal but clean; prioritize clarity and error surfacing.
+- **Milestone 5 – Frontend MVP** (**completed**)
+  - React + Vite frontend scaffold with TypeScript.
+  - Pages implemented:
+    - Dashboard: displays `/api/analysis/daily` ranked list.
+    - Stocks: list + detail views (sentiment and latest prices).
+    - Notifications: lists unread from `/api/notifications`.
+    - Paper trading: create trade form + portfolio summary.
+  - API client: centralized backend calls with error handling.
+  - CORS configured for frontend dev (localhost:5173).
 
-- **Milestone 5 – Frontend MVP**
-  Dashboard, stock detail views, notifications panel, and paper trading UI.
-
-- **Milestone 6 – Background Jobs & Refinement**
-  Schedulers for data collection and EOD analysis, performance optimizations, and UX polish.
+- **Milestone 6 – Background Jobs & Refinement** (**completed**)
+  - APScheduler integrated for periodic background jobs.
+  - Scheduled jobs:
+    - Reddit data collection (configurable interval, default: hourly).
+    - Price data collection (configurable interval, default: every 15 minutes).
+    - Daily analysis (configurable time, default: 4 PM).
+    - Notification checks (configurable interval, default: every 30 minutes).
+  - Catch-up functionality: on startup, checks for missed jobs and runs them.
+  - Job execution tracking in database for catch-up logic.
+  - Basic ticker extraction from Reddit post titles.
+  - All jobs are idempotent and handle errors gracefully.
+  - Note: Performance optimizations and UX polish deferred for future work.
 
 ## Architecture
 

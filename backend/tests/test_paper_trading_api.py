@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
-
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import sessionmaker
 
 from backend.app.main import create_app
 from backend.app.data.database import Base, get_session
@@ -74,5 +72,3 @@ def test_paper_trading_flow() -> None:
     summary2 = resp.json()
     assert summary2["open_positions"] == 0
     assert summary2["closed_positions"] == 1
-
-

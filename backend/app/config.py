@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     api_port: int = 8000
     log_level: str = "INFO"
 
-    database_url: str = "sqlite:///../data/app.db"
+    database_url: str = "sqlite:///./data/app.db"
 
     # Reddit API credentials
     reddit_client_id: str | None = None
@@ -33,6 +33,14 @@ class Settings(BaseSettings):
 
     # CORS
     cors_allowed_origins: str = "http://127.0.0.1:5173,http://localhost:5173"
+
+    # Scheduling configuration
+    reddit_collection_interval_minutes: int = 60  # Collect Reddit data every hour
+    price_collection_interval_minutes: int = 15  # Collect price data every 15 minutes
+    notification_check_interval_minutes: int = 30  # Check for notifications every 30 minutes
+    daily_analysis_hour: int = 16  # Run daily analysis at 4 PM (16:00) local time
+    reddit_subreddits: str = "wallstreetbets,stocks,investing"  # Comma-separated list
+    enable_catch_up: bool = True  # Run missed jobs on startup
 
     class Config:
         env_file = ".env"

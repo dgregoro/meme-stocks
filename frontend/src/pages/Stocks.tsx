@@ -62,4 +62,3 @@ export const Stocks: React.FC = () => {
     </div>
   )
 }
-
