@@ -114,3 +114,63 @@ def test_job_endpoint_without_scheduler():
     assert response.status_code == 503
     assert "Scheduler not initialized" in response.json()["detail"]
 
+
+def test_get_recent_reddit_posts_empty(db_session):
+    """Test getting recent Reddit posts when none exist."""
+    app = create_app()
+    client = TestClient(app)
+    
+    response = client.get("/api/jobs/reddit-collection/recent")
+    
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_get_recent_reddit_posts_with_data(db_session):
+    """Test getting recent Reddit posts when some exist."""
+    from datetime import datetime, timezone
+    from backend.app.models.reddit_post import RedditPost
+    from backend.app.models.stock import Stock
+    from backend.app.data.repositories.stock_repo import StockRepository
+    
+    # Create a stock first
+    stock_repo = StockRepository(db_session)
+    stock = Stock(symbol="GME", name="GameStop", sector="Retail", market_cap=None)
+    stock_repo.add(stock)
+    db_session.commit()
+    
+    # Create some Reddit posts
+    now = datetime.now(timezone.utc)
+    posts = [
+        RedditPost(
+            id=f"post{i}",
+            stock_symbol="GME",
+            subreddit="wallstreetbets",
+            title=f"GME post {i}",
+            author=f"user{i}",
+            upvotes=100 + i,
+            comments=50 + i,
+            url=f"https://reddit.com/post{i}",
+            posted_at=now,
+            collected_at=now,
+        )
+        for i in range(3)
+    ]
+    
+    for post in posts:
+        db_session.add(post)
+    db_session.commit()
+    
+    app = create_app()
+    client = TestClient(app)
+    
+    response = client.get("/api/jobs/reddit-collection/recent?limit=5")
+    
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 3
+    assert all("id" in post for post in data)
+    assert all("stock_symbol" in post for post in data)
+    assert all("title" in post for post in data)
+    assert data[0]["stock_symbol"] == "GME"
+
