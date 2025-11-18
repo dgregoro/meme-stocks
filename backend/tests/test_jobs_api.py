@@ -25,13 +25,19 @@ def db_session():
 @pytest.fixture
 def test_app():
     """Create a test FastAPI app."""
+    # Ensure tables are created
+    Base.metadata.create_all(engine)
+    
     app = create_app()
     # Mock scheduler for testing
     mock_scheduler = MagicMock(spec=SchedulerService)
     from backend.app.api import jobs as jobs_api
 
     jobs_api.set_scheduler(mock_scheduler)
-    return app, mock_scheduler
+    yield app, mock_scheduler
+    
+    # Cleanup
+    Base.metadata.drop_all(engine)
 
 
 def test_trigger_reddit_collection(test_app):
