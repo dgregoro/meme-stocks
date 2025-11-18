@@ -19,6 +19,7 @@ from .api import sentiment_price as sentiment_price_api
 from .api import analysis as analysis_api
 from .api import notifications as notifications_api
 from .api import paper_trading as paper_trading_api
+from .api import jobs as jobs_api
 from .services.scheduler_service import SchedulerService
 
 
@@ -61,6 +62,8 @@ def create_app() -> FastAPI:
         init_db()
         # Start background scheduler with catch-up
         scheduler.start()
+        # Make scheduler available for manual job execution
+        jobs_api.set_scheduler(scheduler)
 
     @app.on_event("shutdown")
     async def _shutdown() -> None:
@@ -73,6 +76,7 @@ def create_app() -> FastAPI:
     app.include_router(analysis_api.router)
     app.include_router(notifications_api.router)
     app.include_router(paper_trading_api.router)
+    app.include_router(jobs_api.router)
 
     return app
 
