@@ -504,12 +504,12 @@ After each phase, provide a summary:
 
 #### Medium (functionality works but has gaps)
 - [x] **Config/.env loading from project root**: Fixed. `config.py` now uses `env_file = (".env", "backend/.env")`.
-- [ ] **RedditSymbolMentionRepository has no dedicated tests**: Only indirect coverage via scheduler/jobs. Add unit tests for `add`, `get_posts_for_symbol`, `count_recent_mentions`, `get_symbols_for_post`.
+- [x] **RedditSymbolMentionRepository has no dedicated tests**: Added `test_reddit_symbol_mention_repo.py` with 4 tests.
 
 #### Low (polish, nice-to-have)
-- [ ] **FastAPI `on_event` deprecated**: Replace `@app.on_event("startup")` and `@app.on_event("shutdown")` with lifespan context manager.
-- [ ] **Pydantic `class Config` deprecated**: Replace with `model_config = ConfigDict(...)` in BaseModel/Settings subclasses.
-- [ ] **PRD data model table outdated**: Update PRD Section 7.3 to match implementation: PaperTrade (entry_price/exit_price vs price/status), JobExecution (last_run_at vs started_at/completed_at), Notification (add stock_symbol). Prefer updating docs to match code.
+- [x] **FastAPI `on_event` deprecated**: Replaced with lifespan context manager in `main.py`.
+- [x] **Pydantic `class Config` deprecated**: Replaced with `model_config`/ConfigDict in config.py and API response models.
+- [x] **PRD data model table outdated**: Updated PRD Section 7.3 to match implementation.
 
 ### Task 2.2: Documentation Update Decisions
 

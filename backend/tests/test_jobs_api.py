@@ -153,7 +153,9 @@ def test_get_recent_reddit_posts_with_data(db_session):
         mention_repo.add(RedditSymbolMention(post_id=f"post{i}", symbol="GME"))
     db_session.commit()
 
-    app = create_app()
+    # Use mock scheduler so real catch-up doesn't add stocks and conflict with test data
+    mock_scheduler = MagicMock(spec=SchedulerService)
+    app = create_app(scheduler_for_testing=mock_scheduler)
     with TestClient(app) as client:
         response = client.get("/api/jobs/reddit-collection/recent?limit=5")
 
