@@ -14,9 +14,11 @@ export const Stocks: React.FC = () => {
 
   useEffect(() => {
     if (!selected) return
-    setSentiment(null)
-    setPrices([])
-    setError(null)
+    void Promise.resolve().then(() => {
+      setSentiment(null)
+      setPrices([])
+      setError(null)
+    })
     api.getSentiment(selected).then(setSentiment).catch((e) => setError(String(e)))
     api.getPrices(selected).then(setPrices).catch((e) => setError(String(e)))
   }, [selected])

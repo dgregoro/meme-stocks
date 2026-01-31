@@ -11,8 +11,11 @@ on:
 jobs:
   security:
     runs-on: ubuntu-latest
+    container: fedora:latest
     timeout-minutes: 15
     steps:
+      - name: Install git
+        run: dnf install -y git
       - name: Checkout
         uses: actions/checkout@v4
 

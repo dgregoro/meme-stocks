@@ -2,6 +2,8 @@
 - Always keep work aligned with PLAN.md and the defined milestones.
 - Prefer explicit failures over silent behavior.
 - Always add or update tests when adding or changing backend logic.
+- **Follow PRD Section 5.0 (Reliability Principles)** for all code changes.
+- **Be skeptical; do not oversell.** Verify before claiming completion. Describe limitations and unknowns.
 
 # Planning & scope
 - Before implementing features, read PLAN.md and identify the current milestone and subtask.
@@ -16,7 +18,7 @@
 - Prefer small, deterministic units that are easy to test.
 - Use pytest as the default test framework.
 
-# Error handling
+# Error handling (PRD §5.0 Reliability Principles)
 - Never swallow exceptions silently; log and surface meaningful errors to the caller.
 - For external APIs (Reddit, Yahoo, etc.), handle:
   - network failures,
@@ -24,6 +26,8 @@
   - rate limiting,
   explicitly and consistently.
 - When data is missing or incomplete, return a clear error or “no data” signal instead of fabricating defaults.
+- Background jobs must not crash the app on external API failure; log the error and continue.
+- Return structured API errors (PRD Appendix C); never expose raw stack traces to clients.
 
 # Configuration & thresholds
 - Do not hard-code API keys, secrets, or environment-dependent values.

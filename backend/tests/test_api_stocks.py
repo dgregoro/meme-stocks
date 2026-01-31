@@ -9,8 +9,9 @@ from sqlalchemy.orm import Session, sessionmaker
 from backend.app.main import create_app
 from backend.app.data.database import Base, get_session
 from backend.app.models.price_data import PriceData
-from backend.app.models.stock import Stock
 from backend.app.models.reddit_post import RedditPost
+from backend.app.models.reddit_symbol_mention import RedditSymbolMention
+from backend.app.models.stock import Stock
 
 
 def create_test_engine_and_sessionmaker():
@@ -80,10 +81,9 @@ def test_get_sentiment_and_prices_for_stock() -> None:
     stock = Stock(symbol="AMC", name="AMC", sector="Entertainment", market_cap=None)
     db.add(stock)
 
-    # Seed one reddit post
+    # Seed one reddit post with symbol mention
     post = RedditPost(
         id="post1",
-        stock_symbol="AMC",
         subreddit="wallstreetbets",
         title="AMC to the moon buy buy",
         author="user",
@@ -94,6 +94,7 @@ def test_get_sentiment_and_prices_for_stock() -> None:
         collected_at=now,
     )
     db.add(post)
+    db.add(RedditSymbolMention(post_id="post1", symbol="AMC"))
 
     # Seed one price bar
     price = PriceData(

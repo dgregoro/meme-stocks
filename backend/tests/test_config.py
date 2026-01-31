@@ -36,10 +36,7 @@ def test_settings_can_be_overridden_via_environment(
     monkeypatch.setenv("LOG_LEVEL", "DEBUG")
     monkeypatch.setenv("DATABASE_URL", "sqlite:///./test.db")
 
-    # Clear cache to ensure fresh settings are loaded
-    Settings.Config.case_sensitive = False  # no-op but ensures class referenced
-
-    # Bypass cache for this test by constructing Settings directly
+    # Bypass get_settings cache by constructing Settings directly
     settings = Settings()
 
     assert settings.api_host == "0.0.0.0"

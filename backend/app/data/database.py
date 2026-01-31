@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Generator
 import os
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import declarative_base, sessionmaker, Session
 
 from backend.app.config import get_settings
@@ -49,6 +49,33 @@ def get_session() -> Generator[Session, None, None]:
         db.close()
 
 
+def _migrate_drop_reddit_posts_stock_symbol() -> None:
+    """Drop legacy stock_symbol column from reddit_posts if it exists.
+
+    The model now uses RedditSymbolMention junction table; old schemas may
+    have a NOT NULL stock_symbol column that causes insert failures.
+    """
+    import sqlite3
+
+    if ":memory:" in _db_url or "sqlite" not in _db_url.lower():
+        return
+    path = _db_url.replace("sqlite:///", "", 1).split("?")[0].strip()
+    if not path or path == ":memory:":
+        return
+    path = os.path.abspath(path)
+    try:
+        conn = sqlite3.connect(path)
+        cur = conn.execute("PRAGMA table_info(reddit_posts)")
+        columns = [row[1] for row in cur.fetchall()]
+        conn.close()
+        if "stock_symbol" in columns:
+            with engine.begin() as c:
+                c.execute(text("ALTER TABLE reddit_posts DROP COLUMN stock_symbol"))
+    except Exception:
+        pass  # Non-SQLite or migration not supported; rely on create_all
+
+
 def init_db() -> None:
     """Initialize database schema if missing (development convenience)."""
     Base.metadata.create_all(bind=engine)
+    _migrate_drop_reddit_posts_stock_symbol()

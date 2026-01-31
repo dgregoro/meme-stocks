@@ -8,9 +8,13 @@ from sqlalchemy.orm import Session, sessionmaker
 from backend.app.data.database import Base
 from backend.app.data.repositories.price_data_repo import PriceDataRepository
 from backend.app.data.repositories.reddit_post_repo import RedditPostRepository
+from backend.app.data.repositories.reddit_symbol_mention_repo import (
+    RedditSymbolMentionRepository,
+)
 from backend.app.data.repositories.stock_repo import StockRepository
 from backend.app.models.price_data import PriceData
 from backend.app.models.reddit_post import RedditPost
+from backend.app.models.reddit_symbol_mention import RedditSymbolMention
 from backend.app.models.stock import Stock
 
 
@@ -44,12 +48,12 @@ def test_reddit_post_repository_add_and_list_for_stock() -> None:
         Stock(symbol="AMC", name="AMC", sector="Entertainment", market_cap=None)
     )
 
-    repo = RedditPostRepository(session)
+    post_repo = RedditPostRepository(session)
+    mention_repo = RedditSymbolMentionRepository(session)
 
     now = datetime.now(timezone.utc)
     post = RedditPost(
         id="post1",
-        stock_symbol="AMC",
         subreddit="wallstreetbets",
         title="AMC to the moon",
         author="user1",
@@ -59,9 +63,10 @@ def test_reddit_post_repository_add_and_list_for_stock() -> None:
         posted_at=now,
         collected_at=now,
     )
-    repo.add(post)
+    post_repo.add(post)
+    mention_repo.add(RedditSymbolMention(post_id="post1", symbol="AMC"))
 
-    posts = repo.list_for_stock("AMC")
+    posts = post_repo.list_for_stock("AMC")
     assert len(posts) == 1
     assert posts[0].id == "post1"
 
@@ -71,16 +76,16 @@ def test_reddit_post_repository_count_recent_mentions() -> None:
     stock_repo = StockRepository(session)
     stock_repo.add(Stock(symbol="TSLA", name="Tesla", sector="Auto", market_cap=None))
 
-    repo = RedditPostRepository(session)
+    post_repo = RedditPostRepository(session)
+    mention_repo = RedditSymbolMentionRepository(session)
 
     now = datetime.now(timezone.utc)
     old_time = now - timedelta(days=2)
 
     recent_post = RedditPost(
         id="recent",
-        stock_symbol="TSLA",
         subreddit="wallstreetbets",
-        title="TSLA",  # minimal
+        title="TSLA",
         author="user1",
         upvotes=10,
         comments=2,
@@ -90,7 +95,6 @@ def test_reddit_post_repository_count_recent_mentions() -> None:
     )
     old_post = RedditPost(
         id="old",
-        stock_symbol="TSLA",
         subreddit="wallstreetbets",
         title="TSLA old",
         author="user2",
@@ -100,10 +104,12 @@ def test_reddit_post_repository_count_recent_mentions() -> None:
         posted_at=old_time,
         collected_at=old_time,
     )
-    repo.add(recent_post)
-    repo.add(old_post)
+    post_repo.add(recent_post)
+    mention_repo.add(RedditSymbolMention(post_id="recent", symbol="TSLA"))
+    post_repo.add(old_post)
+    mention_repo.add(RedditSymbolMention(post_id="old", symbol="TSLA"))
 
-    count_24h = repo.count_recent_mentions("TSLA", timedelta(hours=24))
+    count_24h = post_repo.count_recent_mentions("TSLA", timedelta(hours=24))
     assert count_24h == 1
 
 

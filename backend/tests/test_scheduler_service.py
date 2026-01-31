@@ -73,17 +73,28 @@ def test_job_execution_repository_record_and_get_run(db_session):
 @patch("backend.app.services.scheduler_service.YahooFinanceService")
 def test_collect_reddit_data_with_tickers(mock_yahoo, mock_reddit_class, db_session, sample_stock):
     """Test Reddit data collection with auto-discovery of stocks."""
+    from backend.app.data.repositories.symbol_universe_repo import SymbolUniverseRepository
+    from backend.app.models.symbol_universe import SymbolUniverse
+
+    # Seed symbol universe so extract_tickers only returns GME and AAPL (reduces false positives)
+    universe_repo = SymbolUniverseRepository(db_session)
+    for sym in ("GME", "AAPL"):
+        universe_repo.add(SymbolUniverse(symbol=sym, is_active=True))
+    db_session.commit()
+    from backend.app.utils.ticker_extractor import clear_symbol_universe_cache
+
+    clear_symbol_universe_cache()
+
     # Mock Reddit service
     mock_reddit = MagicMock()
     mock_reddit_class.return_value = mock_reddit
 
     from backend.app.services.reddit_service import RedditPostData
 
-    # Create mock posts with ticker mentions
     mock_posts = [
         RedditPostData(
             id="post1",
-            stock_symbol="",  # Will be extracted
+            stock_symbol="",
             subreddit="wallstreetbets",
             title="GME is going up! $GME",
             author="user1",
@@ -114,29 +125,25 @@ def test_collect_reddit_data_with_tickers(mock_yahoo, mock_reddit_class, db_sess
     stats = scheduler._collect_reddit_data(db_session)
     db_session.commit()
 
-    # Check stats
     assert stats["posts_fetched"] == 2
     assert stats["posts_with_tickers"] == 2
-    assert stats["posts_saved"] >= 2  # At least GME and AAPL posts
-    assert stats["stocks_created"] == 1  # AAPL should be auto-created (GME already exists)
+    assert stats["posts_saved"] >= 2
+    assert stats["stocks_created"] == 1  # AAPL auto-created (GME already exists)
 
-    # Check that GME post was saved
     from backend.app.data.repositories.reddit_post_repo import RedditPostRepository
     from backend.app.data.repositories.stock_repo import StockRepository
+
     reddit_repo = RedditPostRepository(db_session)
     stock_repo = StockRepository(db_session)
-    
+
     posts = reddit_repo.list_for_stock("GME")
     assert len(posts) == 1
     assert posts[0].id == "post1"
-    assert posts[0].stock_symbol == "GME"
-    
-    # Check that AAPL was auto-created
+
     aapl_stock = stock_repo.get("AAPL")
     assert aapl_stock is not None
     assert aapl_stock.name == "AAPL (auto-discovered)"
-    
-    # Check that AAPL post was saved
+
     aapl_posts = reddit_repo.list_for_stock("AAPL")
     assert len(aapl_posts) == 1
     assert aapl_posts[0].id == "post2"

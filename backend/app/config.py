@@ -3,7 +3,7 @@ from __future__ import annotations
 from functools import lru_cache
 
 from pydantic import ValidationError
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -42,10 +42,11 @@ class Settings(BaseSettings):
     reddit_subreddits: str = "wallstreetbets,stocks,investing"  # Comma-separated list
     enable_catch_up: bool = True  # Run missed jobs on startup
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = False
+    model_config = SettingsConfigDict(
+        env_file=(".env", "backend/.env"),
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+    )
 
 
 @lru_cache()

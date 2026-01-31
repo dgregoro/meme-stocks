@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -26,14 +28,52 @@ from .api import symbol_universe as symbol_universe_api
 from .services.scheduler_service import SchedulerService
 
 
-def create_app() -> FastAPI:
+def _make_lifespan(
+    scheduler_for_testing: SchedulerService | None = None,
+    omit_scheduler: bool = False,
+):
+    """Build lifespan context manager; accepts optional scheduler for testing."""
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        # Startup
+        init_db()
+        if omit_scheduler:
+            scheduler = None
+        elif scheduler_for_testing is not None:
+            scheduler = scheduler_for_testing
+        else:
+            scheduler = SchedulerService()
+            scheduler.start()
+        if scheduler is not None:
+            jobs_api.set_scheduler(scheduler)
+            app.state.scheduler = scheduler
+
+        yield
+
+        # Shutdown
+        if scheduler is not None and scheduler_for_testing is None:
+            scheduler.shutdown()
+        jobs_api.set_scheduler(None)
+
+    return lifespan
+
+
+def create_app(
+    scheduler_for_testing: SchedulerService | None = None,
+    omit_scheduler: bool = False,
+) -> FastAPI:
     """Application factory for the FastAPI app.
 
     Using a factory makes testing and future configuration easier.
     """
 
     settings = get_settings()
-    app = FastAPI(title="Meme Stocks Trading App", debug=False)
+    app = FastAPI(
+        title="Meme Stocks Trading App",
+        debug=False,
+        lifespan=_make_lifespan(scheduler_for_testing, omit_scheduler),
+    )
 
     @app.get("/health", tags=["system"])
     async def health() -> dict[str, str]:
@@ -55,23 +95,6 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-
-    # Initialize scheduler (will be started on startup)
-    scheduler = SchedulerService()
-
-    @app.on_event("startup")
-    async def _startup() -> None:
-        # Initialize schema if missing (dev convenience; not a replacement for migrations)
-        init_db()
-        # Start background scheduler with catch-up
-        scheduler.start()
-        # Make scheduler available for manual job execution
-        jobs_api.set_scheduler(scheduler)
-
-    @app.on_event("shutdown")
-    async def _shutdown() -> None:
-        # Stop scheduler gracefully
-        scheduler.shutdown()
 
     # API routers
     app.include_router(stocks_api.router)

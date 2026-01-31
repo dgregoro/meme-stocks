@@ -4,7 +4,7 @@ import logging
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
 from backend.app.data.database import get_session
@@ -149,8 +149,7 @@ class RedditPostResponse(BaseModel):
     posted_at: str
     collected_at: str
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 @router.get("/reddit-collection/recent", response_model=List[RedditPostResponse])

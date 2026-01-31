@@ -1,7 +1,7 @@
 version: 2
 updates:
   - package-ecosystem: "pip"
-    directory: "/backend"
+    directory: "backend"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
@@ -10,6 +10,18 @@ updates:
       - "python"
     commit-message:
       prefix: "deps(pip)"
+    rebase-strategy: "auto"
+
+  - package-ecosystem: "npm"
+    directory: "frontend"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "frontend"
+    commit-message:
+      prefix: "deps(npm)"
     rebase-strategy: "auto"
 
   - package-ecosystem: "github-actions"

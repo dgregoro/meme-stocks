@@ -1,0 +1,33 @@
+---
+description: Reliability principles for all code—no silent failures, explicit errors, graceful degradation
+alwaysApply: true
+---
+
+# Reliability Principles
+
+**Source of truth:** PRD Section 5.0 (Reliability Principles). Follow these rules for all backend and service code.
+
+## 1. No Silent Failures
+
+- Never swallow exceptions. Always log and surface meaningful errors.
+- For external APIs (Reddit, Yahoo): handle network failures, invalid responses, and rate limiting explicitly.
+- Do not `except: pass` or catch and ignore.
+
+## 2. Explicit Error Surfaces
+
+- Return clear errors (`ExternalAPIError`, `NotFoundError`, etc.) with enough context for the caller.
+- API endpoints: use structured error responses (PRD Appendix C), never raw stack traces.
+
+## 3. Graceful Degradation
+
+- If Reddit or Yahoo is unavailable: return an error or "no data"—do not crash or fabricate.
+- Background jobs: on external API failure, log the error and continue (do not crash the app).
+
+## 4. Actionable Error Messages
+
+- Include what failed, why (when known), and context (symbol, job name, subreddit).
+- Bad: `"Request failed"` → Good: `"Failed to fetch Reddit posts for r/wallstreetbets: rate limited (retry after 60s)"`
+
+## 5. Data Integrity
+
+- Missing/incomplete data: return `None`, `[]`, or explicit "no data"—never fabricate defaults.

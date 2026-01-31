@@ -1,0 +1,14 @@
+---
+description: Prefer Fedora when choosing a Linux distro (containers, runners, docs)
+alwaysApply: true
+---
+
+# Platform Preference: Fedora
+
+When there is a choice of Linux distribution, use **Fedora**.
+
+Examples:
+- **Container images**: Use `fedora:latest` or `registry.fedoraproject.org/fedora:latest` as base image
+- **Self-hosted runners**: Use Fedora as the host OS
+- **Documentation**: When mentioning a distro for local dev or setup, reference Fedora
+- **Package manager**: Prefer `dnf` when showing install commands

@@ -9,8 +9,9 @@ from sqlalchemy.orm import Session, sessionmaker
 from backend.app.main import create_app
 from backend.app.data.database import Base, get_session
 from backend.app.models.price_data import PriceData
-from backend.app.models.stock import Stock
 from backend.app.models.reddit_post import RedditPost
+from backend.app.models.reddit_symbol_mention import RedditSymbolMention
+from backend.app.models.stock import Stock
 from backend.app.services.notification_service import generate_notifications_for_stock
 
 
@@ -71,10 +72,9 @@ def seed_stock_with_activity(db: Session) -> str:
         )
     )
 
-    # One strongly positive reddit post
+    # One strongly positive reddit post with symbol mention
     post = RedditPost(
         id="post1",
-        stock_symbol=symbol,
         subreddit="wallstreetbets",
         title="GME moon buy buy",
         author="user",
@@ -85,6 +85,7 @@ def seed_stock_with_activity(db: Session) -> str:
         collected_at=now,
     )
     db.add(post)
+    db.add(RedditSymbolMention(post_id="post1", symbol=symbol))
 
     db.commit()
     return symbol

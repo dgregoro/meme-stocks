@@ -9,8 +9,9 @@ from sqlalchemy.orm import Session, sessionmaker
 from backend.app.main import create_app
 from backend.app.data.database import Base, get_session
 from backend.app.models.price_data import PriceData
-from backend.app.models.stock import Stock
 from backend.app.models.reddit_post import RedditPost
+from backend.app.models.reddit_symbol_mention import RedditSymbolMention
+from backend.app.models.stock import Stock
 
 
 def create_test_engine_and_sessionmaker():
@@ -52,7 +53,6 @@ def test_daily_analysis_ranks_stocks_by_composite_score() -> None:
     # GME: strongly positive post
     gme_post = RedditPost(
         id="gme1",
-        stock_symbol="GME",
         subreddit="wallstreetbets",
         title="GME to the moon buy buy",
         author="user",
@@ -65,7 +65,6 @@ def test_daily_analysis_ranks_stocks_by_composite_score() -> None:
     # AMC: negative/neutral post
     amc_post = RedditPost(
         id="amc1",
-        stock_symbol="AMC",
         subreddit="wallstreetbets",
         title="AMC is a scam sell",
         author="user",
@@ -76,6 +75,10 @@ def test_daily_analysis_ranks_stocks_by_composite_score() -> None:
         collected_at=now,
     )
     db.add_all([gme_post, amc_post])
+    db.add_all([
+        RedditSymbolMention(post_id="gme1", symbol="GME"),
+        RedditSymbolMention(post_id="amc1", symbol="AMC"),
+    ])
 
     # GME price trending up, AMC trending down
     for i in range(60):

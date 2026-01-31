@@ -24,7 +24,7 @@ export const PaperTrading: React.FC = () => {
     try {
       await api.createTrade({ stock_symbol: symbol, action, quantity, price })
       refresh()
-    } catch (e: any) {
+    } catch (e: unknown) {
       setError(String(e))
     }
   }
@@ -35,7 +35,7 @@ export const PaperTrading: React.FC = () => {
     try {
       await api.closeTrade(id, exit)
       refresh()
-    } catch (e: any) {
+    } catch (e: unknown) {
       setError(String(e))
     }
   }
@@ -46,7 +46,7 @@ export const PaperTrading: React.FC = () => {
       {error && <div style={{ color: 'red' }}>Error: {error}</div>}
       <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
         <input value={symbol} onChange={(e) => setSymbol(e.target.value.toUpperCase())} placeholder="Symbol" />
-        <select value={action} onChange={(e) => setAction(e.target.value as any)}>
+        <select value={action} onChange={(e) => setAction(e.target.value as 'buy' | 'sell')}>
           <option value="buy">Buy</option>
           <option value="sell">Sell</option>
         </select>

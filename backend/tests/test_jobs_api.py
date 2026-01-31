@@ -24,25 +24,20 @@ def db_session():
 
 @pytest.fixture
 def test_app():
-    """Create a test FastAPI app."""
-    # Ensure tables are created
+    """Create a test FastAPI app with TestClient for lifespan support."""
     Base.metadata.create_all(engine)
-    
-    app = create_app()
-    # Mock scheduler for testing
-    mock_scheduler = MagicMock(spec=SchedulerService)
-    from backend.app.api import jobs as jobs_api
 
-    jobs_api.set_scheduler(mock_scheduler)
-    yield app, mock_scheduler
-    
-    # Cleanup
+    mock_scheduler = MagicMock(spec=SchedulerService)
+    app = create_app(scheduler_for_testing=mock_scheduler)
+    with TestClient(app) as client:
+        yield app, mock_scheduler, client
+
     Base.metadata.drop_all(engine)
 
 
 def test_trigger_reddit_collection(test_app):
     """Test manual Reddit collection endpoint."""
-    app, mock_scheduler = test_app
+    app, mock_scheduler, client = test_app
 
     # Mock the collection method to return stats
     mock_scheduler._collect_reddit_data = MagicMock(
@@ -53,7 +48,6 @@ def test_trigger_reddit_collection(test_app):
         }
     )
 
-    client = TestClient(app)
     response = client.post("/api/jobs/reddit-collection")
 
     assert response.status_code == 200
@@ -70,11 +64,10 @@ def test_trigger_reddit_collection(test_app):
 
 def test_trigger_price_collection(test_app):
     """Test manual price collection endpoint."""
-    app, mock_scheduler = test_app
+    app, mock_scheduler, client = test_app
 
     mock_scheduler._collect_price_data = MagicMock()
 
-    client = TestClient(app)
     response = client.post("/api/jobs/price-collection")
 
     assert response.status_code == 200
@@ -86,11 +79,10 @@ def test_trigger_price_collection(test_app):
 
 def test_trigger_notification_check(test_app):
     """Test manual notification check endpoint."""
-    app, mock_scheduler = test_app
+    app, mock_scheduler, client = test_app
 
     mock_scheduler._check_notifications = MagicMock()
 
-    client = TestClient(app)
     response = client.post("/api/jobs/notification-check")
 
     assert response.status_code == 200
@@ -102,14 +94,10 @@ def test_trigger_notification_check(test_app):
 
 def test_job_endpoint_without_scheduler():
     """Test that endpoints return 503 if scheduler not initialized."""
-    app = create_app()
-    # Don't set scheduler
-    from backend.app.api import jobs as jobs_api
+    app = create_app(omit_scheduler=True)
 
-    jobs_api.set_scheduler(None)
-
-    client = TestClient(app)
-    response = client.post("/api/jobs/reddit-collection")
+    with TestClient(app) as client:
+        response = client.post("/api/jobs/reddit-collection")
 
     assert response.status_code == 503
     assert "Scheduler not initialized" in response.json()["detail"]
@@ -129,22 +117,29 @@ def test_get_recent_reddit_posts_empty(db_session):
 def test_get_recent_reddit_posts_with_data(db_session):
     """Test getting recent Reddit posts when some exist."""
     from datetime import datetime, timezone
-    from backend.app.models.reddit_post import RedditPost
-    from backend.app.models.stock import Stock
+
+    from backend.app.data.repositories.reddit_post_repo import RedditPostRepository
+    from backend.app.data.repositories.reddit_symbol_mention_repo import (
+        RedditSymbolMentionRepository,
+    )
     from backend.app.data.repositories.stock_repo import StockRepository
-    
+    from backend.app.models.reddit_post import RedditPost
+    from backend.app.models.reddit_symbol_mention import RedditSymbolMention
+    from backend.app.models.stock import Stock
+
     # Create a stock first
     stock_repo = StockRepository(db_session)
     stock = Stock(symbol="GME", name="GameStop", sector="Retail", market_cap=None)
     stock_repo.add(stock)
     db_session.commit()
-    
-    # Create some Reddit posts
+
+    # Create Reddit posts with symbol mentions
     now = datetime.now(timezone.utc)
-    posts = [
-        RedditPost(
+    post_repo = RedditPostRepository(db_session)
+    mention_repo = RedditSymbolMentionRepository(db_session)
+    for i in range(3):
+        post = RedditPost(
             id=f"post{i}",
-            stock_symbol="GME",
             subreddit="wallstreetbets",
             title=f"GME post {i}",
             author=f"user{i}",
@@ -154,18 +149,14 @@ def test_get_recent_reddit_posts_with_data(db_session):
             posted_at=now,
             collected_at=now,
         )
-        for i in range(3)
-    ]
-    
-    for post in posts:
-        db_session.add(post)
+        post_repo.add(post)
+        mention_repo.add(RedditSymbolMention(post_id=f"post{i}", symbol="GME"))
     db_session.commit()
-    
+
     app = create_app()
-    client = TestClient(app)
-    
-    response = client.get("/api/jobs/reddit-collection/recent?limit=5")
-    
+    with TestClient(app) as client:
+        response = client.get("/api/jobs/reddit-collection/recent?limit=5")
+
     assert response.status_code == 200
     data = response.json()
     assert len(data) == 3

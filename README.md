@@ -186,6 +186,7 @@ Configuration is managed via environment variables (see `backend/app/config.py`)
 - Python 3.11+ (recommended)
 - Node.js 18+ (for frontend)
 - SQLite (used via SQLAlchemy; no manual setup required)
+- **Linux**: Fedora is the preferred distro for development (CI runs in Fedora containers)
 
 ### Running Tests
 
