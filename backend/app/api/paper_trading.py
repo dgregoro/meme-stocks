@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from typing import List
+from typing import List, Literal  # noqa: F401 - Literal used in CreateTradeRequest
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from backend.app.data.database import get_session
@@ -43,7 +43,7 @@ class TradeResponse(BaseModel):
 
 
 class CloseTradeRequest(BaseModel):
-    exit_price: float
+    exit_price: float = Field(gt=0, description="Exit price per share")
 
 
 class PortfolioResponse(BaseModel):

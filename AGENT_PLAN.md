@@ -246,7 +246,7 @@
 - [x] **Extract "stock not found" helper** — Added `require_stock()` in `utils/stock_helpers.py`; used by stocks, sentiment_price.
 - [x] **Move magic numbers to config** — Added analysis_sentiment_weight, analysis_trend_weight, sentiment_window_hours, reddit_max_age_days, price_history_days to config.
 - [x] **Database migration: log swallowed exceptions** — Added logger.warning() in migration except block.
-- [ ] **Pydantic validation on CreateTradeRequest** — Add `action: Literal["buy","sell"]`, `quantity > 0`, `price > 0`; validation currently in service layer.
+- [x] **Pydantic validation on CreateTradeRequest** — Added Literal["buy","sell"], Field(gt=0) for quantity, price, exit_price.
 - [ ] **RedditPostData.stock_symbol** — Field is placeholder `""`; name suggests single symbol but posts can mention multiple. Consider renaming or `symbols: list[str]`.
 
 ### Low Priority
