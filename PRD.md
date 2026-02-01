@@ -11,7 +11,7 @@
 
 The Meme Stocks Trading Application is a web-based tool designed for retail investors who want to analyze meme stocks using a combination of social sentiment data and technical price patterns. The application aggregates Reddit discussions, calculates sentiment scores, monitors price movements, and provides actionable insights through end-of-day analysis and real-time notifications.
 
-This is a decision-support tool for manual trading—it does not execute trades automatically or integrate with brokers.
+This is a decision-support tool for manual trading—it does not execute trades automatically or integrate with brokers. It is intended as a single-user application for personal use (for now). A command-line interface (CLI) provides full parity with the web UI for terminal users and scripting.
 
 ---
 
@@ -175,7 +175,8 @@ These principles apply to all code in this project. They ensure the application 
 | FR-5.3 | Close positions and calculate realized P/L | Must Have | ✅ Complete |
 | FR-5.4 | View portfolio summary (total value, P/L) | Must Have | ✅ Complete |
 | FR-5.5 | Trade history with performance metrics | Must Have | ✅ Complete |
-| FR-5.6 | Calculate win rate and average win/loss | Should Have | ❌ Future |
+| FR-5.6 | Calculate win rate and average win/loss | Should Have | ✅ Complete |
+| FR-5.7 | Support equity options (calls, puts with strike/expiry) | Should Have | ✅ Complete |
 
 #### FR-6: Symbol Universe Management
 
@@ -196,6 +197,68 @@ These principles apply to all code in this project. They ensure the application 
 | FR-7.4 | Scheduled notification checks | Must Have | ✅ Complete |
 | FR-7.5 | Catch-up logic for missed jobs on startup | Must Have | ✅ Complete |
 | FR-7.6 | Job execution tracking in database | Must Have | ✅ Complete |
+
+#### FR-8: Command-Line Interface (CLI)
+
+A fully functional CLI that provides parity with the web UI and API. The CLI operates as an API client: it requires a running backend and makes HTTP requests to the REST API. This ensures a single source of truth and avoids duplicating business logic.
+
+| ID | Requirement | Priority | Status |
+|----|-------------|----------|--------|
+| FR-8.1 | Connect to backend via configurable base URL (default http://127.0.0.1:8000) | Must Have | ❌ Future |
+| FR-8.2 | Health check command (`meme-stocks health`) | Must Have | ❌ Future |
+| FR-8.3 | Stock commands: list, show, create | Must Have | ❌ Future |
+| FR-8.4 | Sentiment and price commands for a symbol | Must Have | ❌ Future |
+| FR-8.5 | Daily analysis command (ranked summary) | Must Have | ❌ Future |
+| FR-8.6 | Notifications command (list unread) | Must Have | ❌ Future |
+| FR-8.7 | Paper trading: create trade, list trades, close trade, portfolio | Must Have | ❌ Future |
+| FR-8.8 | Symbol universe: refresh, stats | Must Have | ❌ Future |
+| FR-8.9 | Job commands: trigger reddit/price/notification collection, list job runs, recent Reddit posts | Must Have | ❌ Future |
+| FR-8.10 | Human-readable table output for list endpoints (with optional JSON) | Must Have | ❌ Future |
+| FR-8.11 | Structured error handling (API errors displayed clearly) | Must Have | ❌ Future |
+| FR-8.12 | Global flags: `--base-url`, `--output json|table` | Should Have | ❌ Future |
+| FR-8.13 | Shell completion (bash, zsh) | Could Have | ❌ Future |
+
+**CLI Command Structure**
+
+The CLI is invoked as `meme-stocks` (or `python -m backend.cli`) with subcommands. All commands require a running backend unless otherwise noted.
+
+| Command | Description | API Equivalent |
+|---------|-------------|----------------|
+| `meme-stocks health` | Check backend connectivity | `GET /health` |
+| `meme-stocks stocks list` | List all tracked stocks | `GET /api/stocks` |
+| `meme-stocks stocks show SYMBOL` | Show stock details | `GET /api/stocks/{symbol}` |
+| `meme-stocks stocks add SYMBOL [--name NAME]` | Add a stock to tracking | `POST /api/stocks` |
+| `meme-stocks sentiment SYMBOL` | Show sentiment analysis | `GET /api/stocks/{symbol}/sentiment` |
+| `meme-stocks prices SYMBOL` | Show price history | `GET /api/stocks/{symbol}/prices` |
+| `meme-stocks analysis` | Daily ranked analysis | `GET /api/analysis/daily` |
+| `meme-stocks notifications` | List unread notifications | `GET /api/notifications` |
+| `meme-stocks trades list` | List paper trades | `GET /api/trades` |
+| `meme-stocks trades create SYMBOL buy|sell QTY PRICE [--option call\|put --strike N --expiry YYYY-MM-DD]` | Create paper trade | `POST /api/trades` |
+| `meme-stocks trades close ID EXIT_PRICE` | Close a trade | `POST /api/trades/{id}/close` |
+| `meme-stocks portfolio` | Portfolio summary | `GET /api/portfolio` |
+| `meme-stocks symbols refresh` | Refresh symbol universe | `POST /api/symbol-universe/refresh` |
+| `meme-stocks symbols stats` | Symbol universe stats | `GET /api/symbol-universe/stats` |
+| `meme-stocks jobs reddit` | Trigger Reddit collection | `POST /api/jobs/reddit-collection` |
+| `meme-stocks jobs prices` | Trigger price collection | `POST /api/jobs/price-collection` |
+| `meme-stocks jobs notifications` | Trigger notification check | `POST /api/jobs/notification-check` |
+| `meme-stocks jobs runs [JOB_NAME]` | List job execution history | `GET /api/jobs/{job_name}/runs` |
+| `meme-stocks jobs recent-posts [--limit N]` | Recent Reddit posts | `GET /api/jobs/reddit-collection/recent` |
+
+**Output Formats**
+
+- **Table** (default): Human-readable tables for list endpoints (stocks, trades, analysis, notifications, etc.). Column widths adapt to terminal.
+- **JSON** (`--output json`): Raw JSON for scripting and piping to `jq`.
+
+**Configuration**
+
+- `MEME_STOCKS_API_URL` or `--base-url`: Backend base URL (default `http://127.0.0.1:8000`).
+- `MEME_STOCKS_OUTPUT`: Default output format (`table` or `json`).
+
+**Error Handling**
+
+- Connection refused / timeout: Clear message with suggested fix (e.g., "Backend not reachable. Is the server running? Try: uvicorn backend.app.main:app")
+- API errors (4xx, 5xx): Display `error_type` and `message` from API response.
+- Exit codes: 0 = success, 1 = client/validation error, 2 = server error, 3 = connection error.
 
 ### 5.2 Non-Functional Requirements
 
@@ -224,7 +287,7 @@ These principles apply to all code in this project. They ensure the application 
 | NFR-3.1 | Tracked stocks | Support up to 500 stocks |
 | NFR-3.2 | Historical data retention | 1 year of price data per stock |
 | NFR-3.3 | Reddit posts per day | Handle 10,000+ posts |
-| NFR-3.4 | Concurrent users | Support 10 simultaneous users |
+| NFR-3.4 | Deployment model | Single-user; no multi-user or concurrency requirements |
 
 #### NFR-4: Security
 
@@ -251,7 +314,15 @@ These principles apply to all code in this project. They ensure the application 
 | NFR-6.1 | Responsive web design | ✅ Implemented |
 | NFR-6.2 | Clear error messages in UI | ✅ Implemented |
 | NFR-6.3 | Auto-refresh for dynamic data | ❌ Future |
-| NFR-6.4 | Mobile-friendly layout | ❌ Future |
+
+#### NFR-7: CLI Usability (FR-8)
+
+| ID | Requirement | Target |
+|----|-------------|--------|
+| NFR-7.1 | CLI startup time | < 200ms |
+| NFR-7.2 | Help text for all commands | Every command has `--help` |
+| NFR-7.3 | Table output fits 80-column terminals | Columns truncate or wrap gracefully |
+| NFR-7.4 | Scriptable (non-interactive) | All commands work without TTY |
 
 ---
 
@@ -301,6 +372,18 @@ These principles apply to all code in this project. They ensure the application 
 
 **US-6.2** As a user, I want to see a list of all tracked stocks so that I can browse and select ones to analyze.
 
+### Epic 7: Command-Line Interface
+
+**US-7.1** As a terminal user, I want to run all app operations from the command line so that I can work without a browser.
+
+**US-7.2** As a power user, I want JSON output for list commands so that I can script workflows and pipe to `jq` or other tools.
+
+**US-7.3** As a developer, I want to trigger background jobs manually via CLI so that I can test data collection without waiting for the scheduler.
+
+**US-7.4** As a paper trader, I want to create and close trades from the terminal so that I can integrate paper trading into my existing workflow.
+
+**US-7.5** As a user, I want clear error messages when the backend is down so that I know how to fix the problem.
+
 ---
 
 ## 7. Technical Architecture
@@ -309,8 +392,11 @@ These principles apply to all code in this project. They ensure the application 
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                         User's Browser                          │
-│                        (React Frontend)                         │
+│              User Interfaces (Browser + CLI)                     │
+│  ┌─────────────────────────┐  ┌──────────────────────────────┐  │
+│  │   React Frontend        │  │   CLI (meme-stocks)          │  │
+│  │   (Web UI)              │  │   (API client, terminal)     │  │
+│  └─────────────────────────┘  └──────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────┘
                                  │
                                  │ HTTP/REST
@@ -343,7 +429,8 @@ These principles apply to all code in this project. They ensure the application 
 
 | Layer | Technology | Purpose |
 |-------|------------|---------|
-| Frontend | React + TypeScript + Vite | User interface |
+| Frontend | React + TypeScript + Vite | Web user interface |
+| CLI | Python (argparse/click/typer) | Terminal interface, API client |
 | Backend | FastAPI (Python 3.11+) | REST API server |
 | Database | SQLite | Persistent data storage |
 | Scheduling | APScheduler | Background job execution |
@@ -387,7 +474,7 @@ All thresholds and settings are configurable via environment variables:
 | REDDIT_COLLECTION_INTERVAL_MINUTES | 60 | How often to fetch Reddit data |
 | PRICE_COLLECTION_INTERVAL_MINUTES | 15 | How often to update prices |
 | NOTIFICATION_CHECK_INTERVAL_MINUTES | 30 | How often to scan for alerts |
-| DAILY_ANALYSIS_HOUR | 16 | Hour (24h format) for daily analysis |
+| DAILY_ANALYSIS_HOUR | 16 | Hour (24h format, UTC) for daily analysis |
 | REDDIT_SUBREDDITS | wallstreetbets,stocks,investing | Subreddits to monitor |
 | ENABLE_CATCH_UP | true | Run missed jobs on startup |
 
@@ -401,7 +488,13 @@ All thresholds and settings are configurable via environment variables:
 2. **Users have their own brokerage**: No broker integration; all trades are manual.
 3. **Reddit is a valid signal source**: Social sentiment on Reddit correlates with meme stock movements.
 4. **Free APIs are sufficient**: Reddit and Yahoo Finance free tiers meet our data needs.
-5. **Single-user deployment**: Initial version is for personal use, not multi-tenant.
+5. **Single-user application (for now)**: Designed for personal use by one user. No multi-user authentication, tenant isolation, or concurrency requirements. May support multiple users in a future version.
+
+### Data, Time, and API Policy
+
+- **Data retention**: Indefinite. Reddit posts, price data, notifications, and trade history are retained until explicitly removed. No automatic purging.
+- **Timezones**: All timestamps and scheduled times use UTC. The `DAILY_ANALYSIS_HOUR` and similar config values are interpreted in UTC.
+- **API versioning**: Not used. The API may evolve; breaking changes will be documented in release notes.
 
 ### Constraints
 
@@ -422,11 +515,10 @@ The following features are explicitly not included in the current scope but may 
 3. **Advanced technical indicators**: RSI, MACD, Bollinger Bands, etc.
 4. **Multi-user authentication**: User accounts with personalized watchlists
 5. **Broker integration**: Connect to Robinhood, TD Ameritrade, etc. for live trading
-6. **Mobile app**: Native iOS/Android applications
-7. **Options data**: Track options flow and unusual options activity
-8. **News integration**: Aggregate news headlines alongside social sentiment
-9. **Backtesting engine**: Test strategies against historical data
-10. **Discord/Telegram alerts**: Push notifications to messaging platforms
+6. **Options data**: Track options flow and unusual options activity
+7. **News integration**: Aggregate news headlines alongside social sentiment
+8. **Backtesting engine**: Test strategies against historical data
+9. **Discord/Telegram alerts**: Push notifications to messaging platforms
 
 ---
 
@@ -482,6 +574,8 @@ The following features are explicitly not included in the current scope but may 
 
 ### A. API Endpoints Reference
 
+See FR-8 "CLI Command Structure" for the mapping between CLI commands and API endpoints.
+
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | /health | Health check |
@@ -498,7 +592,26 @@ The following features are explicitly not included in the current scope but may 
 | POST | /api/symbol-universe/refresh | Refresh symbol whitelist |
 | GET | /api/symbol-universe/stats | Get symbol universe stats |
 
-### B. Related Documents
+### B. CLI Quick Reference (FR-8)
+
+When implemented, the CLI will support:
+
+```bash
+meme-stocks health
+meme-stocks stocks list | show SYMBOL | add SYMBOL
+meme-stocks sentiment SYMBOL
+meme-stocks prices SYMBOL
+meme-stocks analysis
+meme-stocks notifications
+meme-stocks trades list | create SYMBOL buy|sell QTY PRICE | close ID EXIT_PRICE
+meme-stocks portfolio
+meme-stocks symbols refresh | stats
+meme-stocks jobs reddit | prices | notifications | runs [JOB] | recent-posts
+```
+
+Use `meme-stocks --help` and `meme-stocks <command> --help` for details.
+
+### C. Related Documents
 
 - **PLAN.md**: Detailed project plan, architecture, and business logic
 - **README.md**: Quick start guide and development instructions
@@ -506,7 +619,7 @@ The following features are explicitly not included in the current scope but may 
 - **.cursor/rules/reliability.mdc**: Always-applied rule for AI agents implementing Reliability Principles
 - **.cursor/rules/agent-conduct.mdc**: Always-applied rule—be skeptical, don't oversell, verify before claiming
 
-### C. API Error Response Format
+### D. API Error Response Format
 
 All API endpoints must return structured errors (never raw stack traces). Use this format:
 

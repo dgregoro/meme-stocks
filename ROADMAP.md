@@ -243,11 +243,10 @@ class PerformanceMetrics:
 | ID | Task | PRD Ref | Effort |
 |----|------|---------|--------|
 | 4.1 | Auto-refresh for dashboard data | NFR-6.3 | Small |
-| 4.2 | Mobile-responsive layout | NFR-6.4 | Medium |
-| 4.3 | WebSocket real-time notifications | FR-3.6 | Large |
-| 4.4 | Price charts with indicators | PRD §5 | Medium |
-| 4.5 | Notification preferences/filtering | PRD §5 | Small |
-| 4.6 | Loading states and error handling | NFR-6.2 | Small |
+| 4.2 | WebSocket real-time notifications | FR-3.6 | Large |
+| 4.3 | Price charts with indicators | PRD §5 | Medium |
+| 4.4 | Notification preferences/filtering | PRD §5 | Small |
+| 4.5 | Loading states and error handling | NFR-6.2 | Small |
 
 ### 4.3 WebSocket Notifications
 
@@ -266,7 +265,6 @@ async def notification_websocket(websocket: WebSocket):
 
 ### Success Criteria
 - [ ] Dashboard auto-refreshes every 60 seconds
-- [ ] Works on mobile devices
 - [ ] Notifications appear in real-time (WebSocket)
 - [ ] Charts display price data with overlays
 

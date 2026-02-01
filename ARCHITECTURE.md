@@ -65,6 +65,76 @@ backend/app/
 
 ---
 
+## CLI Architecture
+
+The CLI (`meme-stocks`) is an **API client**: it does not contain business logic or access the database directly. It requires a running backend and issues HTTP requests to the REST API. This keeps a single source of truth and avoids duplicating service logic.
+
+### Design Principles
+
+- **API-first**: Every CLI command maps to one or more API endpoints. No direct imports of services or repositories.
+- **Stateless**: The CLI has no local state; all data comes from the backend.
+- **Scriptable**: All commands work non-interactively (no prompts, no TTY required). JSON output enables piping to `jq` and other tools.
+
+### Component Layout
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        CLI (meme-stocks)                         │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────────┐  │
+│  │  Commands   │  │ HTTP Client │  │  Output Formatters      │  │
+│  │  (argparse/ │──│  (requests/ │  │  (table, JSON)          │  │
+│  │   click/    │  │   httpx)    │  │                         │  │
+│  │   typer)    │  │             │  │                         │  │
+│  └─────────────┘  └──────┬──────┘  └─────────────────────────┘  │
+└──────────────────────────┼──────────────────────────────────────┘
+                           │ HTTP
+                           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    FastAPI Backend (running)                     │
+│                    GET/POST /api/... endpoints                   │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Suggested Structure
+
+```
+backend/
+├── cli/
+│   ├── __init__.py
+│   ├── main.py           # Entry point, top-level parser
+│   ├── client.py         # HTTP client wrapper (base URL, auth, error handling)
+│   ├── commands/
+│   │   ├── stocks.py     # stocks list, show, add
+│   │   ├── trades.py     # trades list, create, close
+│   │   ├── jobs.py       # jobs reddit, prices, notifications, runs, recent-posts
+│   │   ├── symbols.py    # symbols refresh, stats
+│   │   └── ...
+│   └── output.py         # Table and JSON formatters
+```
+
+### Command Hierarchy
+
+- **Resource-based**: `meme-stocks <resource> <action> [args]` (e.g. `stocks list`, `trades create`).
+- **Top-level shortcuts**: Frequently used commands (`health`, `analysis`, `portfolio`, `sentiment SYMBOL`, `prices SYMBOL`) stay at top level for brevity.
+- **Config**: Base URL from `MEME_STOCKS_API_URL` or `--base-url`; output format from `MEME_STOCKS_OUTPUT` or `--output json|table`.
+
+### Output and Errors
+
+- **Table** (default): Human-readable tables for list endpoints. Columns adapt to terminal width; truncate or wrap as needed.
+- **JSON** (`--output json`): Raw JSON for scripting.
+- **Errors**: Connection failures → exit 3, clear message ("Backend not reachable. Is the server running?"). API 4xx/5xx → exit 1 or 2, display `error_type` and `message` from the response.
+
+### Checklist for Adding a CLI Command
+
+- [ ] Add subcommand under the appropriate resource (or top-level).
+- [ ] Map to existing API endpoint(s); no new backend logic for CLI-only use.
+- [ ] Support both table and JSON output.
+- [ ] Handle connection errors and API errors with clear messages and correct exit codes.
+- [ ] Provide `--help` for the command.
+- [ ] Add a test that exercises the command (with mocked HTTP or against a test server).
+
+---
+
 ## Pattern: Adding a New Model
 
 **Location**: `backend/app/models/{name}.py`
@@ -641,6 +711,7 @@ To adopt Alembic in the future, add it to requirements and initialize with `alem
 
 | Type | Location | Naming |
 |------|----------|--------|
+| CLI | `backend/cli/` | `main.py`, `client.py`, `commands/{resource}.py`, `output.py` |
 | Model | `backend/app/models/{name}.py` | `snake_case.py`, class `PascalCase` |
 | Repository | `backend/app/data/repositories/{name}_repo.py` | `{model}_repo.py` |
 | Service | `backend/app/services/{name}_service.py` | `{feature}_service.py` |

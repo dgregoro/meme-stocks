@@ -20,7 +20,7 @@ A web application for analyzing meme stocks using social sentiment (Reddit) and 
 - **Price Pattern Analysis**: Historical price data from Yahoo Finance with technical indicators (SMA-based trend detection)
 - **Unusual Activity Detection**: Volume spikes, price movements, and sentiment shift alerts
 - **End-of-Day Analysis**: Daily ranked stock summaries with composite scoring
-- **Paper Trading**: Track hypothetical positions, portfolio performance, and trade history
+- **Paper Trading**: Track hypothetical stock and option positions, portfolio performance, and trade history
 - **Background Jobs**: Automated data collection with catch-up on startup (handles laptop sleep/wake gracefully)
 - **Ticker Extraction**: Automatic stock symbol detection from Reddit post titles
 - **Notifications**: Real-time alerts for unusual activity (volume spikes, price moves, sentiment shifts)
@@ -34,7 +34,7 @@ A web application for analyzing meme stocks using social sentiment (Reddit) and 
 - `GET /api/stocks/{symbol}/prices` - Get historical price data
 - `GET /api/analysis/daily` - Get ranked daily analysis summary
 - `GET /api/notifications` - List unread notifications
-- `POST /api/trades` - Create a paper trade
+- `POST /api/trades` - Create a paper trade (stock or option)
 - `GET /api/trades` - List all paper trades
 - `POST /api/trades/{id}/close` - Close a paper trade
 - `GET /api/portfolio` - Get portfolio summary
