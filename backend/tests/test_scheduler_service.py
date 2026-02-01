@@ -8,6 +8,8 @@ import pytest
 from backend.app.data.database import Base, SessionLocal, engine
 from backend.app.data.repositories.job_execution_repo import JobExecutionRepository
 from backend.app.data.repositories.stock_repo import StockRepository
+from backend.app.models.job_run_history import JobRunHistory  # noqa: F401 - ensure table created
+from backend.app.models.reddit_symbol_mention import RedditSymbolMention  # noqa: F401 - Stock relationship
 from backend.app.models.stock import Stock
 from backend.app.services.scheduler_service import SchedulerService
 

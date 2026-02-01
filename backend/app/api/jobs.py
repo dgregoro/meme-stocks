@@ -136,6 +136,52 @@ def trigger_notification_check(
         ) from exc
 
 
+# Map URL path segment (hyphenated) to internal job name (underscore)
+JOB_NAME_FROM_PATH: dict[str, str] = {
+    "reddit-collection": "reddit_collection",
+    "price-collection": "price_collection",
+    "daily-analysis": "daily_analysis",
+    "notification-check": "notification_check",
+}
+
+
+class JobRunResponse(BaseModel):
+    """Response model for a single job run."""
+
+    id: int
+    job_name: str
+    run_at: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+@router.get("/{job_name}/runs", response_model=List[JobRunResponse])
+def get_job_runs(
+    job_name: str,
+    db: Session = Depends(get_session),
+) -> List[JobRunResponse]:
+    """Get the last 30 runs for a job.
+
+    Valid job_name values: reddit-collection, price-collection, daily-analysis, notification-check
+    """
+    internal_name = JOB_NAME_FROM_PATH.get(job_name)
+    if internal_name is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=error_detail("NotFound", f"Unknown job: {job_name}"),
+        )
+    repo = JobExecutionRepository(db)
+    runs = repo.list_recent_runs(internal_name, limit=30)
+    return [
+        JobRunResponse(
+            id=r.id,
+            job_name=r.job_name,
+            run_at=r.run_at.isoformat(),
+        )
+        for r in runs
+    ]
+
+
 class RedditPostResponse(BaseModel):
     """Response model for Reddit post."""
 

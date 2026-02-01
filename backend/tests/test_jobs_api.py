@@ -103,6 +103,48 @@ def test_job_endpoint_without_scheduler():
     assert "Scheduler not initialized" in response.json()["detail"]["message"]
 
 
+def test_get_job_runs_empty(db_session):
+    """Test GET job runs when none exist."""
+    app = create_app(omit_scheduler=True)
+    with TestClient(app) as client:
+        response = client.get("/api/jobs/reddit-collection/runs")
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_get_job_runs_with_data(db_session):
+    """Test GET job runs returns last 30 runs for a job."""
+    from datetime import datetime, timezone
+
+    from backend.app.data.repositories.job_execution_repo import JobExecutionRepository
+
+    repo = JobExecutionRepository(db_session)
+    now = datetime.now(timezone.utc)
+    for i in range(5):
+        repo.record_run("reddit_collection", run_at=now)
+    db_session.commit()
+
+    app = create_app(omit_scheduler=True)
+    with TestClient(app) as client:
+        response = client.get("/api/jobs/reddit-collection/runs")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 5
+    assert all(r["job_name"] == "reddit_collection" for r in data)
+    assert all("run_at" in r and "id" in r for r in data)
+
+
+def test_get_job_runs_unknown_job_returns_404(db_session):
+    """Test GET job runs for unknown job returns 404."""
+    app = create_app(omit_scheduler=True)
+    with TestClient(app) as client:
+        response = client.get("/api/jobs/nonexistent/runs")
+
+    assert response.status_code == 404
+
+
 def test_get_recent_reddit_posts_empty(db_session):
     """Test getting recent Reddit posts when none exist."""
     app = create_app()
