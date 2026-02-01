@@ -3,12 +3,13 @@ from __future__ import annotations
 import logging
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
 from backend.app.data.database import get_session
 from backend.app.data.repositories.job_execution_repo import JobExecutionRepository
+from backend.app.utils.api_errors import error_detail
 from backend.app.services.scheduler_service import SchedulerService
 
 logger = logging.getLogger(__name__)
@@ -29,7 +30,10 @@ def set_scheduler(scheduler: SchedulerService | None) -> None:
 def get_scheduler() -> SchedulerService:
     """Get the scheduler instance, raising an error if not available."""
     if _scheduler_instance is None:
-        raise HTTPException(status_code=503, detail="Scheduler not initialized")
+        raise HTTPException(
+            status_code=503,
+            detail=error_detail("ServiceUnavailable", "Scheduler not initialized"),
+        )
     return _scheduler_instance
 
 
@@ -97,8 +101,8 @@ def trigger_price_collection(
         logger.error(f"Error in manual price collection: {exc}", exc_info=True)
         db.rollback()
         raise HTTPException(
-            status_code=500,
-            detail=f"Price collection failed: {str(exc)}",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=error_detail("InternalServerError", f"Price collection failed: {exc}"),
         ) from exc
 
 
@@ -196,6 +200,6 @@ def get_recent_reddit_posts(
     except Exception as exc:
         logger.error(f"Error fetching recent Reddit posts: {exc}", exc_info=True)
         raise HTTPException(
-            status_code=500,
-            detail=f"Failed to fetch recent Reddit posts: {str(exc)}",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=error_detail("InternalServerError", f"Failed to fetch recent Reddit posts: {exc}"),
         ) from exc

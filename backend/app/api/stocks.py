@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.data.database import get_session
 from backend.app.data.repositories.stock_repo import StockRepository
+from backend.app.utils.api_errors import error_detail
 from backend.app.models.stock import Stock
 from backend.app.utils.errors import DataAccessError
 
@@ -40,11 +41,7 @@ def get_stock(symbol: str, db: Session = Depends(get_session)) -> StockResponse:
     if stock is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail={
-                "error": True,
-                "error_type": "NotFoundError",
-                "message": "Stock not found",
-            },
+            detail=error_detail("NotFoundError", "Stock not found"),
         )
     return StockResponse.model_validate(stock)
 
@@ -92,9 +89,5 @@ def create_stock(req: CreateStockRequest, db: Session = Depends(get_session)) ->
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={
-                "error": True,
-                "error_type": "DataAccessError",
-                "message": str(exc),
-            },
+            detail=error_detail("DataAccessError", str(exc)),
         ) from exc

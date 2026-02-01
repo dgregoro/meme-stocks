@@ -100,7 +100,7 @@ def test_job_endpoint_without_scheduler():
         response = client.post("/api/jobs/reddit-collection")
 
     assert response.status_code == 503
-    assert "Scheduler not initialized" in response.json()["detail"]
+    assert "Scheduler not initialized" in response.json()["detail"]["message"]
 
 
 def test_get_recent_reddit_posts_empty(db_session):

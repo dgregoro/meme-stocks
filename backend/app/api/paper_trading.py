@@ -16,6 +16,7 @@ from backend.app.services.paper_trading_service import (
     compute_portfolio_summary,
     create_trade,
 )
+from backend.app.utils.api_errors import error_detail
 from backend.app.utils.errors import DataAccessError
 
 
@@ -98,15 +99,21 @@ def post_close_trade(trade_id: int, req: CloseTradeRequest, db: Session = Depend
         db.commit()
     except ValueError as ve:
         db.rollback()
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ve))
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=error_detail("ValidationError", str(ve)),
+        )
     except DataAccessError as dae:
         db.rollback()
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(dae))
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=error_detail("NotFoundError", str(dae)),
+        )
     except Exception as exc:
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(exc),
+            detail=error_detail("InternalServerError", str(exc)),
         )
     return TradeResponse.model_validate(trade)
 

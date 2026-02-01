@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from backend.app.data.database import get_session
 from backend.app.services.symbol_universe_service import SymbolUniverseService
+from backend.app.utils.api_errors import error_detail
 from backend.app.utils.errors import ExternalAPIError
 from backend.app.utils.ticker_extractor import clear_symbol_universe_cache
 
@@ -83,4 +84,7 @@ def get_universe_stats(db: Session = Depends(get_session)) -> UniverseStatsRespo
         return UniverseStatsResponse(total_symbols=total, active_symbols=active)
     except Exception as exc:
         logger.error(f"Error getting universe stats: {exc}")
-        raise HTTPException(status_code=500, detail=f"Failed to get universe stats: {exc}") from exc
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=error_detail("InternalServerError", f"Failed to get universe stats: {exc}"),
+        ) from exc

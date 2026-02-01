@@ -238,7 +238,7 @@
 
 - [x] **Paper trading API: add db.rollback() on exception** — Added `db.rollback()` in all except blocks before re-raise.
 - [x] **Paper trading API: handle DataAccessError explicitly** — DataAccessError → 400 (create) or 404 (close); Exception → 500.
-- [ ] **Standardize API error response format** — Stocks/sentiment_price use `{"error": true, "error_type": "...", "message": "..."}`; paper_trading/jobs/symbol_universe use `str(exc)`. Define shared schema.
+- [x] **Standardize API error response format** — Added `error_detail()` in `utils/api_errors.py`; all APIs now use `{"error": true, "error_type": "...", "message": "..."}`.
 - [ ] **Alembic unused** — In requirements.txt but no migrations; schema changes are ad hoc. Either adopt Alembic or remove from requirements and document migration strategy.
 
 ### Medium Priority

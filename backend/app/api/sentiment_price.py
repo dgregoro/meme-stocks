@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.data.database import get_session
 from backend.app.data.repositories.price_data_repo import PriceDataRepository
+from backend.app.utils.api_errors import error_detail
 from backend.app.data.repositories.reddit_post_repo import RedditPostRepository
 from backend.app.data.repositories.stock_repo import StockRepository
 from backend.app.services.sentiment_analyzer import (
@@ -47,11 +48,7 @@ def get_stock_sentiment(symbol: str, db: Session = Depends(get_session)) -> Sent
     if StockRepository(db).get(symbol) is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail={
-                "error": True,
-                "error_type": "NotFoundError",
-                "message": "Stock not found",
-            },
+            detail=error_detail("NotFoundError", "Stock not found"),
         )
 
     reddit_repo = RedditPostRepository(db)
@@ -76,11 +73,7 @@ def get_stock_prices(symbol: str, db: Session = Depends(get_session)) -> List[Pr
     if StockRepository(db).get(symbol) is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail={
-                "error": True,
-                "error_type": "NotFoundError",
-                "message": "Stock not found",
-            },
+            detail=error_detail("NotFoundError", "Stock not found"),
         )
 
     price_repo = PriceDataRepository(db)
