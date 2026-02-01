@@ -19,6 +19,7 @@ def test_get_settings_uses_defaults_when_env_not_set(
     assert settings.api_host == "127.0.0.1"
     assert settings.api_port == 8000
     assert settings.log_level == "INFO"
+    assert settings.log_file == "logs/app.log"
     assert settings.database_url.startswith("sqlite:///")
     # Analysis thresholds should have sane defaults
     assert settings.sentiment_positive_threshold == 0.3

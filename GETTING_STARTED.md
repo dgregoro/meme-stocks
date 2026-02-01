@@ -79,6 +79,7 @@ Defaults work for local dev. For Reddit data collection and custom settings, cre
 
 ```bash
 LOG_LEVEL=INFO
+LOG_FILE=logs/app.log   # yfinance/pandas noise saved here, not printed to terminal
 DATABASE_URL=sqlite:///./data/app.db
 REDDIT_CLIENT_ID=your-client-id
 REDDIT_CLIENT_SECRET=your-client-secret

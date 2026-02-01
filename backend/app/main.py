@@ -11,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .config import get_settings
 from .data.database import init_db
+from .utils.logging_config import configure_logging
 
 # Import all models so SQLAlchemy knows about them for schema creation
 from .models import (  # noqa: F401
@@ -42,6 +43,7 @@ def _make_lifespan(
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> Any:
         # Startup
+        configure_logging()  # Redirect yfinance/pandas noise to log file, not terminal
         init_db()
         if omit_scheduler:
             scheduler = None
