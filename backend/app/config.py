@@ -49,6 +49,9 @@ class Settings(BaseSettings):
     reddit_subreddits: str = "wallstreetbets,stocks,investing"  # Comma-separated list
     enable_catch_up: bool = True  # Run missed jobs on startup
 
+    # SEC EDGAR (requires User-Agent; use contact email for compliance)
+    sec_user_agent: str = "MemeStocksApp/1.0 (contact@example.com)"
+
     model_config = SettingsConfigDict(
         env_file=(".env", "backend/.env"),
         env_file_encoding="utf-8",

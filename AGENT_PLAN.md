@@ -253,7 +253,7 @@
 
 - [ ] **Repository injection** — Services instantiate repos (e.g. `PaperTradeRepository(db)`) inline; inject for testability.
 - [ ] **Re-enable mypy** — Disabled in pre-commit due to module path issues. Fix config and re-enable.
-- [ ] **SEC user agent** — `"contact@example.com"` in symbol_universe_service; make configurable.
+- [x] **SEC user agent** — Added sec_user_agent to config; symbol_universe_service uses it.
 - [ ] **Test coverage** — Add symbol-universe API tests; migration test for `_migrate_drop_reddit_posts_stock_symbol`; consider testing SQLAlchemy error paths.
 - [x] **Use status constants consistently** — main, symbol_universe, jobs use status.HTTP_XXX; symbol_universe refresh uses error_detail.
 

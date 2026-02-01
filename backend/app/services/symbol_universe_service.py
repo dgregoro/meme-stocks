@@ -111,9 +111,9 @@ class SymbolUniverseService:
             List of symbol dictionaries with symbol, name, exchange info
         """
         try:
-            headers = {
-                "User-Agent": "MemeStocksApp/1.0 (contact@example.com)",  # SEC requires user agent
-            }
+            from backend.app.config import get_settings
+
+            headers = {"User-Agent": get_settings().sec_user_agent}
             response = requests.get(SEC_COMPANY_TICKERS_URL, headers=headers, timeout=30)
             response.raise_for_status()
 
