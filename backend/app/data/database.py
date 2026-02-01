@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
-from typing import Generator
+import logging
 import os
+from typing import Generator
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import declarative_base, sessionmaker, Session
 
 from backend.app.config import get_settings
 
+logger = logging.getLogger(__name__)
 
 Base = declarative_base()
 
@@ -71,8 +73,11 @@ def _migrate_drop_reddit_posts_stock_symbol() -> None:
         if "stock_symbol" in columns:
             with engine.begin() as c:
                 c.execute(text("ALTER TABLE reddit_posts DROP COLUMN stock_symbol"))
-    except Exception:
-        pass  # Non-SQLite or migration not supported; rely on create_all
+    except Exception as exc:
+        logger.warning(
+            "Migration drop reddit_posts.stock_symbol failed (non-SQLite or unsupported): %s",
+            exc,
+        )
 
 
 def init_db() -> None:
