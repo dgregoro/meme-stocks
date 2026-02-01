@@ -77,6 +77,13 @@
 - Don't add features not in PLAN.md or PRD.md without updating them first
 - Don't skip tests - every service/repo/endpoint needs tests
 
+# Git commits
+When saving changes to git (e.g., in response to "save to git", "commit", "git save"):
+- **Inspect the actual diffs** before committing. Run `git status` and `git diff` (or `git diff --stat`) to see what changed.
+- **Use logical, separate commits** when changes span multiple concerns (e.g., container fixes vs coverage vs docs). Multiple small commits are preferred over one large commit.
+- **Write accurate commit messages** that describe the changes in that commit, not a generic summary of all work.
+- Do not batch unrelated changes into a single commit.
+
 # Task completion protocol
 When completing a task:
 1. Implement the feature following ARCHITECTURE.md patterns
