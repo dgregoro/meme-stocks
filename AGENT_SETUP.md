@@ -109,7 +109,7 @@ from backend.app.data.database import Base
 
 class MyModel(Base):
     __tablename__ = "my_models"
-    
+
     id = Column(Integer, primary_key=True)
     name = Column(String, nullable=False)
     created_at = Column(DateTime, nullable=False)
@@ -125,10 +125,10 @@ from backend.app.models.my_model import MyModel
 class MyModelRepository:
     def __init__(self, session: Session):
         self.session = session
-    
+
     def get_by_id(self, id: int) -> MyModel | None:
         return self.session.query(MyModel).filter(MyModel.id == id).first()
-    
+
     def create(self, model: MyModel) -> MyModel:
         self.session.add(model)
         self.session.commit()
@@ -151,7 +151,7 @@ class MyModelResult:
 class MyModelService:
     def __init__(self, repo: MyModelRepository):
         self.repo = repo
-    
+
     def get_by_id(self, id: int) -> MyModelResult | None:
         model = self.repo.get_by_id(id)
         if model is None:

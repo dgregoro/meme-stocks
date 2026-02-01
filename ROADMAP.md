@@ -2,13 +2,15 @@
 
 This roadmap organizes future development work into prioritized phases.
 
+**Last Updated**: February 1, 2026
+
 ---
 
 ## Overview
 
 | Phase | Focus | Effort | Status |
 |-------|-------|--------|--------|
-| Phase 1 | Assessment & Stabilization | 1-2 days | Not Started |
+| Phase 1 | Assessment & Stabilization | 1-2 days | ✅ Complete |
 | Phase 2 | Tech Debt Resolution | 3-5 days | Not Started |
 | Phase 3 | Analysis Enhancements | 5-7 days | Not Started |
 | Phase 4 | User Experience | 3-5 days | Not Started |
@@ -17,36 +19,50 @@ This roadmap organizes future development work into prioritized phases.
 
 ---
 
-## Phase 1: Assessment & Stabilization
+## Phase 1: Assessment & Stabilization ✅ Complete
 
 **Goal**: Establish baseline quality and fix any blocking issues.
 
 **Priority**: Critical - Do this first
 
+**Completed**: January 31, 2026
+
 ### Tasks
 
-| ID | Task | Deliverable |
-|----|------|-------------|
-| 1.1 | Run quality check | Baseline score recorded |
-| 1.2 | Run full test suite | All tests passing |
-| 1.3 | Verify backend starts | Server runs without errors |
-| 1.4 | Verify frontend builds | Dev server runs |
-| 1.5 | Test API endpoints manually | Confirm core functionality |
-| 1.6 | Document any issues found | Issues list for Phase 2 |
+| ID | Task | Status | Result |
+|----|------|--------|--------|
+| 1.1 | Run quality check | ✅ | Baseline established |
+| 1.2 | Run full test suite | ✅ | 53 tests, 100% pass rate |
+| 1.3 | Verify backend starts | ✅ | Server runs, /health returns 200 |
+| 1.4 | Verify frontend builds | ✅ | Vite dev server runs on :5173 |
+| 1.5 | Test API endpoints manually | ✅ | All endpoints return expected responses |
+| 1.6 | Document any issues found | ✅ | Issues triaged and fixed |
 
-### Success Criteria
-- [ ] `./scripts/quality-check.sh` runs and produces score
-- [ ] `pytest backend/tests/ -v` shows 100% pass rate
-- [ ] Backend starts: `uvicorn backend.app.main:app`
-- [ ] Frontend starts: `npm run dev` (in frontend/)
-- [ ] Quality baseline documented
+### Work Completed
+
+**Environment Verification**:
+- Backend starts with `uvicorn backend.app.main:app --host 127.0.0.1 --port 8000` from project root
+- Frontend starts with `npm run dev` in frontend/ directory
+- All 53 tests pass after fixes
+
+**Issues Fixed**:
+- Fixed 7 failing tests (6 due to RedditPost/RedditSymbolMention model update, 1 assertion fix)
+- Fixed schema drift: added migration to drop legacy `stock_symbol` column from `reddit_posts`
+- Fixed config loading: `env_file = (".env", "backend/.env")` for project root execution
+- Fixed API 500 errors on all DB-backed endpoints
+- Replaced deprecated FastAPI `on_event` with lifespan context manager
+- Replaced deprecated Pydantic `class Config` with `model_config`/ConfigDict
+
+**Added**:
+- `test_reddit_symbol_mention_repo.py` with 4 tests for RedditSymbolMentionRepository
 
 ### Commands
 ```bash
+# From project root
 ./scripts/quality-check.sh
 pytest backend/tests/ -v
-cd backend && uvicorn app.main:app --reload &
-cd frontend && npm run dev &
+uvicorn backend.app.main:app --host 127.0.0.1 --port 8000
+cd frontend && npm run dev
 ```
 
 ---
@@ -59,15 +75,43 @@ cd frontend && npm run dev &
 
 ### Tasks
 
-| ID | Task | Source | Effort |
-|----|------|--------|--------|
-| 2.1 | Make sentiment keywords configurable | PLAN.md tech debt | Small |
-| 2.2 | Add post body to sentiment analysis | PLAN.md tech debt | Medium |
-| 2.3 | Add RSI indicator | PLAN.md tech debt, PRD FR-2.5 | Medium |
-| 2.4 | Add volume confirmation to patterns | PLAN.md tech debt | Small |
-| 2.5 | Implement combined-signal alerts | PLAN.md tech debt, PRD FR-3.7 | Medium |
-| 2.6 | Fix any deprecation warnings | Test output | Small |
-| 2.7 | Increase test coverage to 80%+ | Quality framework | Medium |
+| ID | Task | Source | Effort | Status |
+|----|------|--------|--------|--------|
+| 2.1 | Make sentiment keywords configurable | PLAN.md tech debt | Small | Not Started |
+| 2.2 | Add post body to sentiment analysis | PLAN.md tech debt | Medium | Not Started |
+| 2.3 | Add RSI indicator | PLAN.md tech debt, PRD FR-2.5 | Medium | Not Started |
+| 2.4 | Add volume confirmation to patterns | PLAN.md tech debt | Small | Not Started |
+| 2.5 | Implement combined-signal alerts | PLAN.md tech debt, PRD FR-3.7 | Medium | Not Started |
+| 2.6 | Fix any deprecation warnings | Test output | Small | ✅ Done in Phase 1 |
+| 2.7 | Increase test coverage to 80%+ | Quality framework | Medium | Not Started |
+
+### Technical Debt Checklist
+
+Items consolidated from codebase analysis. Address when doing maintenance or before major features.
+
+#### Completed ✅
+
+| Item | Resolution |
+|------|------------|
+| Paper trading API: add db.rollback() on exception | Added in all except blocks |
+| Paper trading API: handle DataAccessError | DataAccessError → 400/404; Exception → 500 |
+| Standardize API error response format | Added `error_detail()` in `utils/api_errors.py` |
+| Alembic unused | Removed; added Database Migrations section to ARCHITECTURE.md |
+| Extract "stock not found" helper | Added `require_stock()` in `utils/stock_helpers.py` |
+| Move magic numbers to config | Added analysis weights, windows, history days to config |
+| Database migration: log swallowed exceptions | Added logger.warning() in migration except block |
+| Pydantic validation on CreateTradeRequest | Added Literal, Field(gt=0) constraints |
+| SEC user agent | Added sec_user_agent to config |
+| Use status constants consistently | APIs now use status.HTTP_XXX consistently |
+
+#### Remaining
+
+| Priority | Item | Notes |
+|----------|------|-------|
+| Medium | RedditPostData.stock_symbol naming | Field is placeholder ""; consider renaming to `symbols: list[str]` |
+| Low | Repository injection | Services instantiate repos inline; inject for testability |
+| Low | Re-enable mypy in pre-commit | Disabled due to module path issues; fix config |
+| Low | Additional test coverage | symbol-universe API tests, migration tests, SQLAlchemy error paths |
 
 ### 2.1 Make Sentiment Keywords Configurable
 
@@ -375,7 +419,13 @@ Update this section as work completes:
 
 | Date | Phase | Task | Status | Notes |
 |------|-------|------|--------|-------|
-| | | | | |
+| 2026-01-31 | 1 | Environment verification | ✅ | Backend/frontend run, /health returns 200 |
+| 2026-01-31 | 1 | Test suite | ✅ | 53 tests, 100% pass rate |
+| 2026-01-31 | 1 | Fix failing tests | ✅ | 7 tests fixed (model/assertion updates) |
+| 2026-01-31 | 1 | Schema migration | ✅ | Dropped legacy reddit_posts.stock_symbol |
+| 2026-01-31 | 1 | Config loading fix | ✅ | env_file supports project root |
+| 2026-01-31 | 1 | Deprecation fixes | ✅ | FastAPI lifespan, Pydantic ConfigDict |
+| 2026-01-31 | 1 | Add missing tests | ✅ | RedditSymbolMentionRepository tests |
 
 ---
 
@@ -383,6 +433,24 @@ Update this section as work completes:
 
 - `PLAN.md` - Original project plan and tech debt
 - `PRD.md` - Product requirements with FR/NFR details
-- `AGENT_PLAN.md` - Task breakdown for agent execution
 - `QUALITY.md` - Quality measurement framework
 - `ARCHITECTURE.md` - Implementation patterns
+
+---
+
+## Agent Instructions
+
+When working on this roadmap:
+
+1. **Execute phases in order** - complete Phase N before starting Phase N+1
+2. **One task at a time** - complete and verify before moving on
+3. **Update this document** - mark tasks complete, add notes, update tracking table
+4. **Follow ARCHITECTURE.md patterns** - Model → Repository → Service → API → Tests
+5. **Run verification** - `./scripts/verify.sh` or `pytest` + `pre-commit` before marking done
+
+### Decision Rules
+
+- **If a test fails**: Investigate before fixing - understand root cause
+- **If docs conflict with code**: Check git history, ask user if unclear
+- **If external API unavailable**: Mock for testing, note for user
+- **If unclear on priority**: Ask user before proceeding
