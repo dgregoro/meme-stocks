@@ -1,0 +1,26 @@
+---
+description: Git commit practices—inspect diffs, use logical separate commits
+alwaysApply: true
+---
+
+# Git Commits
+
+When saving changes to git (e.g., "save to git", "commit", "git save"):
+
+## Before committing
+
+1. **Inspect the actual changes.** Run `git status` and `git diff` (or `git diff <file>`) to see what each file changed. Do not assume—look at the diffs.
+2. **Group changes by concern.** Identify distinct concerns (e.g., "container fixes", "add coverage", "update docs", "fix bug in X").
+
+## Commit strategy
+
+- **Use multiple commits when changes span different concerns.** One commit per logical unit (e.g., one for container fix, one for coverage, one for ROADMAP update).
+- **Write accurate commit messages** that describe only the changes in that commit.
+- **Do not batch unrelated changes** into a single commit.
+
+## Example
+
+If `git status` shows changes to Containerfile, compose.yaml, scripts/verify.sh, and ROADMAP.md:
+- Commit 1: Containerfile + compose.yaml (container deployment fixes)
+- Commit 2: scripts/verify.sh (verify script changes)
+- Commit 3: ROADMAP.md (roadmap update)
