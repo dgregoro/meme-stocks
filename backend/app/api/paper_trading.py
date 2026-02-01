@@ -16,6 +16,7 @@ from backend.app.services.paper_trading_service import (
     compute_portfolio_summary,
     create_trade,
 )
+from backend.app.utils.errors import DataAccessError
 
 
 router = APIRouter(prefix="/api", tags=["paper_trading"])
@@ -69,9 +70,17 @@ def post_trade(req: CreateTradeRequest, db: Session = Depends(get_session)) -> T
         )
         db.commit()
     except ValueError as ve:
+        db.rollback()
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ve))
+    except DataAccessError as dae:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(dae))
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(exc),
+        )
     return TradeResponse.model_validate(trade)
 
 
@@ -88,9 +97,17 @@ def post_close_trade(trade_id: int, req: CloseTradeRequest, db: Session = Depend
         trade = close_trade(db, trade_id, exit_price=req.exit_price)
         db.commit()
     except ValueError as ve:
-        raise HTTPException(status_code=400, detail=str(ve))
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ve))
+    except DataAccessError as dae:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(dae))
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(exc),
+        )
     return TradeResponse.model_validate(trade)
 
 

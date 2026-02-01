@@ -230,6 +230,35 @@
 
 ---
 
+## Technical Debt Checklist
+
+*Items identified from codebase analysis. Address when doing maintenance or before major features.*
+
+### High Priority
+
+- [x] **Paper trading API: add db.rollback() on exception** — Added `db.rollback()` in all except blocks before re-raise.
+- [x] **Paper trading API: handle DataAccessError explicitly** — DataAccessError → 400 (create) or 404 (close); Exception → 500.
+- [ ] **Standardize API error response format** — Stocks/sentiment_price use `{"error": true, "error_type": "...", "message": "..."}`; paper_trading/jobs/symbol_universe use `str(exc)`. Define shared schema.
+- [ ] **Alembic unused** — In requirements.txt but no migrations; schema changes are ad hoc. Either adopt Alembic or remove from requirements and document migration strategy.
+
+### Medium Priority
+
+- [ ] **Extract "stock not found" helper** — `sentiment_price.py` duplicates `StockRepository(db).get(symbol) is None` with same 404 payload in two endpoints.
+- [ ] **Move magic numbers to config** — `compute_composite_score` has hardcoded 0.6/0.4; `timedelta(hours=24)`, `timedelta(days=2)` scattered. Add to `config.py`.
+- [ ] **Database migration: log swallowed exceptions** — `_migrate_drop_reddit_posts_stock_symbol` uses `except Exception: pass`; failures are silent.
+- [ ] **Pydantic validation on CreateTradeRequest** — Add `action: Literal["buy","sell"]`, `quantity > 0`, `price > 0`; validation currently in service layer.
+- [ ] **RedditPostData.stock_symbol** — Field is placeholder `""`; name suggests single symbol but posts can mention multiple. Consider renaming or `symbols: list[str]`.
+
+### Low Priority
+
+- [ ] **Repository injection** — Services instantiate repos (e.g. `PaperTradeRepository(db)`) inline; inject for testability.
+- [ ] **Re-enable mypy** — Disabled in pre-commit due to module path issues. Fix config and re-enable.
+- [ ] **SEC user agent** — `"contact@example.com"` in symbol_universe_service; make configurable.
+- [ ] **Test coverage** — Add symbol-universe API tests; migration test for `_migrate_drop_reddit_posts_stock_symbol`; consider testing SQLAlchemy error paths.
+- [ ] **Use status constants consistently** — `post_trade` uses `status.HTTP_400_BAD_REQUEST`; `post_close_trade` uses raw `400`.
+
+---
+
 ## Agent Instructions
 
 ### How to Use This Plan

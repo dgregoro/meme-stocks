@@ -81,23 +81,23 @@ from backend.app.data.database import Base
 
 class MyNewModel(Base):
     """Brief description of what this model represents."""
-    
+
     __tablename__ = "my_new_models"
 
     # Primary key
     id = Column(Integer, primary_key=True, autoincrement=True)
-    
+
     # Required fields
     name = Column(String, nullable=False)
     value = Column(Float, nullable=False)
-    
+
     # Optional fields
     description = Column(String, nullable=True)
     is_active = Column(Boolean, default=True)
-    
+
     # Foreign key example
     stock_symbol = Column(String, ForeignKey("stocks.symbol"), nullable=False)
-    
+
     # Timestamps (always include these)
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, nullable=True, onupdate=lambda: datetime.now(timezone.utc))
@@ -207,7 +207,7 @@ class MyNewModelRepoProtocol(Protocol):
 
 def calculate_something(value: float, multiplier: float | None = None) -> float:
     """Pure function for business logic.
-    
+
     Pure functions are preferred because they are:
     - Easy to test
     - Easy to understand
@@ -243,12 +243,12 @@ class MyNewModelService:
             raise ValidationError("Name cannot be empty")
         if value < 0:
             raise ValidationError("Value must be non-negative")
-        
+
         # Create and save
         from backend.app.models.my_new_model import MyNewModel
         model = MyNewModel(name=name, value=value)
         saved = self.repo.create(model)
-        
+
         return MyNewModelResult(
             id=saved.id,
             name=saved.name,
@@ -464,13 +464,13 @@ class MockModel:
 
 class MockRepository:
     """Mock repository for unit testing services."""
-    
+
     def __init__(self, models: list[MockModel] | None = None):
         self.models = models or []
-    
+
     def get_by_id(self, id: int) -> MockModel | None:
         return next((m for m in self.models if m.id == id), None)
-    
+
     def create(self, model: object) -> MockModel:
         new_model = MockModel(
             id=len(self.models) + 1,
@@ -485,7 +485,7 @@ class MockRepository:
 def test_service_get_by_id_found() -> None:
     """Test service returns result when model exists."""
     from backend.app.services.my_new_model_service import MyNewModelService
-    
+
     mock_model = MockModel(
         id=1,
         name="Test",
@@ -494,7 +494,7 @@ def test_service_get_by_id_found() -> None:
     )
     repo = MockRepository([mock_model])
     service = MyNewModelService(repo)
-    
+
     result = service.get_by_id(1)
     assert result is not None
     assert result.name == "Test"
@@ -503,10 +503,10 @@ def test_service_get_by_id_found() -> None:
 def test_service_get_by_id_not_found() -> None:
     """Test service returns None when model doesn't exist."""
     from backend.app.services.my_new_model_service import MyNewModelService
-    
+
     repo = MockRepository([])
     service = MyNewModelService(repo)
-    
+
     result = service.get_by_id(999)
     assert result is None
 ```
