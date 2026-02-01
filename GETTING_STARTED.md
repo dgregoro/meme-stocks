@@ -25,7 +25,7 @@ docker compose up --build
 
 - **App**: http://localhost:8000
 - **API docs**: http://localhost:8000/docs
-- Backend code is volume-mounted; restart is automatic with `--reload` on save.
+- Backend code is volume-mounted; run `podman-compose restart backend` to apply changes.
 
 ### Frontend development (HMR)
 

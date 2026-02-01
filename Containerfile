@@ -48,4 +48,7 @@ EXPOSE 8000
 # Create data directory for SQLite
 RUN mkdir -p /app/data
 
+# Ensure /app is on PYTHONPATH for backend.app imports
+ENV PYTHONPATH=/app
+
 CMD ["uvicorn", "backend.app.main:app", "--host", "0.0.0.0", "--port", "8000"]
