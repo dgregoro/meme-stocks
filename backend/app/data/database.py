@@ -51,6 +51,39 @@ def get_session() -> Generator[Session, None, None]:
         db.close()
 
 
+def _migrate_paper_trades_add_option_columns() -> None:
+    """Add option-related columns to paper_trades if they do not exist."""
+    import sqlite3
+
+    if ":memory:" in _db_url or "sqlite" not in _db_url.lower():
+        return
+    path = _db_url.replace("sqlite:///", "", 1).split("?")[0].strip()
+    if not path or path == ":memory:":
+        return
+    path = os.path.abspath(path)
+    try:
+        conn = sqlite3.connect(path)
+        cur = conn.execute("PRAGMA table_info(paper_trades)")
+        columns = {row[1] for row in cur.fetchall()}
+        conn.close()
+        with engine.begin() as c:
+            if "instrument_type" not in columns:
+                c.execute(
+                    text("ALTER TABLE paper_trades ADD COLUMN instrument_type VARCHAR(16) DEFAULT 'stock' NOT NULL")
+                )
+            if "option_type" not in columns:
+                c.execute(text("ALTER TABLE paper_trades ADD COLUMN option_type VARCHAR(8)"))
+            if "strike_price" not in columns:
+                c.execute(text("ALTER TABLE paper_trades ADD COLUMN strike_price FLOAT"))
+            if "expiry_date" not in columns:
+                c.execute(text("ALTER TABLE paper_trades ADD COLUMN expiry_date DATE"))
+    except Exception as exc:
+        logger.warning(
+            "Migration paper_trades option columns failed: %s",
+            exc,
+        )
+
+
 def _migrate_drop_reddit_posts_stock_symbol() -> None:
     """Drop legacy stock_symbol column from reddit_posts if it exists.
 
@@ -84,3 +117,4 @@ def init_db() -> None:
     """Initialize database schema if missing (development convenience)."""
     Base.metadata.create_all(bind=engine)
     _migrate_drop_reddit_posts_stock_symbol()
+    _migrate_paper_trades_add_option_columns()

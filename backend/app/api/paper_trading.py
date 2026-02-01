@@ -1,8 +1,13 @@
-"""API endpoints for paper trading: trades and portfolio summary."""
+"""API endpoints for paper trading: trades and portfolio summary.
+
+Supports stocks and equity options. For options: quantity = contracts (100 shares each),
+price = premium per share.
+"""
 
 from __future__ import annotations
 
-from typing import List, Literal  # noqa: F401 - Literal used in CreateTradeRequest
+from datetime import date
+from typing import List, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
@@ -25,10 +30,14 @@ router = APIRouter(prefix="/api", tags=["paper_trading"])
 
 class CreateTradeRequest(BaseModel):
     stock_symbol: str
-    action: str
-    quantity: int
-    price: float
+    action: Literal["buy", "sell"] = "buy"
+    quantity: int = Field(gt=0, description="Shares for stock, contracts for options")
+    price: float = Field(gt=0, description="Price per share or premium per share for options")
     notes: str | None = None
+    instrument_type: Literal["stock", "option"] = "stock"
+    option_type: Literal["call", "put"] | None = None
+    strike_price: float | None = Field(None, gt=0)
+    expiry_date: date | None = None
 
 
 class TradeResponse(BaseModel):
@@ -38,6 +47,10 @@ class TradeResponse(BaseModel):
     quantity: int
     entry_price: float
     exit_price: float | None
+    instrument_type: str = "stock"
+    option_type: str | None = None
+    strike_price: float | None = None
+    expiry_date: date | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -59,7 +72,7 @@ class PortfolioResponse(BaseModel):
 
 @router.post("/trades", response_model=TradeResponse, status_code=201)
 def post_trade(req: CreateTradeRequest, db: Session = Depends(get_session)) -> TradeResponse:
-    """Create a paper trade (buy or sell). Symbol must exist in stocks."""
+    """Create a paper trade (buy or sell stock or option). Symbol must exist in stocks."""
     try:
         trade = create_trade(
             db,
@@ -68,6 +81,10 @@ def post_trade(req: CreateTradeRequest, db: Session = Depends(get_session)) -> T
             quantity=req.quantity,
             price=req.price,
             notes=req.notes,
+            instrument_type=req.instrument_type,
+            option_type=req.option_type,
+            strike_price=req.strike_price,
+            expiry_date=req.expiry_date,
         )
         db.commit()
     except ValueError as ve:

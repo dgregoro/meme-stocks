@@ -1,15 +1,23 @@
-"""Paper trading: create/close trades, compute portfolio summary and win-rate metrics."""
+"""Paper trading: create/close trades, compute portfolio summary and win-rate metrics.
+
+Supports stocks and equity options. Options: quantity = contracts (100 shares each),
+entry/exit price = premium per share.
+"""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
+from typing import Literal
+
 from sqlalchemy.orm import Session
 
 from backend.app.data.repositories.paper_trade_repo import PaperTradeRepository
 from backend.app.data.repositories.stock_repo import StockRepository
 from backend.app.models.paper_trade import PaperTrade
 from backend.app.utils.errors import DataAccessError
+
+OPTIONS_CONTRACT_MULTIPLIER = 100  # US equity options: 100 shares per contract
 
 
 @dataclass(frozen=True)
@@ -45,13 +53,20 @@ def create_trade(
     quantity: int,
     price: float,
     notes: str | None = None,
+    instrument_type: Literal["stock", "option"] = "stock",
+    option_type: Literal["call", "put"] | None = None,
+    strike_price: float | None = None,
+    expiry_date: date | None = None,
 ) -> PaperTrade:
-    """Create a paper trade (buy or sell). Symbol must exist in stocks table.
+    """Create a paper trade (buy or sell stock or option). Symbol must exist in stocks table.
+
+    For options: quantity = contracts, price = premium per share. Requires option_type,
+    strike_price, and expiry_date.
 
     Caller must commit the session after this returns.
 
     Raises:
-        ValueError: If quantity/price <= 0 or action not in ('buy', 'sell').
+        ValueError: If validation fails (quantity, price, action, or option params).
         DataAccessError: If symbol is not a known stock.
     """
     if quantity <= 0 or price <= 0:
@@ -61,12 +76,27 @@ def create_trade(
     if StockRepository(db).get(symbol) is None:
         raise DataAccessError("Unknown stock symbol")
 
+    if instrument_type == "option":
+        if option_type not in {"call", "put"}:
+            raise ValueError("option_type must be 'call' or 'put' for options")
+        if strike_price is None or strike_price <= 0:
+            raise ValueError("strike_price must be positive for options")
+        if expiry_date is None:
+            raise ValueError("expiry_date is required for options")
+    else:
+        if option_type is not None or strike_price is not None or expiry_date is not None:
+            raise ValueError("option_type, strike_price, expiry_date are only for options")
+
     trade = PaperTrade(
         stock_symbol=symbol,
         action=action,
         quantity=quantity,
         entry_price=price,
         notes=notes,
+        instrument_type=instrument_type,
+        option_type=option_type,
+        strike_price=strike_price,
+        expiry_date=expiry_date,
     )
     PaperTradeRepository(db).add(trade)
     return trade
@@ -101,14 +131,17 @@ def compute_portfolio_summary(db: Session, *, current_prices: dict[str, float] |
 
     for t in trades:
         direction = 1 if t.action == "buy" else -1
+        mult = OPTIONS_CONTRACT_MULTIPLIER if getattr(t, "instrument_type", "stock") == "option" else 1
         if t.exit_price is not None:
-            pl = direction * (t.exit_price - t.entry_price) * t.quantity
+            pl = direction * (t.exit_price - t.entry_price) * t.quantity * mult
             realized += pl
             closed_pos += 1
             pl_per_trade.append(pl)
         else:
             open_pos += 1
-            if current_prices and t.stock_symbol in current_prices:
+            # Unrealized: only for stocks (current_prices keyed by symbol); options need premium source
+            is_option = getattr(t, "instrument_type", "stock") == "option"
+            if not is_option and current_prices and t.stock_symbol in current_prices:
                 current = current_prices[t.stock_symbol]
                 unrealized += direction * (current - t.entry_price) * t.quantity
 

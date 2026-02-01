@@ -1,11 +1,15 @@
 import React, { useEffect, useState } from 'react'
-import { api, PortfolioSummary, Trade } from '../services/api'
+import { api, CreateTradePayload, PortfolioSummary, Trade } from '../services/api'
 
 export const PaperTrading: React.FC = () => {
   const [symbol, setSymbol] = useState('GME')
   const [action, setAction] = useState<'buy' | 'sell'>('buy')
   const [quantity, setQuantity] = useState(1)
   const [price, setPrice] = useState(10)
+  const [instrumentType, setInstrumentType] = useState<'stock' | 'option'>('stock')
+  const [optionType, setOptionType] = useState<'call' | 'put'>('call')
+  const [strikePrice, setStrikePrice] = useState(20)
+  const [expiryDate, setExpiryDate] = useState('')
   const [trades, setTrades] = useState<Trade[]>([])
   const [summary, setSummary] = useState<PortfolioSummary | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -21,8 +25,20 @@ export const PaperTrading: React.FC = () => {
 
   const submit = async () => {
     setError(null)
+    const payload: CreateTradePayload = {
+      stock_symbol: symbol,
+      action,
+      quantity,
+      price,
+      instrument_type: instrumentType,
+    }
+    if (instrumentType === 'option') {
+      payload.option_type = optionType
+      payload.strike_price = strikePrice
+      payload.expiry_date = expiryDate || undefined
+    }
     try {
-      await api.createTrade({ stock_symbol: symbol, action, quantity, price })
+      await api.createTrade(payload)
       refresh()
     } catch (e: unknown) {
       setError(String(e))
@@ -44,14 +60,40 @@ export const PaperTrading: React.FC = () => {
     <div>
       <h3>Paper Trading</h3>
       {error && <div style={{ color: 'red' }}>Error: {error}</div>}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
         <input value={symbol} onChange={(e) => setSymbol(e.target.value.toUpperCase())} placeholder="Symbol" />
         <select value={action} onChange={(e) => setAction(e.target.value as 'buy' | 'sell')}>
           <option value="buy">Buy</option>
           <option value="sell">Sell</option>
         </select>
-        <input type="number" value={quantity} onChange={(e) => setQuantity(Number(e.target.value))} min={1} />
-        <input type="number" step="0.01" value={price} onChange={(e) => setPrice(Number(e.target.value))} min={0.01} />
+        <select value={instrumentType} onChange={(e) => setInstrumentType(e.target.value as 'stock' | 'option')}>
+          <option value="stock">Stock</option>
+          <option value="option">Option</option>
+        </select>
+        {instrumentType === 'option' && (
+          <>
+            <select value={optionType} onChange={(e) => setOptionType(e.target.value as 'call' | 'put')}>
+              <option value="call">Call</option>
+              <option value="put">Put</option>
+            </select>
+            <input
+              type="number"
+              step="0.01"
+              placeholder="Strike"
+              value={strikePrice}
+              onChange={(e) => setStrikePrice(Number(e.target.value))}
+              min={0.01}
+            />
+            <input
+              type="date"
+              placeholder="Expiry"
+              value={expiryDate}
+              onChange={(e) => setExpiryDate(e.target.value)}
+            />
+          </>
+        )}
+        <input type="number" value={quantity} onChange={(e) => setQuantity(Number(e.target.value))} min={1} title={instrumentType === 'option' ? 'Contracts' : 'Shares'} />
+        <input type="number" step="0.01" value={price} onChange={(e) => setPrice(Number(e.target.value))} min={0.01} title={instrumentType === 'option' ? 'Premium per share' : 'Price'} />
         <button onClick={submit}>Create Trade</button>
       </div>
 
@@ -72,6 +114,7 @@ export const PaperTrading: React.FC = () => {
           <tr>
             <th>ID</th>
             <th>Symbol</th>
+            <th>Type</th>
             <th>Action</th>
             <th>Qty</th>
             <th>Entry</th>
@@ -83,9 +126,15 @@ export const PaperTrading: React.FC = () => {
           {trades.map((t) => (
             <tr key={t.id}>
               <td>{t.id}</td>
-              <td>{t.stock_symbol}</td>
+              <td>
+                {t.stock_symbol}
+                {t.instrument_type === 'option' && t.option_type && t.strike_price && (
+                  <small> {t.option_type} ${t.strike_price}</small>
+                )}
+              </td>
+              <td>{t.instrument_type === 'option' ? 'Option' : 'Stock'}</td>
               <td>{t.action}</td>
-              <td>{t.quantity}</td>
+              <td>{t.quantity}{t.instrument_type === 'option' ? ' contracts' : ''}</td>
               <td>{t.entry_price}</td>
               <td>{t.exit_price ?? '-'}</td>
               <td>{t.exit_price == null && <button onClick={() => doClose(t.id)}>Close</button>}</td>

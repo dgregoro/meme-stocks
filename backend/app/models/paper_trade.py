@@ -1,17 +1,18 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
-from sqlalchemy import String, Integer, Float, DateTime, ForeignKey
+from sqlalchemy import Date, String, Integer, Float, DateTime, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.app.data.database import Base
 
 
 class PaperTrade(Base):
-    """A simulated (paper) trade: buy or sell a stock at a price and quantity.
+    """A simulated (paper) trade: buy or sell a stock or option at a price and quantity.
 
-    Open trades have exit_price/exit_at as None. Closed trades have both set.
+    Supports stocks and equity options. For options: quantity = contracts (100 shares each),
+    entry/exit price = premium per share. Open trades have exit_price/exit_at as None.
     """
 
     __tablename__ = "paper_trades"
@@ -26,3 +27,10 @@ class PaperTrade(Base):
     exit_price: Mapped[float | None] = mapped_column(Float, nullable=True)
     exit_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     notes: Mapped[str | None] = mapped_column(String(512), nullable=True)
+
+    # Instrument type: 'stock' or 'option'. Default 'stock' for backward compatibility.
+    instrument_type: Mapped[str] = mapped_column(String(16), default="stock", nullable=False)
+    # Option-specific (null for stocks)
+    option_type: Mapped[str | None] = mapped_column(String(8), nullable=True)  # 'call' | 'put'
+    strike_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    expiry_date: Mapped[date | None] = mapped_column(Date, nullable=True)

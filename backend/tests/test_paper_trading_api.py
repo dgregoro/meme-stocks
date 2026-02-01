@@ -105,3 +105,72 @@ def test_portfolio_win_rate_mixed_wins_losses() -> None:
     assert s["win_rate"] == pytest.approx(2 / 3, rel=1e-3)  # 2 wins of 3
     assert s["average_win"] == 20.0  # (20+20)/2
     assert s["average_loss"] == -10.0  # single loss
+
+
+def test_option_trade_flow() -> None:
+    """Test creating and closing an option trade; P/L uses 100 shares per contract."""
+    client, db = build_app_with_db()
+    db.add(Stock(symbol="GME", name="GameStop", sector="Retail", market_cap=None))
+    db.commit()
+
+    # Create option: 1 call contract, premium $2.00
+    resp = client.post(
+        "/api/trades",
+        json={
+            "stock_symbol": "GME",
+            "action": "buy",
+            "quantity": 1,
+            "price": 2.0,
+            "instrument_type": "option",
+            "option_type": "call",
+            "strike_price": 20.0,
+            "expiry_date": "2025-12-19",
+        },
+    )
+    assert resp.status_code == 201
+    trade = resp.json()
+    assert trade["instrument_type"] == "option"
+    assert trade["option_type"] == "call"
+    assert trade["strike_price"] == 20.0
+    assert trade["expiry_date"] == "2025-12-19"
+
+    # Close at $3.00 premium: P/L = (3 - 2) * 1 * 100 = $100
+    resp = client.post(f"/api/trades/{trade['id']}/close", json={"exit_price": 3.0})
+    assert resp.status_code == 200
+
+    resp = client.get("/api/portfolio")
+    assert resp.status_code == 200
+    s = resp.json()
+    assert s["realized_pl"] == 100.0
+    assert s["win_rate"] == 1.0
+    assert s["average_win"] == 100.0
+
+
+def test_option_trade_validation() -> None:
+    """Option trades require option_type, strike_price, expiry_date."""
+    client, db = build_app_with_db()
+    db.add(Stock(symbol="GME", name="GameStop", sector="Retail", market_cap=None))
+    db.commit()
+
+    # Missing option params (service raises ValueError -> 400)
+    resp = client.post(
+        "/api/trades",
+        json={"stock_symbol": "GME", "action": "buy", "quantity": 1, "price": 2.0, "instrument_type": "option"},
+    )
+    assert resp.status_code == 400
+
+    # With all option params
+    resp = client.post(
+        "/api/trades",
+        json={
+            "stock_symbol": "GME",
+            "action": "buy",
+            "quantity": 1,
+            "price": 2.0,
+            "instrument_type": "option",
+            "option_type": "put",
+            "strike_price": 15.0,
+            "expiry_date": "2025-06-20",
+        },
+    )
+    assert resp.status_code == 201

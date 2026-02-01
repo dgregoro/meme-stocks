@@ -1,6 +1,10 @@
 import axios from 'axios'
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
+// Empty string = same-origin (container build); unset = dev default to backend
+const BASE_URL =
+  import.meta.env.VITE_API_BASE_URL === ''
+    ? ''
+    : (import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000')
 
 export type AnalysisRow = {
   symbol: string
@@ -51,6 +55,22 @@ export type Trade = {
   quantity: number
   entry_price: number
   exit_price: number | null
+  instrument_type?: string
+  option_type?: string | null
+  strike_price?: number | null
+  expiry_date?: string | null
+}
+
+export type CreateTradePayload = {
+  stock_symbol: string
+  action: 'buy' | 'sell'
+  quantity: number
+  price: number
+  notes?: string
+  instrument_type?: 'stock' | 'option'
+  option_type?: 'call' | 'put'
+  strike_price?: number
+  expiry_date?: string // YYYY-MM-DD
 }
 
 export type PortfolioSummary = {
@@ -90,7 +110,7 @@ export const api = {
   getPrices: (symbol: string) =>
     handle(client.get<PricePoint[]>(`/api/stocks/${symbol}/prices`)),
   listNotifications: () => handle(client.get<NotificationItem[]>('/api/notifications')),
-  createTrade: (payload: { stock_symbol: string; action: 'buy' | 'sell'; quantity: number; price: number; notes?: string }) =>
+  createTrade: (payload: CreateTradePayload) =>
     handle(client.post<Trade>('/api/trades', payload)),
   listTrades: () => handle(client.get<Trade[]>('/api/trades')),
   closeTrade: (id: number, exit_price: number) =>
