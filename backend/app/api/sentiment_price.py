@@ -3,15 +3,14 @@ from __future__ import annotations
 from datetime import timedelta
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
 from backend.app.data.database import get_session
 from backend.app.data.repositories.price_data_repo import PriceDataRepository
-from backend.app.utils.api_errors import error_detail
 from backend.app.data.repositories.reddit_post_repo import RedditPostRepository
-from backend.app.data.repositories.stock_repo import StockRepository
+from backend.app.utils.stock_helpers import require_stock
 from backend.app.services.sentiment_analyzer import (
     SentimentSummary,
     calculate_weighted_sentiment,
@@ -44,12 +43,7 @@ class PricePointResponse(BaseModel):
 @router.get("/{symbol}/sentiment", response_model=SentimentResponse)
 def get_stock_sentiment(symbol: str, db: Session = Depends(get_session)) -> SentimentResponse:
     """Get aggregated sentiment from Reddit mentions for a stock (24h window)."""
-    # Ensure stock exists; keep behavior explicit.
-    if StockRepository(db).get(symbol) is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=error_detail("NotFoundError", "Stock not found"),
-        )
+    require_stock(db, symbol)
 
     reddit_repo = RedditPostRepository(db)
     posts = reddit_repo.list_for_stock(symbol)
@@ -70,11 +64,7 @@ def get_stock_sentiment(symbol: str, db: Session = Depends(get_session)) -> Sent
 @router.get("/{symbol}/prices", response_model=List[PricePointResponse])
 def get_stock_prices(symbol: str, db: Session = Depends(get_session)) -> List[PricePointResponse]:
     """Get OHLCV price history for a stock. Returns 404 if stock not found."""
-    if StockRepository(db).get(symbol) is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=error_detail("NotFoundError", "Stock not found"),
-        )
+    require_stock(db, symbol)
 
     price_repo = PriceDataRepository(db)
     prices = price_repo.list_for_stock(symbol)

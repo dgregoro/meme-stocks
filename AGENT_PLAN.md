@@ -239,11 +239,11 @@
 - [x] **Paper trading API: add db.rollback() on exception** — Added `db.rollback()` in all except blocks before re-raise.
 - [x] **Paper trading API: handle DataAccessError explicitly** — DataAccessError → 400 (create) or 404 (close); Exception → 500.
 - [x] **Standardize API error response format** — Added `error_detail()` in `utils/api_errors.py`; all APIs now use `{"error": true, "error_type": "...", "message": "..."}`.
-- [ ] **Alembic unused** — In requirements.txt but no migrations; schema changes are ad hoc. Either adopt Alembic or remove from requirements and document migration strategy.
+- [x] **Alembic unused** — Removed from requirements; added Database Migrations section to ARCHITECTURE.md documenting current strategy.
 
 ### Medium Priority
 
-- [ ] **Extract "stock not found" helper** — `sentiment_price.py` duplicates `StockRepository(db).get(symbol) is None` with same 404 payload in two endpoints.
+- [x] **Extract "stock not found" helper** — Added `require_stock()` in `utils/stock_helpers.py`; used by stocks, sentiment_price.
 - [ ] **Move magic numbers to config** — `compute_composite_score` has hardcoded 0.6/0.4; `timedelta(hours=24)`, `timedelta(days=2)` scattered. Add to `config.py`.
 - [ ] **Database migration: log swallowed exceptions** — `_migrate_drop_reddit_posts_stock_symbol` uses `except Exception: pass`; failures are silent.
 - [ ] **Pydantic validation on CreateTradeRequest** — Add `action: Literal["buy","sell"]`, `quantity > 0`, `price > 0`; validation currently in service layer.

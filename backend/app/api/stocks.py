@@ -8,8 +8,9 @@ from sqlalchemy.orm import Session
 
 from backend.app.data.database import get_session
 from backend.app.data.repositories.stock_repo import StockRepository
-from backend.app.utils.api_errors import error_detail
 from backend.app.models.stock import Stock
+from backend.app.utils.api_errors import error_detail
+from backend.app.utils.stock_helpers import require_stock
 from backend.app.utils.errors import DataAccessError
 
 
@@ -36,13 +37,7 @@ def list_stocks(db: Session = Depends(get_session)) -> List[StockResponse]:
 @router.get("/{symbol}", response_model=StockResponse)
 def get_stock(symbol: str, db: Session = Depends(get_session)) -> StockResponse:
     """Get a single stock by symbol. Returns 404 if not found."""
-    repo = StockRepository(db)
-    stock: Stock | None = repo.get(symbol)
-    if stock is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=error_detail("NotFoundError", "Stock not found"),
-        )
+    stock = require_stock(db, symbol)
     return StockResponse.model_validate(stock)
 
 
@@ -68,11 +63,7 @@ def create_stock(req: CreateStockRequest, db: Session = Depends(get_session)) ->
     if existing is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail={
-                "error": True,
-                "error_type": "ConflictError",
-                "message": f"Stock {req.symbol} already exists",
-            },
+            detail=error_detail("ConflictError", f"Stock {req.symbol} already exists"),
         )
 
     try:
