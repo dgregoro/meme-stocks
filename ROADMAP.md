@@ -11,7 +11,7 @@ This roadmap organizes future development work into prioritized phases.
 | Phase | Focus | Effort | Status |
 |-------|-------|--------|--------|
 | Phase 1 | Assessment & Stabilization | 1-2 days | ✅ Complete |
-| Phase 2 | Tech Debt Resolution | 3-5 days | Not Started |
+| Phase 2 | Tech Debt Resolution | 3-5 days | In Progress |
 | Phase 3 | Analysis Enhancements | 5-7 days | Not Started |
 | Phase 4 | User Experience | 3-5 days | Not Started |
 | Phase 5 | Advanced Features | 7-14 days | Not Started |
@@ -77,7 +77,7 @@ cd frontend && npm run dev
 
 | ID | Task | Source | Effort | Status |
 |----|------|--------|--------|--------|
-| 2.1 | Make sentiment keywords configurable | PLAN.md tech debt | Small | Not Started |
+| 2.1 | Make sentiment keywords configurable | PLAN.md tech debt | Small | ✅ Done |
 | 2.2 | Add post body to sentiment analysis | PLAN.md tech debt | Medium | Not Started |
 | 2.3 | Add RSI indicator | PLAN.md tech debt, PRD FR-2.5 | Medium | Not Started |
 | 2.4 | Add volume confirmation to patterns | PLAN.md tech debt | Small | Not Started |
@@ -426,6 +426,7 @@ Update this section as work completes:
 | 2026-01-31 | 1 | Config loading fix | ✅ | env_file supports project root |
 | 2026-01-31 | 1 | Deprecation fixes | ✅ | FastAPI lifespan, Pydantic ConfigDict |
 | 2026-01-31 | 1 | Add missing tests | ✅ | RedditSymbolMentionRepository tests |
+| 2026-02-01 | 2 | 2.1 Configurable sentiment keywords | ✅ | config.py + sentiment_analyzer.py |
 
 ---
 

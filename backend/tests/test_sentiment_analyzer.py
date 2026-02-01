@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
+
+import pytest
 
 from backend.app.services.sentiment_analyzer import (
     SentimentSummary,
@@ -62,3 +64,23 @@ def test_classify_sentiment_uses_thresholds() -> None:
     assert classify_sentiment(0.5) == "positive"
     assert classify_sentiment(-0.5) == "negative"
     assert classify_sentiment(0.0) == "neutral"
+
+
+def test_analyze_post_sentiment_uses_configurable_keywords(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Verify sentiment keywords can be overridden via config."""
+    monkeypatch.setenv("SENTIMENT_POSITIVE_KEYWORDS", "custompos,hopium")
+    monkeypatch.setenv("SENTIMENT_NEGATIVE_KEYWORDS", "customneg,fud")
+    from backend.app.config import get_settings
+
+    get_settings.cache_clear()
+    try:
+        # Custom positive keywords should yield positive score
+        assert analyze_post_sentiment("This is pure hopium custompos") > 0
+        # Custom negative keywords should yield negative score
+        assert analyze_post_sentiment("Total fud and customneg") < 0
+        # Old defaults should not match
+        assert analyze_post_sentiment("buy moon hold") == 0.0
+    finally:
+        get_settings.cache_clear()

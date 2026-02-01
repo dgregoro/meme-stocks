@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     api_host: str = "127.0.0.1"
     api_port: int = 8000
     log_level: str = "INFO"
+    log_file: str = "logs/app.log"  # Third-party noise (yfinance, etc.) written here, not terminal
 
     database_url: str = "sqlite:///./data/app.db"
 
@@ -27,6 +28,8 @@ class Settings(BaseSettings):
     # Analysis thresholds (can be tuned via environment)
     sentiment_positive_threshold: float = 0.3
     sentiment_negative_threshold: float = -0.2
+    sentiment_positive_keywords: str = "buy,moon,hold,bullish,gains,profit,long"
+    sentiment_negative_keywords: str = "sell,crash,bearish,loss,dump,scam,short"
     volume_spike_threshold: float = 2.0
     price_movement_threshold_pct: float = 5.0
     sentiment_shift_threshold: float = 0.3

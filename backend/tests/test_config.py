@@ -23,6 +23,8 @@ def test_get_settings_uses_defaults_when_env_not_set(
     # Analysis thresholds should have sane defaults
     assert settings.sentiment_positive_threshold == 0.3
     assert settings.sentiment_negative_threshold == -0.2
+    assert "buy" in settings.sentiment_positive_keywords
+    assert "sell" in settings.sentiment_negative_keywords
     assert settings.volume_spike_threshold == 2.0
     assert settings.price_movement_threshold_pct == 5.0
     assert settings.sentiment_shift_threshold == 0.3

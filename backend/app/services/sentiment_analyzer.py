@@ -21,20 +21,33 @@ class HasRedditFields(Protocol):
     collected_at: datetime
 
 
-POSITIVE_KEYWORDS = {"buy", "moon", "hold", "bullish", "gains", "profit", "long"}
-NEGATIVE_KEYWORDS = {"sell", "crash", "bearish", "loss", "dump", "scam", "short"}
+def _parse_keywords(csv: str) -> frozenset[str]:
+    """Parse comma-separated keyword string into a frozenset of lowercase tokens."""
+    return frozenset(kw.strip().lower() for kw in csv.split(",") if kw.strip())
+
+
+def _get_sentiment_keywords() -> tuple[frozenset[str], frozenset[str]]:
+    """Load positive and negative keyword sets from config."""
+    settings = get_settings()
+    pos = _parse_keywords(settings.sentiment_positive_keywords)
+    neg = _parse_keywords(settings.sentiment_negative_keywords)
+    # Fallback to defaults if config yields empty sets
+    default_pos = frozenset({"buy", "moon", "hold", "bullish", "gains", "profit", "long"})
+    default_neg = frozenset({"sell", "crash", "bearish", "loss", "dump", "scam", "short"})
+    return (pos or default_pos, neg or default_neg)
 
 
 def analyze_post_sentiment(text: str) -> float:
     """Very simple keyword-based sentiment score in [-1, 1].
 
-    This is intentionally naive and deterministic; it can be replaced with
-    a more advanced model later without changing callers.
+    Uses positive/negative keyword sets from config (sentiment_positive_keywords,
+    sentiment_negative_keywords). Intentionally naive and deterministic; can be
+    replaced with a more advanced model later without changing callers.
     """
-
+    pos_keywords, neg_keywords = _get_sentiment_keywords()
     lower = text.lower()
-    pos_matches = sum(1 for kw in POSITIVE_KEYWORDS if kw in lower)
-    neg_matches = sum(1 for kw in NEGATIVE_KEYWORDS if kw in lower)
+    pos_matches = sum(1 for kw in pos_keywords if kw in lower)
+    neg_matches = sum(1 for kw in neg_keywords if kw in lower)
 
     if pos_matches == 0 and neg_matches == 0:
         return 0.0
