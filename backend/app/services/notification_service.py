@@ -5,6 +5,7 @@ from typing import List
 
 from sqlalchemy.orm import Session
 
+from backend.app.config import get_settings
 from backend.app.data.repositories.notification_repo import NotificationRepository
 from backend.app.data.repositories.price_data_repo import PriceDataRepository
 from backend.app.data.repositories.reddit_post_repo import RedditPostRepository
@@ -71,7 +72,8 @@ def generate_notifications_for_stock(db: Session, symbol: str) -> List[Notificat
     # Sentiment shift using last two 24h windows if possible (simplified: compare current vs. older window)
     posts = reddit_repo.list_for_stock(symbol)
     if posts:
-        current_summary: SentimentSummary = calculate_weighted_sentiment(symbol, posts, window=timedelta(hours=24))
+        window = timedelta(hours=get_settings().sentiment_window_hours)
+        current_summary: SentimentSummary = calculate_weighted_sentiment(symbol, posts, window=window)
         # For now, we skip historic sentiment and only emit shift when there were previous mentions;
         # a more advanced implementation would cache/store prior summaries.
         if current_summary.mention_count > 0:

@@ -172,9 +172,7 @@ class SchedulerService:
 
         try:
             subreddits = [s.strip() for s in self._settings.reddit_subreddits.split(",")]
-            posts = self._reddit_service.fetch_recent_posts(
-                subreddits, limit_per_subreddit=100, max_age=timedelta(days=2)
-            )
+            posts = self._reddit_service.fetch_recent_posts(subreddits, limit_per_subreddit=100)
             stats["posts_fetched"] = len(posts)
         except ExternalAPIError as exc:
             logger.error(f"Failed to fetch Reddit posts: {exc}")
@@ -289,8 +287,7 @@ class SchedulerService:
 
         for stock in stocks:
             try:
-                # Fetch last 30 days of data to ensure we have recent prices
-                start_date = today - timedelta(days=30)
+                start_date = today - timedelta(days=self._settings.price_history_days)
                 bars = self._yahoo_service.fetch_historical_prices(stock.symbol, start=start_date, end=today)
             except ExternalAPIError as exc:
                 logger.warning(f"Failed to fetch price data for {stock.symbol}: {exc}")

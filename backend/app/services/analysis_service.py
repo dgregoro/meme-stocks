@@ -6,6 +6,7 @@ from typing import List
 
 from sqlalchemy.orm import Session
 
+from backend.app.config import get_settings
 from backend.app.data.repositories.price_data_repo import PriceDataRepository
 from backend.app.data.repositories.reddit_post_repo import RedditPostRepository
 from backend.app.data.repositories.stock_repo import StockRepository
@@ -78,16 +79,25 @@ def compute_composite_score(sentiment: SentimentSummary, trend: PriceTrend) -> f
     else:
         trend_component = 0.5
 
-    # Simple weighted average
-    return round(sentiment_component * 0.6 + trend_component * 0.4, 4)
+    settings = get_settings()
+    return round(
+        sentiment_component * settings.analysis_sentiment_weight + trend_component * settings.analysis_trend_weight,
+        4,
+    )
 
 
-def run_daily_analysis(db: Session, *, window: timedelta = timedelta(hours=24)) -> List[StockAnalysisRow]:
+def run_daily_analysis(
+    db: Session,
+    *,
+    window: timedelta | None = None,
+) -> List[StockAnalysisRow]:
     """Produce a ranked list of stocks with sentiment and trend.
 
     This function uses existing repositories and analysis helpers and does
     not perform any persistence itself.
     """
+    if window is None:
+        window = timedelta(hours=get_settings().sentiment_window_hours)
 
     stock_repo = StockRepository(db)
     reddit_repo = RedditPostRepository(db)

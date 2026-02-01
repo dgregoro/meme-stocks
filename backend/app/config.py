@@ -31,6 +31,13 @@ class Settings(BaseSettings):
     price_movement_threshold_pct: float = 5.0
     sentiment_shift_threshold: float = 0.3
 
+    # Analysis weights and windows
+    analysis_sentiment_weight: float = 0.6  # Weight for sentiment in composite score
+    analysis_trend_weight: float = 0.4  # Weight for trend in composite score
+    sentiment_window_hours: int = 24  # Window for sentiment aggregation
+    reddit_max_age_days: int = 2  # Max age of Reddit posts to fetch
+    price_history_days: int = 30  # Days of price history for analysis
+
     # CORS
     cors_allowed_origins: str = "http://127.0.0.1:5173,http://localhost:5173"
 

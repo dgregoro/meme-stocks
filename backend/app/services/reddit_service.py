@@ -66,7 +66,7 @@ class RedditService:
         self,
         subreddits: Iterable[str],
         limit_per_subreddit: int = 100,
-        max_age: timedelta | None = timedelta(days=2),
+        max_age: timedelta | None = None,
     ) -> List[RedditPostData]:
         """Fetch recent submissions from the given subreddits.
 
@@ -74,6 +74,8 @@ class RedditService:
         - Does not filter by stock symbol here; that is left to higher-level
           logic so ticker extraction rules remain configurable.
         """
+        if max_age is None:
+            max_age = timedelta(days=get_settings().reddit_max_age_days)
 
         now = datetime.now(timezone.utc)
         results: list[RedditPostData] = []

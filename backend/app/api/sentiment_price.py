@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
+from backend.app.config import get_settings
 from backend.app.data.database import get_session
 from backend.app.data.repositories.price_data_repo import PriceDataRepository
 from backend.app.data.repositories.reddit_post_repo import RedditPostRepository
@@ -48,8 +49,8 @@ def get_stock_sentiment(symbol: str, db: Session = Depends(get_session)) -> Sent
     reddit_repo = RedditPostRepository(db)
     posts = reddit_repo.list_for_stock(symbol)
 
-    # Use a fixed 24h window for now; this can be made configurable later.
-    summary: SentimentSummary = calculate_weighted_sentiment(symbol, posts, window=timedelta(hours=24))
+    window = timedelta(hours=get_settings().sentiment_window_hours)
+    summary: SentimentSummary = calculate_weighted_sentiment(symbol, posts, window=window)
     classification = classify_sentiment(summary.score)
 
     return SentimentResponse(
