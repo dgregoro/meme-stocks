@@ -83,4 +83,3 @@ class SymbolUniverseRepository:
             return len(list(self._session.execute(stmt).scalars().all()))
         except SQLAlchemyError as exc:
             raise DataAccessError("Failed to count symbols") from exc
-

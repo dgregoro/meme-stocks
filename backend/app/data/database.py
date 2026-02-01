@@ -1,3 +1,5 @@
+"""Database connection, session management, and schema initialization."""
+
 from __future__ import annotations
 
 from typing import Generator
@@ -29,9 +31,7 @@ def _ensure_sqlite_path_exists(db_url: str) -> None:
 _db_url = _build_engine_url()
 _ensure_sqlite_path_exists(_db_url)
 engine = create_engine(_db_url, future=True)
-SessionLocal = sessionmaker(
-    autocommit=False, autoflush=False, bind=engine, class_=Session
-)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine, class_=Session)
 
 
 def get_session() -> Generator[Session, None, None]:

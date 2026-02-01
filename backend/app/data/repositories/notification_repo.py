@@ -11,12 +11,13 @@ from backend.app.utils.errors import DataAccessError
 
 
 class NotificationRepository:
-    """Repository for Notification entities."""
+    """Data access for Notification (activity alerts)."""
 
     def __init__(self, session: Session) -> None:
         self._session = session
 
     def add(self, notification: Notification) -> None:
+        """Persist a notification. Caller must commit the session."""
         try:
             self._session.add(notification)
             self._session.flush()
@@ -24,6 +25,7 @@ class NotificationRepository:
             raise DataAccessError("Failed to add notification") from exc
 
     def list_unread(self, limit: int = 100) -> Sequence[Notification]:
+        """List unread notifications, most recent first, up to limit."""
         stmt = (
             select(Notification)
             .where(Notification.read.is_(False))

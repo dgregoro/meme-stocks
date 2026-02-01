@@ -17,12 +17,11 @@ class StockRepository:
         self._session = session
 
     def get(self, symbol: str) -> Stock | None:
+        """Fetch a stock by symbol, or None if not found."""
         stmt = select(Stock).where(Stock.symbol == symbol)
         try:
             return self._session.execute(stmt).scalar_one_or_none()
-        except (
-            SQLAlchemyError
-        ) as exc:  # pragma: no cover - exercised via higher-level tests
+        except SQLAlchemyError as exc:  # pragma: no cover - exercised via higher-level tests
             raise DataAccessError("Failed to fetch stock") from exc
 
     def list(self) -> Sequence[Stock]:
@@ -33,6 +32,7 @@ class StockRepository:
             raise DataAccessError("Failed to list stocks") from exc
 
     def add(self, stock: Stock) -> None:
+        """Persist a new stock. Caller must commit the session."""
         try:
             self._session.add(stock)
             self._session.flush()

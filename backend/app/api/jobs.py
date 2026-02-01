@@ -9,7 +9,6 @@ from sqlalchemy.orm import Session
 
 from backend.app.data.database import get_session
 from backend.app.data.repositories.job_execution_repo import JobExecutionRepository
-from backend.app.data.repositories.reddit_post_repo import RedditPostRepository
 from backend.app.services.scheduler_service import SchedulerService
 
 logger = logging.getLogger(__name__)
@@ -21,7 +20,7 @@ router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 _scheduler_instance: SchedulerService | None = None
 
 
-def set_scheduler(scheduler: SchedulerService) -> None:
+def set_scheduler(scheduler: SchedulerService | None) -> None:
     """Set the scheduler instance for manual job execution."""
     global _scheduler_instance
     _scheduler_instance = scheduler
@@ -30,9 +29,7 @@ def set_scheduler(scheduler: SchedulerService) -> None:
 def get_scheduler() -> SchedulerService:
     """Get the scheduler instance, raising an error if not available."""
     if _scheduler_instance is None:
-        raise HTTPException(
-            status_code=503, detail="Scheduler not initialized"
-        )
+        raise HTTPException(status_code=503, detail="Scheduler not initialized")
     return _scheduler_instance
 
 
@@ -158,7 +155,7 @@ def get_recent_reddit_posts(
     db: Session = Depends(get_session),
 ) -> List[RedditPostResponse]:
     """Get recently collected Reddit posts.
-    
+
     Args:
         limit: Maximum number of posts to return (default: 20, max: 100)
     """
@@ -167,19 +164,19 @@ def get_recent_reddit_posts(
         from backend.app.data.repositories.reddit_symbol_mention_repo import (
             RedditSymbolMentionRepository,
         )
-        
+
         reddit_repo = RedditPostRepository(db)
         mention_repo = RedditSymbolMentionRepository(db)
-        
+
         posts = reddit_repo.list_recent(limit=limit)
-        
+
         result = []
         for post in posts:
             # Get symbols mentioned in this post
             symbols = mention_repo.get_symbols_for_post(post.id)
             # For backward compatibility, use first symbol or empty string
             primary_symbol = symbols[0] if symbols else ""
-            
+
             result.append(
                 RedditPostResponse(
                     id=post.id,
@@ -194,7 +191,7 @@ def get_recent_reddit_posts(
                     collected_at=post.collected_at.isoformat(),
                 )
             )
-        
+
         return result
     except Exception as exc:
         logger.error(f"Error fetching recent Reddit posts: {exc}", exc_info=True)
@@ -202,4 +199,3 @@ def get_recent_reddit_posts(
             status_code=500,
             detail=f"Failed to fetch recent Reddit posts: {str(exc)}",
         ) from exc
-

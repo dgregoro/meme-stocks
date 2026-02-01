@@ -27,6 +27,7 @@ class NotificationResponse(BaseModel):
 def list_notifications(
     db: Session = Depends(get_session),
 ) -> List[NotificationResponse]:
+    """List unread notifications (volume spikes, price moves, sentiment shifts)."""
     repo = NotificationRepository(db)
     notifications = repo.list_unread()
     return [

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 from datetime import date, datetime, timedelta, timezone
-from typing import Callable
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
@@ -18,11 +17,10 @@ from backend.app.data.repositories.stock_repo import StockRepository
 from backend.app.models.price_data import PriceData
 from backend.app.models.reddit_post import RedditPost
 from backend.app.models.stock import Stock
-from backend.app.services.analysis_service import run_daily_analysis
 from backend.app.services.notification_service import generate_notifications_for_stock
 from backend.app.services.reddit_service import RedditService
 from backend.app.services.yahoo_service import YahooFinanceService
-from backend.app.utils.errors import DataAccessError, ExternalAPIError
+from backend.app.utils.errors import ExternalAPIError
 from backend.app.utils.ticker_extractor import extract_tickers
 
 logger = logging.getLogger(__name__)
@@ -90,9 +88,7 @@ class SchedulerService:
 
             # Check daily analysis (run if we haven't run one today)
             last_analysis = ensure_timezone_aware(job_repo.get_last_run("daily_analysis"))
-            today_start = datetime.now(timezone.utc).replace(
-                hour=0, minute=0, second=0, microsecond=0
-            )
+            today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
             if last_analysis is None or last_analysis < today_start:
                 logger.info("Catching up on daily analysis...")
                 self._run_daily_analysis(db)
@@ -118,9 +114,7 @@ class SchedulerService:
         # Reddit collection
         self._scheduler.add_job(
             self._collect_reddit_data_job,
-            trigger=IntervalTrigger(
-                minutes=self._settings.reddit_collection_interval_minutes
-            ),
+            trigger=IntervalTrigger(minutes=self._settings.reddit_collection_interval_minutes),
             id="reddit_collection",
             replace_existing=True,
         )
@@ -128,9 +122,7 @@ class SchedulerService:
         # Price collection
         self._scheduler.add_job(
             self._collect_price_data_job,
-            trigger=IntervalTrigger(
-                minutes=self._settings.price_collection_interval_minutes
-            ),
+            trigger=IntervalTrigger(minutes=self._settings.price_collection_interval_minutes),
             id="price_collection",
             replace_existing=True,
         )
@@ -146,9 +138,7 @@ class SchedulerService:
         # Notification checks
         self._scheduler.add_job(
             self._check_notifications_job,
-            trigger=IntervalTrigger(
-                minutes=self._settings.notification_check_interval_minutes
-            ),
+            trigger=IntervalTrigger(minutes=self._settings.notification_check_interval_minutes),
             id="notification_check",
             replace_existing=True,
         )
@@ -169,7 +159,7 @@ class SchedulerService:
 
     def _collect_reddit_data(self, db: Session) -> dict[str, int]:
         """Collect Reddit posts and save them to the database.
-        
+
         Returns:
             Dictionary with statistics: posts_fetched, posts_with_tickers, posts_saved
         """
@@ -179,11 +169,9 @@ class SchedulerService:
             "posts_saved": 0,
             "stocks_created": 0,
         }
-        
+
         try:
-            subreddits = [
-                s.strip() for s in self._settings.reddit_subreddits.split(",")
-            ]
+            subreddits = [s.strip() for s in self._settings.reddit_subreddits.split(",")]
             posts = self._reddit_service.fetch_recent_posts(
                 subreddits, limit_per_subreddit=100, max_age=timedelta(days=2)
             )
@@ -303,9 +291,7 @@ class SchedulerService:
             try:
                 # Fetch last 30 days of data to ensure we have recent prices
                 start_date = today - timedelta(days=30)
-                bars = self._yahoo_service.fetch_historical_prices(
-                    stock.symbol, start=start_date, end=today
-                )
+                bars = self._yahoo_service.fetch_historical_prices(stock.symbol, start=start_date, end=today)
             except ExternalAPIError as exc:
                 logger.warning(f"Failed to fetch price data for {stock.symbol}: {exc}")
                 continue
@@ -375,9 +361,7 @@ class SchedulerService:
                 notifications = generate_notifications_for_stock(db, stock.symbol)
                 total_notifications += len(notifications)
             except Exception as exc:
-                logger.warning(
-                    f"Error generating notifications for {stock.symbol}: {exc}"
-                )
+                logger.warning(f"Error generating notifications for {stock.symbol}: {exc}")
                 continue
 
         if total_notifications > 0:

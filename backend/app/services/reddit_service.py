@@ -46,9 +46,7 @@ class RedditService:
                     user_agent=settings.reddit_user_agent,
                     check_for_async=False,
                 )
-            except (
-                Exception
-            ) as exc:  # pragma: no cover - exercised via higher-level tests
+            except Exception as exc:  # pragma: no cover - exercised via higher-level tests
                 raise ExternalAPIError("Failed to initialize Reddit client") from exc
 
         self._client = client
@@ -60,7 +58,7 @@ class RedditService:
         max_time=30,
         jitter=backoff.full_jitter,
     )
-    def _iter_new(subreddit, limit: int):
+    def _iter_new(subreddit: praw.models.Subreddit, limit: int) -> list[praw.models.Submission]:
         # Separate method to simplify backoff wrapping and testing
         return list(subreddit.new(limit=limit))
 
@@ -84,9 +82,7 @@ class RedditService:
             try:
                 subreddit = self._client.subreddit(subreddit_name)
                 for submission in self._iter_new(subreddit, limit_per_subreddit):
-                    created = datetime.fromtimestamp(
-                        float(submission.created_utc), tz=timezone.utc
-                    )
+                    created = datetime.fromtimestamp(float(submission.created_utc), tz=timezone.utc)
                     if max_age is not None and created < now - max_age:
                         # Skip posts older than the window; we do not break here
                         # to keep behavior simple and testable with dummy data.
@@ -107,8 +103,6 @@ class RedditService:
                         )
                     )
             except Exception as exc:
-                raise ExternalAPIError(
-                    f"Failed to fetch posts from subreddit '{subreddit_name}'"
-                ) from exc
+                raise ExternalAPIError(f"Failed to fetch posts from subreddit '{subreddit_name}'") from exc
 
         return results

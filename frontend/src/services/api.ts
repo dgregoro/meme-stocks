@@ -59,6 +59,9 @@ export type PortfolioSummary = {
   closed_positions: number
   realized_pl: number
   unrealized_pl: number
+  win_rate: number | null
+  average_win: number | null
+  average_loss: number | null
 }
 
 const client = axios.create({

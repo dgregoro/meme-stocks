@@ -25,6 +25,7 @@ class StockAnalysisResponse(BaseModel):
 def get_daily_analysis(
     db: Session = Depends(get_session),
 ) -> List[StockAnalysisResponse]:
+    """Get daily analysis: stocks ranked by composite score (sentiment + price trend)."""
     rows = run_daily_analysis(db)
     return [
         StockAnalysisResponse(

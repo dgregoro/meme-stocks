@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 from fastapi.testclient import TestClient
@@ -107,9 +107,9 @@ def test_get_recent_reddit_posts_empty(db_session):
     """Test getting recent Reddit posts when none exist."""
     app = create_app()
     client = TestClient(app)
-    
+
     response = client.get("/api/jobs/reddit-collection/recent")
-    
+
     assert response.status_code == 200
     assert response.json() == []
 
@@ -166,4 +166,3 @@ def test_get_recent_reddit_posts_with_data(db_session):
     assert all("stock_symbol" in post for post in data)
     assert all("title" in post for post in data)
     assert data[0]["stock_symbol"] == "GME"
-

@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import csv
 import logging
 from datetime import datetime, timezone
-from io import StringIO
-from typing import Any
+from typing import Any, TypedDict
 
 import requests
 from sqlalchemy.orm import Session
@@ -26,6 +24,15 @@ NASDAQ_FTP_CSV = "ftp://ftp.nasdaqtrader.com/SymbolDirectory/nasdaqlisted.txt"
 SEC_COMPANY_TICKERS_URL = "https://www.sec.gov/files/company_tickers.json"
 
 
+class RefreshStats(TypedDict):
+    """Return type for refresh_from_nasdaq statistics."""
+
+    inserted: int
+    updated: int
+    total: int
+    errors: list[str]
+
+
 class SymbolUniverseService:
     """Service for fetching and managing stock symbol universe."""
 
@@ -33,15 +40,15 @@ class SymbolUniverseService:
         self._db = db
         self._repo = SymbolUniverseRepository(db)
 
-    def refresh_from_nasdaq(self) -> dict[str, int]:
+    def refresh_from_nasdaq(self) -> RefreshStats:
         """Refresh symbol universe from NASDAQ listings.
 
         Uses SEC EDGAR company tickers as the primary source (includes NASDAQ, NYSE, etc.)
 
         Returns:
-            Dictionary with statistics: {'inserted': int, 'updated': int, 'total': int}
+            Dictionary with statistics: {'inserted': int, 'updated': int, 'total': int, 'errors': list}
         """
-        stats = {"inserted": 0, "updated": 0, "total": 0, "errors": []}
+        stats: RefreshStats = {"inserted": 0, "updated": 0, "total": 0, "errors": []}
 
         try:
             # Use SEC EDGAR as primary source (includes all US exchanges)
@@ -161,4 +168,3 @@ class SymbolUniverseService:
             Total count of symbols
         """
         return self._repo.count(active_only=active_only)
-

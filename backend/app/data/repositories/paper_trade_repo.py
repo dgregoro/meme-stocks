@@ -11,10 +11,13 @@ from backend.app.utils.errors import DataAccessError
 
 
 class PaperTradeRepository:
+    """Data access for PaperTrade entities (simulated buy/sell transactions)."""
+
     def __init__(self, session: Session) -> None:
         self._session = session
 
     def add(self, trade: PaperTrade) -> None:
+        """Persist a new paper trade. Caller must commit the session."""
         try:
             self._session.add(trade)
             self._session.flush()
@@ -29,6 +32,7 @@ class PaperTradeRepository:
             raise DataAccessError("Failed to fetch paper trade") from exc
 
     def list(self) -> Sequence[PaperTrade]:
+        """List all trades, most recent first (by entry_at)."""
         stmt = select(PaperTrade).order_by(PaperTrade.entry_at.desc())
         try:
             return list(self._session.execute(stmt).scalars().all())

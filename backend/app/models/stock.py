@@ -9,6 +9,11 @@ from backend.app.data.database import Base
 
 
 class Stock(Base):
+    """A tracked stock symbol with metadata (name, sector, market cap).
+
+    Stocks must exist before paper trades or Reddit symbol mentions can reference them.
+    """
+
     __tablename__ = "stocks"
 
     symbol: Mapped[str] = mapped_column(String(16), primary_key=True, index=True)
@@ -16,9 +21,7 @@ class Stock(Base):
     sector: Mapped[str | None] = mapped_column(String(255), nullable=True)
     market_cap: Mapped[float | None] = mapped_column(Float, nullable=True)
 
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),

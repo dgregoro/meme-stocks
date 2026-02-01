@@ -20,12 +20,8 @@ class SymbolUniverse(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     sector: Mapped[str | None] = mapped_column(String(100), nullable=True)
     industry: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    last_seen: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True, index=True
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
-    )
+    last_seen: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
@@ -37,4 +33,3 @@ class SymbolUniverse(Base):
         Index("idx_symbol_universe_last_seen", "last_seen"),
         Index("idx_symbol_universe_active", "is_active"),
     )
-

@@ -21,14 +21,9 @@ class RedditSymbolMention(Base):
     post_id: Mapped[str] = mapped_column(
         String(32), ForeignKey("reddit_posts.id", ondelete="CASCADE"), primary_key=True
     )
-    symbol: Mapped[str] = mapped_column(
-        String(16), ForeignKey("stocks.symbol"), primary_key=True, index=True
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
-    )
+    symbol: Mapped[str] = mapped_column(String(16), ForeignKey("stocks.symbol"), primary_key=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     # Relationships
     post = relationship("RedditPost", back_populates="symbol_mentions")
     stock = relationship("Stock", back_populates="reddit_mentions")
-

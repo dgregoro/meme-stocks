@@ -36,6 +36,4 @@ class RedditPost(Base):
     )
 
     # Relationships
-    symbol_mentions = relationship(
-        "RedditSymbolMention", back_populates="post", cascade="all, delete-orphan"
-    )
+    symbol_mentions = relationship("RedditSymbolMention", back_populates="post", cascade="all, delete-orphan")

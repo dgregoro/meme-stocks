@@ -19,6 +19,16 @@ from backend.app.services.yahoo_service import PriceBar
 
 @dataclass(frozen=True)
 class StockAnalysisRow:
+    """One row in the daily analysis: a stock with sentiment, trend, and composite score.
+
+    Attributes:
+        symbol: Stock symbol.
+        sentiment_score: Aggregated sentiment [-1, 1] or None if no Reddit data.
+        mention_count: Number of Reddit posts in the analysis window.
+        price_trend: 'uptrend', 'downtrend', or 'sideways'.
+        composite_score: Combined score [0, 1] used for ranking (higher = better opportunity).
+    """
+
     symbol: str
     sentiment_score: float | None
     mention_count: int
@@ -26,9 +36,8 @@ class StockAnalysisRow:
     composite_score: float
 
 
-def build_price_bars_for_stock(
-    symbol: str, repo: PriceDataRepository
-) -> List[PriceBar]:
+def build_price_bars_for_stock(symbol: str, repo: PriceDataRepository) -> List[PriceBar]:
+    """Convert PriceData records to PriceBar objects for pattern analysis."""
     prices = repo.list_for_stock(symbol)
     bars: list[PriceBar] = []
     for p in prices:
@@ -73,9 +82,7 @@ def compute_composite_score(sentiment: SentimentSummary, trend: PriceTrend) -> f
     return round(sentiment_component * 0.6 + trend_component * 0.4, 4)
 
 
-def run_daily_analysis(
-    db: Session, *, window: timedelta = timedelta(hours=24)
-) -> List[StockAnalysisRow]:
+def run_daily_analysis(db: Session, *, window: timedelta = timedelta(hours=24)) -> List[StockAnalysisRow]:
     """Produce a ranked list of stocks with sentiment and trend.
 
     This function uses existing repositories and analysis helpers and does
@@ -93,9 +100,7 @@ def run_daily_analysis(
 
     for stock in stocks:
         posts = reddit_repo.list_for_stock(stock.symbol)
-        sentiment = calculate_weighted_sentiment(
-            stock.symbol, posts, window=window, now=now
-        )
+        sentiment = calculate_weighted_sentiment(stock.symbol, posts, window=window, now=now)
 
         bars = build_price_bars_for_stock(stock.symbol, price_repo)
         trend = analyze_price_trend(bars)

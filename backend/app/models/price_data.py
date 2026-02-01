@@ -10,12 +10,15 @@ from backend.app.data.database import Base
 
 
 class PriceData(Base):
+    """OHLCV (open, high, low, close, volume) price data for a stock on a given date.
+
+    Used for pattern analysis (e.g., moving averages, trend detection) and charts.
+    """
+
     __tablename__ = "price_data"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    stock_symbol: Mapped[str] = mapped_column(
-        String(16), ForeignKey("stocks.symbol"), index=True
-    )
+    stock_symbol: Mapped[str] = mapped_column(String(16), ForeignKey("stocks.symbol"), index=True)
 
     date: Mapped[dt.date] = mapped_column(Date, index=True)
     open: Mapped[float] = mapped_column(Float)

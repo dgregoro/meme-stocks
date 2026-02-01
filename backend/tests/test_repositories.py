@@ -29,9 +29,7 @@ def test_stock_repository_add_and_get() -> None:
     session = create_test_session()
     repo = StockRepository(session)
 
-    stock = Stock(
-        symbol="GME", name="GameStop", sector="Retail", market_cap=1_000_000_000
-    )
+    stock = Stock(symbol="GME", name="GameStop", sector="Retail", market_cap=1_000_000_000)
     repo.add(stock)
 
     fetched = repo.get("GME")
@@ -44,9 +42,7 @@ def test_reddit_post_repository_add_and_list_for_stock() -> None:
     session = create_test_session()
 
     stock_repo = StockRepository(session)
-    stock_repo.add(
-        Stock(symbol="AMC", name="AMC", sector="Entertainment", market_cap=None)
-    )
+    stock_repo.add(Stock(symbol="AMC", name="AMC", sector="Entertainment", market_cap=None))
 
     post_repo = RedditPostRepository(session)
     mention_repo = RedditSymbolMentionRepository(session)
@@ -116,9 +112,7 @@ def test_reddit_post_repository_count_recent_mentions() -> None:
 def test_price_data_repository_add_and_query() -> None:
     session = create_test_session()
     stock_repo = StockRepository(session)
-    stock_repo.add(
-        Stock(symbol="BBBY", name="Bed Bath & Beyond", sector="Retail", market_cap=None)
-    )
+    stock_repo.add(Stock(symbol="BBBY", name="Bed Bath & Beyond", sector="Retail", market_cap=None))
 
     repo = PriceDataRepository(session)
 

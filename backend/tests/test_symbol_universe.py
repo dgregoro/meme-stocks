@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Generator
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
@@ -16,12 +17,11 @@ from backend.app.services.symbol_universe_service import SymbolUniverseService
 from backend.app.utils.ticker_extractor import (
     clear_symbol_universe_cache,
     extract_tickers,
-    load_symbol_universe_from_db,
 )
 
 
 @pytest.fixture
-def db_session():
+def db_session() -> Generator[Session, None, None]:
     """Create an in-memory database session for testing."""
     engine = create_engine("sqlite:///:memory:", echo=False)
     Base.metadata.create_all(engine)
@@ -32,7 +32,7 @@ def db_session():
 
 
 @pytest.fixture
-def sample_symbols(db_session: Session):
+def sample_symbols(db_session: Session) -> list[SymbolUniverse]:
     """Create sample symbols in the universe."""
     symbols = [
         SymbolUniverse(
@@ -66,7 +66,7 @@ def sample_symbols(db_session: Session):
     return symbols
 
 
-def test_symbol_universe_repository_add_and_get(db_session: Session):
+def test_symbol_universe_repository_add_and_get(db_session: Session) -> None:
     """Test adding and retrieving symbols from repository."""
     repo = SymbolUniverseRepository(db_session)
 
@@ -88,7 +88,7 @@ def test_symbol_universe_repository_add_and_get(db_session: Session):
     assert retrieved.name == "Test Company"
 
 
-def test_symbol_universe_repository_upsert(db_session: Session):
+def test_symbol_universe_repository_upsert(db_session: Session) -> None:
     """Test upsert functionality."""
     repo = SymbolUniverseRepository(db_session)
 
@@ -115,7 +115,7 @@ def test_symbol_universe_repository_upsert(db_session: Session):
     assert updated.name == "Updated Company"
 
 
-def test_symbol_universe_repository_get_symbols_set(db_session: Session, sample_symbols):
+def test_symbol_universe_repository_get_symbols_set(db_session: Session, sample_symbols: list[SymbolUniverse]) -> None:
     """Test getting symbols as a set."""
     repo = SymbolUniverseRepository(db_session)
     symbols_set = repo.get_symbols_set(active_only=True)
@@ -126,7 +126,7 @@ def test_symbol_universe_repository_get_symbols_set(db_session: Session, sample_
     assert len(symbols_set) == 3
 
 
-def test_symbol_universe_repository_count(db_session: Session, sample_symbols):
+def test_symbol_universe_repository_count(db_session: Session, sample_symbols: list[SymbolUniverse]) -> None:
     """Test counting symbols."""
     repo = SymbolUniverseRepository(db_session)
     count = repo.count(active_only=True)
@@ -135,7 +135,7 @@ def test_symbol_universe_repository_count(db_session: Session, sample_symbols):
 
 
 @patch("backend.app.services.symbol_universe_service.requests.get")
-def test_symbol_universe_service_refresh_from_nasdaq(mock_get, db_session: Session):
+def test_symbol_universe_service_refresh_from_nasdaq(mock_get: MagicMock, db_session: Session) -> None:
     """Test refreshing symbol universe from SEC EDGAR."""
     # Mock SEC EDGAR response
     mock_response = MagicMock()
@@ -160,7 +160,7 @@ def test_symbol_universe_service_refresh_from_nasdaq(mock_get, db_session: Sessi
     assert repo.get("GME") is not None
 
 
-def test_symbol_universe_service_get_symbols_set(db_session: Session, sample_symbols):
+def test_symbol_universe_service_get_symbols_set(db_session: Session, sample_symbols: list[SymbolUniverse]) -> None:
     """Test getting symbols set from service."""
     service = SymbolUniverseService(db_session)
     symbols_set = service.get_symbols_set(active_only=True)
@@ -170,7 +170,7 @@ def test_symbol_universe_service_get_symbols_set(db_session: Session, sample_sym
     assert "GME" in symbols_set
 
 
-def test_ticker_extractor_uses_symbol_universe(db_session: Session, sample_symbols):
+def test_ticker_extractor_uses_symbol_universe(db_session: Session, sample_symbols: list[SymbolUniverse]) -> None:
     """Test that ticker extractor uses symbol universe when available."""
     # Clear cache to force reload
     clear_symbol_universe_cache()
@@ -189,7 +189,7 @@ def test_ticker_extractor_uses_symbol_universe(db_session: Session, sample_symbo
     assert "BUY" not in tickers
 
 
-def test_ticker_extractor_fallback_without_universe():
+def test_ticker_extractor_fallback_without_universe() -> None:
     """Test that ticker extractor falls back to auto-discovery when universe is empty."""
     # Clear cache
     clear_symbol_universe_cache()
@@ -204,7 +204,7 @@ def test_ticker_extractor_fallback_without_universe():
         assert "MSFT" in tickers
 
 
-def test_ticker_extractor_without_universe_flag():
+def test_ticker_extractor_without_universe_flag() -> None:
     """Test that ticker extractor works without symbol universe."""
     text = "I love AAPL and MSFT but also MOON"
 
@@ -216,4 +216,3 @@ def test_ticker_extractor_without_universe_flag():
     assert "MSFT" in tickers
     # MOON should be filtered out as common word
     assert "MOON" not in tickers
-

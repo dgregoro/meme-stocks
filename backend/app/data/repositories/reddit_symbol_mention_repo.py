@@ -23,11 +23,9 @@ class RedditSymbolMentionRepository:
             self._session.add(mention)
             self._session.flush()
         except SQLAlchemyError as exc:
-            raise DataAccessError(f"Failed to add symbol mention") from exc
+            raise DataAccessError("Failed to add symbol mention") from exc
 
-    def get_posts_for_symbol(
-        self, symbol: str, since: datetime | None = None
-    ) -> Sequence[RedditSymbolMention]:
+    def get_posts_for_symbol(self, symbol: str, since: datetime | None = None) -> Sequence[RedditSymbolMention]:
         """Get all posts that mention a symbol.
 
         Args:
@@ -83,12 +81,9 @@ class RedditSymbolMentionRepository:
         Returns:
             Sequence of symbol strings
         """
-        stmt = select(RedditSymbolMention.symbol).where(
-            RedditSymbolMention.post_id == post_id
-        )
+        stmt = select(RedditSymbolMention.symbol).where(RedditSymbolMention.post_id == post_id)
 
         try:
             return [row[0] for row in self._session.execute(stmt).all()]
         except SQLAlchemyError as exc:
             raise DataAccessError(f"Failed to get symbols for post {post_id}") from exc
-

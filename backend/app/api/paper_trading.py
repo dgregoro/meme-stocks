@@ -1,3 +1,5 @@
+"""API endpoints for paper trading: trades and portfolio summary."""
+
 from __future__ import annotations
 
 from typing import List
@@ -48,12 +50,14 @@ class PortfolioResponse(BaseModel):
     closed_positions: int
     realized_pl: float
     unrealized_pl: float
+    win_rate: float | None = None
+    average_win: float | None = None
+    average_loss: float | None = None
 
 
 @router.post("/trades", response_model=TradeResponse, status_code=201)
-def post_trade(
-    req: CreateTradeRequest, db: Session = Depends(get_session)
-) -> TradeResponse:
+def post_trade(req: CreateTradeRequest, db: Session = Depends(get_session)) -> TradeResponse:
+    """Create a paper trade (buy or sell). Symbol must exist in stocks."""
     try:
         trade = create_trade(
             db,
@@ -73,14 +77,13 @@ def post_trade(
 
 @router.get("/trades", response_model=List[TradeResponse])
 def list_trades(db: Session = Depends(get_session)) -> List[TradeResponse]:
+    """List all paper trades, most recent first."""
     trades = PaperTradeRepository(db).list()
     return [TradeResponse.model_validate(t) for t in trades]
 
 
 @router.post("/trades/{trade_id}/close", response_model=TradeResponse)
-def post_close_trade(
-    trade_id: int, req: CloseTradeRequest, db: Session = Depends(get_session)
-) -> TradeResponse:
+def post_close_trade(trade_id: int, req: CloseTradeRequest, db: Session = Depends(get_session)) -> TradeResponse:
     try:
         trade = close_trade(db, trade_id, exit_price=req.exit_price)
         db.commit()
@@ -93,5 +96,15 @@ def post_close_trade(
 
 @router.get("/portfolio", response_model=PortfolioResponse)
 def get_portfolio(db: Session = Depends(get_session)) -> PortfolioResponse:
+    """Get portfolio summary: position counts, realized/unrealized P/L, win rate, avg win/loss."""
     summary: PortfolioSummary = compute_portfolio_summary(db)
-    return PortfolioResponse(**summary.__dict__)
+    return PortfolioResponse(
+        total_positions=summary.total_positions,
+        open_positions=summary.open_positions,
+        closed_positions=summary.closed_positions,
+        realized_pl=summary.realized_pl,
+        unrealized_pl=summary.unrealized_pl,
+        win_rate=summary.win_rate,
+        average_win=summary.average_win,
+        average_loss=summary.average_loss,
+    )

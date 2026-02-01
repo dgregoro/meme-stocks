@@ -1,8 +1,8 @@
 # Product Requirements Document (PRD)
 ## Meme Stocks Trading Application
 
-**Version:** 1.0  
-**Last Updated:** January 31, 2026  
+**Version:** 1.0
+**Last Updated:** January 31, 2026
 **Status:** MVP Complete
 
 ---

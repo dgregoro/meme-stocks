@@ -59,8 +59,6 @@ def get_settings() -> Settings:
 
     try:
         return Settings()
-    except (
-        ValidationError
-    ) as exc:  # pragma: no cover - defensive, but tested via unit tests
+    except ValidationError as exc:  # pragma: no cover - defensive, but tested via unit tests
         # Re-raise to ensure FastAPI startup fails loudly if config is invalid.
         raise exc

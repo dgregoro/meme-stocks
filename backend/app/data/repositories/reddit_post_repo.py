@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import Sequence
 
 from sqlalchemy import select
@@ -37,9 +37,7 @@ class RedditPostRepository:
         except SQLAlchemyError as exc:
             raise DataAccessError("Failed to add reddit post") from exc
 
-    def list_recent(
-        self, limit: int = 100, since: datetime | None = None
-    ) -> Sequence[RedditPost]:
+    def list_recent(self, limit: int = 100, since: datetime | None = None) -> Sequence[RedditPost]:
         """List recent posts, optionally filtered by collection time.
 
         Args:
@@ -59,9 +57,7 @@ class RedditPostRepository:
         except SQLAlchemyError as exc:
             raise DataAccessError("Failed to list reddit posts") from exc
 
-    def list_for_stock(
-        self, symbol: str, since: datetime | None = None
-    ) -> Sequence[RedditPost]:
+    def list_for_stock(self, symbol: str, since: datetime | None = None) -> Sequence[RedditPost]:
         """Get posts that mention a symbol (via symbol mentions table).
 
         This method maintains backward compatibility but now uses the

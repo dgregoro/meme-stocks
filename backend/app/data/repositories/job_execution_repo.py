@@ -45,4 +45,3 @@ class JobExecutionRepository:
             self._session.flush()
         except SQLAlchemyError as exc:  # pragma: no cover
             raise DataAccessError(f"Failed to record run for job {job_name}") from exc
-

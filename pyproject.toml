@@ -30,3 +30,7 @@ exclude = [
     "dist",
     "backend/app/.*__init__\\.py",
 ]
+
+[[tool.mypy.overrides]]
+module = "backend.tests.*"
+disallow_untyped_defs = false

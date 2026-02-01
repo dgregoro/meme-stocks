@@ -8,7 +8,6 @@ import pytest
 from backend.app.data.database import Base, SessionLocal, engine
 from backend.app.data.repositories.job_execution_repo import JobExecutionRepository
 from backend.app.data.repositories.stock_repo import StockRepository
-from backend.app.models.job_execution import JobExecution
 from backend.app.models.stock import Stock
 from backend.app.services.scheduler_service import SchedulerService
 
@@ -191,6 +190,7 @@ def test_collect_price_data(mock_yahoo_class, db_session, sample_stock):
 
     # Check that price data was saved
     from backend.app.data.repositories.price_data_repo import PriceDataRepository
+
     price_repo = PriceDataRepository(db_session)
     prices = price_repo.list_for_stock("GME")
     assert len(prices) == 2
@@ -201,10 +201,12 @@ def test_catch_up_runs_missed_jobs(db_session, sample_stock):
     scheduler = SchedulerService()
 
     # Mock the collection methods to avoid actual API calls
-    with patch.object(scheduler, "_collect_reddit_data") as mock_reddit, \
-         patch.object(scheduler, "_collect_price_data") as mock_price, \
-         patch.object(scheduler, "_run_daily_analysis") as mock_analysis, \
-         patch.object(scheduler, "_check_notifications") as mock_notif:
+    with (
+        patch.object(scheduler, "_collect_reddit_data") as mock_reddit,
+        patch.object(scheduler, "_collect_price_data") as mock_price,
+        patch.object(scheduler, "_run_daily_analysis") as mock_analysis,
+        patch.object(scheduler, "_check_notifications") as mock_notif,
+    ):
 
         # First run - no previous executions
         scheduler._run_catch_up()
@@ -245,8 +247,7 @@ def test_scheduler_start_and_shutdown():
     scheduler = SchedulerService()
 
     # Mock catch-up and scheduling to avoid actual job execution
-    with patch.object(scheduler, "_run_catch_up"), \
-         patch.object(scheduler, "_schedule_jobs"):
+    with patch.object(scheduler, "_run_catch_up"), patch.object(scheduler, "_schedule_jobs"):
 
         scheduler.start()
         assert scheduler._scheduler.running

@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from typing import Any
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import get_settings
 from .data.database import init_db
+
 # Import all models so SQLAlchemy knows about them for schema creation
 from .models import (  # noqa: F401
     job_execution,
@@ -31,11 +33,11 @@ from .services.scheduler_service import SchedulerService
 def _make_lifespan(
     scheduler_for_testing: SchedulerService | None = None,
     omit_scheduler: bool = False,
-):
+) -> Any:
     """Build lifespan context manager; accepts optional scheduler for testing."""
 
     @asynccontextmanager
-    async def lifespan(app: FastAPI):
+    async def lifespan(app: FastAPI) -> Any:
         # Startup
         init_db()
         if omit_scheduler:

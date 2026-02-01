@@ -26,6 +26,7 @@ class StockResponse(BaseModel):
 
 @router.get("", response_model=List[StockResponse])
 def list_stocks(db: Session = Depends(get_session)) -> List[StockResponse]:
+    """List all tracked stocks."""
     repo = StockRepository(db)
     stocks = repo.list()
     return [StockResponse.model_validate(s) for s in stocks]
@@ -33,6 +34,7 @@ def list_stocks(db: Session = Depends(get_session)) -> List[StockResponse]:
 
 @router.get("/{symbol}", response_model=StockResponse)
 def get_stock(symbol: str, db: Session = Depends(get_session)) -> StockResponse:
+    """Get a single stock by symbol. Returns 404 if not found."""
     repo = StockRepository(db)
     stock: Stock | None = repo.get(symbol)
     if stock is None:
@@ -57,15 +59,13 @@ class CreateStockRequest(BaseModel):
 
 
 @router.post("", response_model=StockResponse, status_code=status.HTTP_201_CREATED)
-def create_stock(
-    req: CreateStockRequest, db: Session = Depends(get_session)
-) -> StockResponse:
+def create_stock(req: CreateStockRequest, db: Session = Depends(get_session)) -> StockResponse:
     """Add a new stock to track.
-    
+
     The stock symbol will be used for ticker extraction from Reddit posts.
     """
     repo = StockRepository(db)
-    
+
     # Check if stock already exists
     existing = repo.get(req.symbol.upper())
     if existing is not None:
@@ -77,7 +77,7 @@ def create_stock(
                 "message": f"Stock {req.symbol} already exists",
             },
         )
-    
+
     try:
         stock = Stock(
             symbol=req.symbol.upper(),

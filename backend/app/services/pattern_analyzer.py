@@ -16,15 +16,14 @@ class PriceTrend:
 
 
 def simple_moving_average(values: List[float], window: int) -> float | None:
+    """Compute SMA over the last `window` values. Returns None if insufficient data or invalid window."""
     if len(values) < window or window <= 0:
         return None
     subset = values[-window:]
     return sum(subset) / float(window)
 
 
-def analyze_price_trend(
-    bars: Iterable[PriceBar], short_window: int = 20, long_window: int = 50
-) -> PriceTrend:
+def analyze_price_trend(bars: Iterable[PriceBar], short_window: int = 20, long_window: int = 50) -> PriceTrend:
     """Classify trend based on simple moving averages of close prices.
 
     - uptrend: sma_short > sma_long

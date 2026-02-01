@@ -45,11 +45,7 @@ def generate_notifications_for_stock(db: Session, symbol: str) -> List[Notificat
         prev = prices[-2]
 
         # Volume spike relative to simple average of previous N volumes (here: all except latest)
-        avg_volume = (
-            sum(p.volume for p in prices[:-1]) / float(len(prices) - 1)
-            if len(prices) > 1
-            else 0
-        )
+        avg_volume = sum(p.volume for p in prices[:-1]) / float(len(prices) - 1) if len(prices) > 1 else 0
         vol_signal = detect_volume_spike(latest.volume, int(avg_volume))
         if vol_signal is not None:
             n = Notification(
@@ -75,9 +71,7 @@ def generate_notifications_for_stock(db: Session, symbol: str) -> List[Notificat
     # Sentiment shift using last two 24h windows if possible (simplified: compare current vs. older window)
     posts = reddit_repo.list_for_stock(symbol)
     if posts:
-        current_summary: SentimentSummary = calculate_weighted_sentiment(
-            symbol, posts, window=timedelta(hours=24)
-        )
+        current_summary: SentimentSummary = calculate_weighted_sentiment(symbol, posts, window=timedelta(hours=24))
         # For now, we skip historic sentiment and only emit shift when there were previous mentions;
         # a more advanced implementation would cache/store prior summaries.
         if current_summary.mention_count > 0:

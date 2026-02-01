@@ -24,7 +24,7 @@ def test_create_stock() -> None:
     Base.metadata.create_all(engine)
     app = create_app()
     client = TestClient(app)
-    
+
     response = client.post(
         "/api/stocks",
         json={
@@ -34,18 +34,18 @@ def test_create_stock() -> None:
             "market_cap": 1000000000.0,
         },
     )
-    
+
     assert response.status_code == 201
     data = response.json()
     assert data["symbol"] == "GME"
     assert data["name"] == "GameStop Corp."
     assert data["sector"] == "Retail"
-    
+
     # Verify it was saved
     get_response = client.get("/api/stocks/GME")
     assert get_response.status_code == 200
     assert get_response.json()["symbol"] == "GME"
-    
+
     Base.metadata.drop_all(engine)
 
 
@@ -54,22 +54,22 @@ def test_create_stock_duplicate() -> None:
     Base.metadata.create_all(engine)
     app = create_app()
     client = TestClient(app)
-    
+
     # Create first stock
     client.post(
         "/api/stocks",
         json={"symbol": "GME", "name": "GameStop", "sector": "Retail"},
     )
-    
+
     # Try to create duplicate
     response = client.post(
         "/api/stocks",
         json={"symbol": "GME", "name": "GameStop", "sector": "Retail"},
     )
-    
+
     assert response.status_code == 409
     assert "already exists" in response.json()["detail"]["message"]
-    
+
     Base.metadata.drop_all(engine)
 
 
@@ -78,14 +78,13 @@ def test_create_stock_symbol_uppercase() -> None:
     Base.metadata.create_all(engine)
     app = create_app()
     client = TestClient(app)
-    
+
     response = client.post(
         "/api/stocks",
         json={"symbol": "gme", "name": "GameStop", "sector": "Retail"},
     )
-    
+
     assert response.status_code == 201
     assert response.json()["symbol"] == "GME"  # Should be uppercase
-    
-    Base.metadata.drop_all(engine)
 
+    Base.metadata.drop_all(engine)

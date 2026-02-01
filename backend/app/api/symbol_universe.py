@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -85,4 +84,3 @@ def get_universe_stats(db: Session = Depends(get_session)) -> UniverseStatsRespo
     except Exception as exc:
         logger.error(f"Error getting universe stats: {exc}")
         raise HTTPException(status_code=500, detail=f"Failed to get universe stats: {exc}") from exc
-

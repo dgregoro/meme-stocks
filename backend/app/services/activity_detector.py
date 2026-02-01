@@ -15,9 +15,11 @@ class ActivitySignal:
     message: str
 
 
-def detect_volume_spike(
-    current_volume: int, average_volume: int
-) -> ActivitySignal | None:
+def detect_volume_spike(current_volume: int, average_volume: int) -> ActivitySignal | None:
+    """Return an ActivitySignal if current volume exceeds configured threshold vs average.
+
+    Uses volume_spike_threshold from config. Returns None if average is 0 or ratio is below threshold.
+    """
     if average_volume <= 0:
         return None
 
@@ -34,9 +36,7 @@ def detect_volume_spike(
     )
 
 
-def detect_price_movement(
-    current_price: float, reference_price: float
-) -> ActivitySignal | None:
+def detect_price_movement(current_price: float, reference_price: float) -> ActivitySignal | None:
     if reference_price <= 0:
         return None
 
@@ -56,9 +56,11 @@ def detect_price_movement(
     )
 
 
-def detect_sentiment_shift(
-    current: SentimentSummary, previous: SentimentSummary | None
-) -> ActivitySignal | None:
+def detect_sentiment_shift(current: SentimentSummary, previous: SentimentSummary | None) -> ActivitySignal | None:
+    """Return an ActivitySignal if sentiment score changed beyond configured threshold.
+
+    Compares current vs previous summary. Returns None if either score is missing or delta is below threshold.
+    """
     if current.score is None or previous is None or previous.score is None:
         return None
 
@@ -67,9 +69,7 @@ def detect_sentiment_shift(
     if abs(delta) <= settings.sentiment_shift_threshold:
         return None
 
-    severity = (
-        "high" if abs(delta) >= settings.sentiment_shift_threshold * 2 else "medium"
-    )
+    severity = "high" if abs(delta) >= settings.sentiment_shift_threshold * 2 else "medium"
     direction = "positive" if delta > 0 else "negative"
     return ActivitySignal(
         kind="sentiment_shift",

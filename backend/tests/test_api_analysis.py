@@ -75,10 +75,12 @@ def test_daily_analysis_ranks_stocks_by_composite_score() -> None:
         collected_at=now,
     )
     db.add_all([gme_post, amc_post])
-    db.add_all([
-        RedditSymbolMention(post_id="gme1", symbol="GME"),
-        RedditSymbolMention(post_id="amc1", symbol="AMC"),
-    ])
+    db.add_all(
+        [
+            RedditSymbolMention(post_id="gme1", symbol="GME"),
+            RedditSymbolMention(post_id="amc1", symbol="AMC"),
+        ]
+    )
 
     # GME price trending up, AMC trending down
     for i in range(60):

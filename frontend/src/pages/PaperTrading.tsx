@@ -58,7 +58,12 @@ export const PaperTrading: React.FC = () => {
       <div style={{ marginBottom: 12 }}>
         <strong>Portfolio:</strong>{' '}
         {summary
-          ? `open ${summary.open_positions}, closed ${summary.closed_positions}, realized ${summary.realized_pl}, unrealized ${summary.unrealized_pl}`
+          ? `open ${summary.open_positions}, closed ${summary.closed_positions}, realized ${summary.realized_pl}, unrealized ${summary.unrealized_pl}` +
+            (summary.win_rate != null
+              ? ` | win rate ${(summary.win_rate * 100).toFixed(1)}%`
+              : '') +
+            (summary.average_win != null ? ` | avg win $${summary.average_win}` : '') +
+            (summary.average_loss != null ? ` | avg loss $${summary.average_loss}` : '')
           : 'Loading…'}
       </div>
 

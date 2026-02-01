@@ -38,9 +38,7 @@ class YahooFinanceService:
     def _safe_history(ticker: yf.Ticker, start: date, end: date) -> pd.DataFrame:
         return ticker.history(start=start, end=end)
 
-    def fetch_historical_prices(
-        self, symbol: str, start: date, end: date
-    ) -> List[PriceBar]:
+    def fetch_historical_prices(self, symbol: str, start: date, end: date) -> List[PriceBar]:
         """Fetch historical OHLCV data for a symbol between start and end (inclusive).
 
         Raises ExternalAPIError on network or data issues instead of failing silently.
@@ -50,9 +48,7 @@ class YahooFinanceService:
             ticker = yf.Ticker(symbol)
             history: pd.DataFrame = self._safe_history(ticker, start=start, end=end)
         except Exception as exc:  # pragma: no cover - network/remote errors
-            raise ExternalAPIError(
-                f"Failed to fetch historical prices for {symbol}"
-            ) from exc
+            raise ExternalAPIError(f"Failed to fetch historical prices for {symbol}") from exc
 
         if history.empty:
             # Explicitly signal "no data" by returning an empty list; callers can decide
@@ -76,9 +72,7 @@ class YahooFinanceService:
                     )
                 )
             except (KeyError, TypeError, ValueError) as exc:
-                raise ExternalAPIError(
-                    f"Malformed price data row for {symbol} on {idx}"
-                ) from exc
+                raise ExternalAPIError(f"Malformed price data row for {symbol} on {idx}") from exc
 
         return results
 

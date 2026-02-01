@@ -14,12 +14,8 @@ class JobExecution(Base):
     __tablename__ = "job_executions"
 
     job_name: Mapped[str] = mapped_column(String(100), primary_key=True)
-    last_run_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
-    )
+    last_run_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
@@ -27,4 +23,3 @@ class JobExecution(Base):
     )
 
     __table_args__ = (Index("idx_job_executions_last_run", "last_run_at"),)
-
