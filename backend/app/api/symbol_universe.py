@@ -63,10 +63,16 @@ def refresh_symbol_universe(db: Session = Depends(get_session)) -> RefreshRespon
         )
     except ExternalAPIError as exc:
         logger.error(f"External API error refreshing symbol universe: {exc}")
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=error_detail("ExternalAPIError", str(exc)),
+        ) from exc
     except Exception as exc:
         logger.error(f"Error refreshing symbol universe: {exc}")
-        raise HTTPException(status_code=500, detail=f"Failed to refresh symbol universe: {exc}") from exc
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=error_detail("InternalServerError", f"Failed to refresh symbol universe: {exc}"),
+        ) from exc
 
 
 @router.get("/stats", response_model=UniverseStatsResponse)

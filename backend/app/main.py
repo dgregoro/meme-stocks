@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from .config import get_settings
 from .data.database import init_db
@@ -106,6 +109,26 @@ def create_app(
     app.include_router(paper_trading_api.router)
     app.include_router(jobs_api.router)
     app.include_router(symbol_universe_api.router)
+
+    # Serve frontend static files when running in container (SERVING_FRONTEND=true)
+    if os.getenv("SERVING_FRONTEND", "").lower() in ("true", "1", "yes"):
+        frontend_dist = Path(__file__).resolve().parent.parent.parent / "frontend_dist"
+        if frontend_dist.exists():
+            app.mount("/assets", StaticFiles(directory=frontend_dist / "assets"), name="assets")
+
+            from fastapi.responses import FileResponse
+
+            @app.get("/{full_path:path}")
+            async def serve_spa(full_path: str) -> Any:
+                """Serve SPA: static files or index.html for client-side routes."""
+                if full_path.startswith("api/") or full_path in ("health", "docs", "redoc", "openapi.json"):
+                    from fastapi import HTTPException, status
+
+                    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+                file_path = frontend_dist / full_path
+                if file_path.is_file():
+                    return FileResponse(file_path)
+                return FileResponse(frontend_dist / "index.html")
 
     return app
 

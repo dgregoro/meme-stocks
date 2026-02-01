@@ -31,7 +31,7 @@ def get_scheduler() -> SchedulerService:
     """Get the scheduler instance, raising an error if not available."""
     if _scheduler_instance is None:
         raise HTTPException(
-            status_code=503,
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=error_detail("ServiceUnavailable", "Scheduler not initialized"),
         )
     return _scheduler_instance
@@ -72,8 +72,8 @@ def trigger_reddit_collection(
         logger.error(f"Error in manual Reddit collection: {exc}", exc_info=True)
         db.rollback()
         raise HTTPException(
-            status_code=500,
-            detail=f"Reddit collection failed: {str(exc)}",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=error_detail("InternalServerError", f"Reddit collection failed: {exc}"),
         ) from exc
 
 
@@ -131,8 +131,8 @@ def trigger_notification_check(
         logger.error(f"Error in manual notification check: {exc}", exc_info=True)
         db.rollback()
         raise HTTPException(
-            status_code=500,
-            detail=f"Notification check failed: {str(exc)}",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=error_detail("InternalServerError", f"Notification check failed: {exc}"),
         ) from exc
 
 
