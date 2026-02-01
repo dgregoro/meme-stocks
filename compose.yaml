@@ -1,7 +1,7 @@
 # Meme Stocks - Development and Production Compose
 #
 # Development:  podman-compose up
-#   - Backend: volume mount for local edits; restart to apply: podman-compose restart backend
+#   - Backend: rebuild image to apply changes (podman-compose up --build)
 #   - Frontend: served from container (or use --profile dev for Vite HMR)
 #   - Data: persisted in ./data
 #
@@ -21,8 +21,9 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      # Mount source for local editing (restart backend to apply changes)
-      - ./backend:/app/backend
+      # Backend mount disabled: rootless Podman bind-mount causes ModuleNotFoundError for backend.app.
+      # For local edits, run backend locally: uvicorn backend.app.main:app --host 127.0.0.1 --port 8000
+      # - ./backend:/app/backend
       # Persist SQLite database and data
       - meme-stocks-data:/app/data
     command: ["uvicorn", "backend.app.main:app", "--host", "0.0.0.0", "--port", "8000"]
@@ -30,7 +31,7 @@ services:
       - PYTHONPATH=/app
       - DATABASE_URL=sqlite:///./data/app.db
       - SERVING_FRONTEND=true
-    # Reddit credentials: create backend/.env on host; it's mounted via ./backend volume
+    # For Reddit: add REDDIT_CLIENT_ID, REDDIT_CLIENT_SECRET to environment
     restart: unless-stopped
 
   # Frontend dev server - only needed when editing frontend locally

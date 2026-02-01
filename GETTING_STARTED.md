@@ -11,7 +11,7 @@ This guide walks you through setting up and running the Meme Stocks Trading Appl
 
 ## Option A: Containers (Recommended for Portability)
 
-Run the app in containers with **local file editing**—edit code on your host; changes apply without rebuilding.
+Run the app in containers. Backend code is baked into the image; rebuild to apply backend changes.
 
 ### Quick start
 
@@ -25,7 +25,7 @@ docker compose up --build
 
 - **App**: http://localhost:8000
 - **API docs**: http://localhost:8000/docs
-- Backend code is volume-mounted; run `podman-compose restart backend` to apply changes.
+- To apply backend changes: `podman-compose up --build` (rebuild the image).
 
 ### Frontend development (HMR)
 
