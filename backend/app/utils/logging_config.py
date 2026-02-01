@@ -20,9 +20,7 @@ def configure_logging() -> None:
 
     file_handler = logging.FileHandler(log_path, encoding="utf-8")
     file_handler.setLevel(logging.DEBUG)
-    file_formatter = logging.Formatter(
-        "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
-    )
+    file_formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
     file_handler.setFormatter(file_formatter)
 
     # Loggers that emit noisy messages (e.g. "possibly delisted; no timezone found")

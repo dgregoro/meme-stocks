@@ -16,6 +16,7 @@ from .utils.logging_config import configure_logging
 # Import all models so SQLAlchemy knows about them for schema creation
 from .models import (  # noqa: F401
     job_execution,
+    job_run_history,
     notification,
     paper_trade,
     price_data,
