@@ -1,0 +1,53 @@
+# Meme Stocks - Development and Production Compose
+#
+# Development (local editing):  podman-compose up
+#   - Backend: volume mount, uvicorn --reload, edits reflect immediately
+#   - Frontend: served from container (or use --profile dev for Vite HMR)
+#   - Data: persisted in ./data
+#
+# With frontend dev server (HMR):  podman-compose --profile dev up
+# Production (portable, no mounts):  podman run -p 8000:8000 -v meme-stocks-data:/app/data meme-stocks:latest
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Containerfile
+    image: meme-stocks:latest
+    container_name: meme-stocks-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      # Mount source for local editing (dev)
+      - ./backend:/app/backend
+      # Persist SQLite database and data
+      - meme-stocks-data:/app/data
+    command: ["uvicorn", "backend.app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    environment:
+      - DATABASE_URL=sqlite:///./data/app.db
+      - SERVING_FRONTEND=true
+    # Reddit credentials: create backend/.env on host; it's mounted via ./backend volume
+    restart: unless-stopped
+
+  # Frontend dev server - only needed when editing frontend locally
+  # Run: podman-compose --profile dev up
+  # Access app at http://localhost:5173 (frontend) with HMR
+  frontend-dev:
+    image: node:20
+    container_name: meme-stocks-frontend-dev
+    working_dir: /app/frontend
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app/frontend
+    environment:
+      - VITE_API_BASE_URL=http://localhost:8000
+    profiles:
+      - dev
+    depends_on:
+      - backend
+
+volumes:
+  meme-stocks-data:
+    name: meme-stocks-data

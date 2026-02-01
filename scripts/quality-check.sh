@@ -80,7 +80,8 @@ echo ""
 
 # --- Linting ---
 echo "[4/4] Linting (flake8)..."
-lint_output=$(flake8 backend/app/ --count 2>&1 || true)
+# Use same args as .pre-commit-config.yaml
+lint_output=$(flake8 backend/app/ --max-line-length=120 --extend-ignore=E501 --count 2>&1 || true)
 # Extract just the final count number (last line, first number)
 lint_errors=$(echo "$lint_output" | tail -1 | grep -oE "^[0-9]+" | head -1 || echo "0")
 lint_errors=${lint_errors:-0}

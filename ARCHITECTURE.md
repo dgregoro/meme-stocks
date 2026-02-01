@@ -614,6 +614,22 @@ if value > settings.my_threshold:
 
 ---
 
+## Database Migrations
+
+**Location**: `backend/app/data/database.py`
+
+This project does **not** use Alembic. Schema changes are handled as follows:
+
+1. **New schemas** — `Base.metadata.create_all(bind=engine)` in `init_db()` creates tables from current models on startup.
+
+2. **Schema changes** — Add a migration function (e.g. `_migrate_drop_reddit_posts_stock_symbol`) and call it from `init_db()` after `create_all()`. Use raw SQL with `text()` for DDL when needed. Run migrations only on SQLite (skip for `:memory:` or non-SQLite).
+
+3. **Conventions** — Keep migrations idempotent (check before altering). Log failures instead of swallowing them silently when practical.
+
+To adopt Alembic in the future, add it to requirements and initialize with `alembic init`; then generate migrations from model changes.
+
+---
+
 ## Quick Reference: File Locations
 
 | Type | Location | Naming |

@@ -1,0 +1,43 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.py[cod]
+*.pyo
+.mypy_cache
+.pytest_cache
+.coverage
+htmlcov
+venv
+.venv
+*.egg-info
+
+# Node
+node_modules
+frontend/node_modules
+
+# IDE and OS
+.idea
+.vscode
+.DS_Store
+
+# Docs and planning (not needed in image)
+*.md
+!backend/README.md
+
+# Tests (not needed in production image)
+backend/tests
+frontend/**/*.test.*
+frontend/**/*.spec.*
+
+# Local data (use volume for persistence)
+data/
+logs/
+*.db
+
+# Dev config
+.env
+.env.*
+!.env.example

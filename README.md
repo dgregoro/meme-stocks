@@ -41,87 +41,16 @@ A web application for analyzing meme stocks using social sentiment (Reddit) and 
 
 Interactive API docs available at `/docs` and `/redoc` when the server is running.
 
-## Quick Start
+## Getting Started
 
-### Backend
+See **[GETTING_STARTED.md](GETTING_STARTED.md)** for setup, configuration, and development instructions.
 
-1. **Install dependencies**:
-
-```bash
-cd backend
-pip install -r requirements.txt
-```
-
-2. **Configure environment** (optional, defaults work for local dev):
-
-Create `backend/.env`:
-```bash
-LOG_LEVEL=INFO
-DATABASE_URL=sqlite:///./data/app.db
-REDDIT_CLIENT_ID=your-client-id
-REDDIT_CLIENT_SECRET=your-client-secret
-REDDIT_USER_AGENT=meme-stocks-app/0.1
-
-# Scheduling (optional, defaults shown)
-REDDIT_COLLECTION_INTERVAL_MINUTES=60
-PRICE_COLLECTION_INTERVAL_MINUTES=15
-NOTIFICATION_CHECK_INTERVAL_MINUTES=30
-DAILY_ANALYSIS_HOUR=16
-REDDIT_SUBREDDITS=wallstreetbets,stocks,investing
-ENABLE_CATCH_UP=true
-```
-
-3. **Run tests**:
+**Quick run with containers** (portable, local editing supported):
 
 ```bash
-cd ..
-python -m pytest backend/tests/ -v
+podman-compose up --build
+# App at http://localhost:8000
 ```
-
-4. **Start the API**:
-
-```bash
-uvicorn backend.app.main:app --reload
-```
-
-The server will start at `http://127.0.0.1:8000`. Visit `/health` to confirm it's running.
-
-### Frontend
-
-1. **Install dependencies**:
-
-```bash
-cd frontend
-npm install
-```
-
-2. **Configure API base** (optional, defaults to `http://127.0.0.1:8000`):
-
-Create `frontend/.env`:
-```bash
-VITE_API_BASE_URL=http://127.0.0.1:8000
-```
-
-3. **Run dev server**:
-
-```bash
-npm run dev
-```
-
-Open the printed URL (default `http://127.0.0.1:5173`).
-
-## Background Jobs
-
-The application includes automated background jobs that run on a schedule:
-
-- **Reddit Collection**: Fetches recent posts from configured subreddits (default: hourly)
-- **Price Collection**: Updates price data for tracked stocks (default: every 15 minutes)
-- **Daily Analysis**: Generates end-of-day analysis (default: 4 PM)
-- **Notification Checks**: Scans for unusual activity (default: every 30 minutes)
-
-**Catch-up Functionality**: When the app starts (e.g., after laptop was off), it automatically checks for missed jobs and runs them. This ensures you don't miss data even if the laptop was sleeping.
-
-All job intervals and subreddits are configurable via environment variables (see Configuration section above).
 
 ## Project Structure
 
@@ -144,96 +73,10 @@ meme-stocks/
 │   │   ├── services/            # API client
 │   │   └── App.tsx              # Main app component
 │   └── package.json
+├── GETTING_STARTED.md            # Setup and development guide
 ├── PLAN.md                      # Detailed project plan and milestones
 └── README.md                    # This file
 ```
-
-## Configuration
-
-Configuration is managed via environment variables (see `backend/app/config.py`). Key settings:
-
-### Core Settings
-- `API_HOST`, `API_PORT` - Server host/port (default: `127.0.0.1:8000`)
-- `LOG_LEVEL` - Logging level (default: `INFO`)
-- `DATABASE_URL` - SQLAlchemy database URL (default: `sqlite:///./data/app.db`)
-
-### Reddit API
-- `REDDIT_CLIENT_ID`, `REDDIT_CLIENT_SECRET` - Reddit API credentials (required for data collection)
-- `REDDIT_USER_AGENT` - User agent string (default: `meme-stocks-app/0.1`)
-
-### Analysis Thresholds
-- `SENTIMENT_POSITIVE_THRESHOLD` (default: `0.3`)
-- `SENTIMENT_NEGATIVE_THRESHOLD` (default: `-0.2`)
-- `VOLUME_SPIKE_THRESHOLD` (default: `2.0`)
-- `PRICE_MOVEMENT_THRESHOLD_PCT` (default: `5.0`)
-- `SENTIMENT_SHIFT_THRESHOLD` (default: `0.3`)
-
-### Scheduling
-- `REDDIT_COLLECTION_INTERVAL_MINUTES` (default: `60`)
-- `PRICE_COLLECTION_INTERVAL_MINUTES` (default: `15`)
-- `NOTIFICATION_CHECK_INTERVAL_MINUTES` (default: `30`)
-- `DAILY_ANALYSIS_HOUR` (default: `16` - 4 PM)
-- `REDDIT_SUBREDDITS` (default: `wallstreetbets,stocks,investing`)
-- `ENABLE_CATCH_UP` (default: `true`)
-
-### CORS
-- `CORS_ALLOWED_ORIGINS` (default: `http://127.0.0.1:5173,http://localhost:5173`)
-
-## Development
-
-### Prerequisites
-
-- Python 3.11+ (recommended)
-- Node.js 18+ (for frontend)
-- SQLite (used via SQLAlchemy; no manual setup required)
-- **Linux**: Fedora is the preferred distro for development (CI runs in Fedora containers)
-
-### Running Tests
-
-```bash
-# All tests
-python -m pytest backend/tests/ -v
-
-# Specific test file
-python -m pytest backend/tests/test_scheduler_service.py -v
-```
-
-The test suite includes:
-- Configuration and settings validation
-- Repository / database behavior
-- External service wrappers (Reddit, Yahoo Finance)
-- Analysis logic (sentiment, patterns, activity detection)
-- API endpoints
-- Background scheduler and catch-up logic
-
-### Pre-commit Hooks
-
-This repository includes `.pre-commit-config.yaml` with:
-- **Core checks**: large-file detection, merge-conflict markers, whitespace fixes
-- **Formatting**: `black` (Python code formatter)
-- **Linting**: `flake8`
-- **Type checking**: `mypy`
-
-To enable:
-
-```bash
-pip install pre-commit
-pre-commit install
-```
-
-Run manually:
-
-```bash
-pre-commit run --all-files
-```
-
-### Development Guidelines
-
-- **Follow `PLAN.md`**: Milestones and scope are documented there
-- **No silent failures**: Prefer explicit exceptions and clear error responses
-- **Keep business logic in services**: Not in API route handlers
-- **Always add/update tests**: When changing backend logic (services, repositories, API routes)
-- **Timezone-aware datetimes**: Use `datetime.now(timezone.utc)`, not `datetime.utcnow()`
 
 ## Tech Stack
 
@@ -252,6 +95,7 @@ pre-commit run --all-files
 
 ## Documentation
 
+- **`GETTING_STARTED.md`** - Setup, configuration, and development instructions
 - **`PLAN.md`** - Detailed project plan, milestones, business logic, and trading strategies
 - **API Docs** - Available at `/docs` when the server is running
 - **Code comments** - Inline documentation throughout the codebase
