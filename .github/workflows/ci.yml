@@ -38,9 +38,9 @@ jobs:
         run: |
           MYPYPATH=. python -m mypy -p backend.app -p backend.tests
 
-      - name: Run pytest
+      - name: Run pytest with coverage
         run: |
-          pytest -q
+          pytest backend/tests/ -q --cov=backend/app --cov-report=term --cov-config=pyproject.toml
 
   frontend-build:
     runs-on: ubuntu-latest

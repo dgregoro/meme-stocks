@@ -34,3 +34,14 @@ exclude = [
 [[tool.mypy.overrides]]
 module = "backend.tests.*"
 disallow_untyped_defs = false
+
+[tool.coverage.run]
+source = ["backend/app"]
+omit = ["backend/app/__init__.py", "*/tests/*"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+]

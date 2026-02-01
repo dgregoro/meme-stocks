@@ -17,6 +17,8 @@
 - Do not remove tests without an explicit reason and a replacement or refactor.
 - Prefer small, deterministic units that are easy to test.
 - Use pytest as the default test framework.
+- **Coverage target**: Aim for 80%+ line coverage on backend/app. New or changed code should not reduce coverage; add tests to cover new paths.
+- **Unit vs integration**: Use `@pytest.mark.unit` for fast, isolated tests (pure functions, mocked deps). Use `@pytest.mark.integration` for tests that hit the DB or external services (mocked where practical). Run coverage with `pytest --cov=backend/app` before considering done.
 
 # Error handling (PRD §5.0 Reliability Principles)
 - Never swallow exceptions silently; log and surface meaningful errors to the caller.
@@ -62,6 +64,7 @@
 - [ ] At least one error-case test exists
 - [ ] Pre-commit passes: `pre-commit run --all-files`
 - [ ] All tests pass: `pytest backend/tests/ -v`
+- [ ] Coverage reported (run `pytest --cov=backend/app`); no intentional reduction in coverage
 - [ ] Router registered in main.py (if new endpoint)
 - [ ] PLAN.md or PRD.md updated if scope changed
 

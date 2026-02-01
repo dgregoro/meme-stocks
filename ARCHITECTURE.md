@@ -383,6 +383,12 @@ app.include_router(my_new_model_router)
 
 **Location**: `backend/tests/test_{feature}.py`
 
+**Coverage and test types**:
+
+- **Target**: 80%+ line coverage on `backend/app`. Run `pytest backend/tests/ --cov=backend/app --cov-report=term` to measure.
+- **Unit tests** (`@pytest.mark.unit`): Fast, isolated; test pure functions or logic with mocked dependencies. No DB, no external APIs.
+- **Integration tests** (`@pytest.mark.integration`): Hit DB or API routes. Use `TestClient` for endpoints; use test DB or mocks for external services. Mock Reddit/Yahoo/SEC when possible.
+
 ```python
 from __future__ import annotations
 
@@ -519,6 +525,7 @@ def test_service_get_by_id_not_found() -> None:
 - [ ] Uses mocks for unit testing services in isolation
 - [ ] Uses `TestClient` for API integration tests
 - [ ] Uses `datetime.now(timezone.utc)` for timestamps
+- [ ] Mark unit tests with `@pytest.mark.unit`, integration with `@pytest.mark.integration` when helpful
 
 ---
 

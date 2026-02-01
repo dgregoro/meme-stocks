@@ -11,6 +11,7 @@ numpy
 requests
 
 pytest
+pytest-cov
 pytest-asyncio
 httpx
 black
