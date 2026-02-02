@@ -277,6 +277,98 @@ printf "  Overall Score: %d/100 (Grade: %s)\n" "$overall_score" "$grade"
 echo "========================================"
 echo ""
 
+# --- Generate Additional Reports for AI Agent ---
+echo "Generating reports for AI agent..."
+
+# API Inventory
+if python scripts/generate-api-inventory.py 2>/dev/null; then
+    echo "  ✓ .api-inventory.md"
+else
+    echo "  ✗ .api-inventory.md (failed)"
+fi
+
+# Mypy Report (detailed type errors)
+{
+    echo "# Type Error Report"
+    echo ""
+    echo "**Generated**: ${REPORT_DATE}"
+    echo "**Total Errors**: ${type_errors}"
+    echo ""
+    if (( type_errors > 0 )); then
+        echo "## Errors by File"
+        echo ""
+        echo '```'
+        echo "$mypy_output" | grep "error:" | head -100
+        echo '```'
+        echo ""
+        if (( type_errors > 100 )); then
+            echo "*Showing first 100 of ${type_errors} errors*"
+        fi
+    else
+        echo "No type errors found."
+    fi
+} > .mypy-report.md
+echo "  ✓ .mypy-report.md"
+
+# Lint Report (detailed lint errors)
+{
+    echo "# Lint Report"
+    echo ""
+    echo "**Generated**: ${REPORT_DATE}"
+    echo "**Total Errors**: ${lint_errors}"
+    echo ""
+    if (( lint_errors > 0 )); then
+        echo "## Errors by File"
+        echo ""
+        echo '```'
+        flake8 backend/app/ --max-line-length=120 --extend-ignore=E501 2>&1 | head -100
+        echo '```'
+        echo ""
+        if (( lint_errors > 100 )); then
+            echo "*Showing first 100 of ${lint_errors} errors*"
+        fi
+    else
+        echo "No lint errors found."
+    fi
+} > .lint-report.md
+echo "  ✓ .lint-report.md"
+
+# TODO/FIXME Report
+{
+    echo "# TODO/FIXME Report"
+    echo ""
+    echo "**Generated**: ${REPORT_DATE}"
+    echo ""
+    todo_count=$(grep -rn "TODO\|FIXME\|XXX\|HACK" backend/app/ --include="*.py" 2>/dev/null | wc -l || echo "0")
+    echo "**Total Items**: ${todo_count}"
+    echo ""
+    if (( todo_count > 0 )); then
+        echo "## Items by Type"
+        echo ""
+        echo "| Type | Count |"
+        echo "|------|-------|"
+        echo "| TODO | $(grep -rn "TODO" backend/app/ --include="*.py" 2>/dev/null | wc -l) |"
+        echo "| FIXME | $(grep -rn "FIXME" backend/app/ --include="*.py" 2>/dev/null | wc -l) |"
+        echo "| XXX | $(grep -rn "XXX" backend/app/ --include="*.py" 2>/dev/null | wc -l) |"
+        echo "| HACK | $(grep -rn "HACK" backend/app/ --include="*.py" 2>/dev/null | wc -l) |"
+        echo ""
+        echo "## All Items"
+        echo ""
+        echo '```'
+        grep -rn "TODO\|FIXME\|XXX\|HACK" backend/app/ --include="*.py" 2>/dev/null | head -50
+        echo '```'
+        if (( todo_count > 50 )); then
+            echo ""
+            echo "*Showing first 50 of ${todo_count} items*"
+        fi
+    else
+        echo "No TODO/FIXME items found."
+    fi
+} > .todos-report.md
+echo "  ✓ .todos-report.md"
+
+echo ""
+
 # Raw metrics for tracking
 echo "--- Raw Metrics (for tracking) ---"
 echo "DATE=$(date '+%Y-%m-%d')"
@@ -287,3 +379,11 @@ echo "TYPE_ERRORS=${type_errors}"
 echo "LINT_ERRORS=${lint_errors}"
 echo "OVERALL_SCORE=${overall_score}"
 echo "GRADE=${grade}"
+
+echo ""
+echo "--- Generated Reports ---"
+echo ".coverage-report.md  - Per-file test coverage with missing lines"
+echo ".api-inventory.md    - All API endpoints from OpenAPI schema"
+echo ".mypy-report.md      - Type errors by file"
+echo ".lint-report.md      - Linting errors by file"
+echo ".todos-report.md     - TODO/FIXME items in codebase"
