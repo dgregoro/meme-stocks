@@ -27,10 +27,6 @@ venv/
 # Data & logs
 /data/
 logs/
-test_api.db
-test_api_analysis.db
-test_notifications.db
-test_paper.db
 
 # Node / frontend
 node_modules/

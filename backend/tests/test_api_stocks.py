@@ -5,6 +5,7 @@ from datetime import date, datetime, timezone
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.pool import StaticPool
 
 from backend.app.main import create_app
 from backend.app.data.database import Base, get_session
@@ -15,9 +16,14 @@ from backend.app.models.stock import Stock
 
 
 def create_test_engine_and_sessionmaker():
-    # Use a file-based SQLite DB so that connections in different sessions
-    # see the same schema and data. This is cleaned up in-memory for tests.
-    engine = create_engine("sqlite:///./test_api.db", future=True)
+    # Use a shared in-memory SQLite DB so connections see the same data.
+    # check_same_thread=False is required for SQLite with multiple connections.
+    engine = create_engine(
+        "sqlite:///:memory:",
+        future=True,
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
     TestSessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)

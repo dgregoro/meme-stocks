@@ -4,6 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
 from backend.app.main import create_app
 from backend.app.data.database import Base, get_session
@@ -11,7 +12,13 @@ from backend.app.models.stock import Stock
 
 
 def build_app_with_db():
-    engine = create_engine("sqlite:///./test_paper.db", future=True)
+    # Use StaticPool to share the in-memory database across connections
+    engine = create_engine(
+        "sqlite:///:memory:",
+        future=True,
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
     TestSessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
