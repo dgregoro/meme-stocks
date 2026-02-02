@@ -41,6 +41,21 @@ A web application for analyzing meme stocks using social sentiment (Reddit) and 
 
 Interactive API docs available at `/docs` and `/redoc` when the server is running.
 
+### CLI
+
+Full API parity from the terminal. Requires a running backend.
+
+```bash
+# Run CLI (from project root)
+python -m backend.cli.main health
+python -m backend.cli.main stocks list
+python -m backend.cli.main analysis --output json
+python -m backend.cli.main portfolio
+python -m backend.cli.main trades create GME buy 10 25.50
+```
+
+Use `python -m backend.cli.main --help` for all commands. Set `MEME_STOCKS_API_URL` or `--base-url` to point at your backend.
+
 ## Getting Started
 
 See **[GETTING_STARTED.md](GETTING_STARTED.md)** for setup, configuration, and development instructions.

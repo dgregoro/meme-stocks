@@ -91,6 +91,13 @@ def seed_stock_with_activity(db: Session) -> str:
     return symbol
 
 
+def test_generate_notifications_for_stock_returns_empty_when_stock_missing() -> None:
+    """Test that generate_notifications_for_stock returns [] when symbol is not in DB."""
+    _, db = build_test_app_with_db()
+    result = generate_notifications_for_stock(db, "NONEXISTENT")
+    assert result == []
+
+
 def test_generate_notifications_and_list_via_api() -> None:
     client, db = build_test_app_with_db()
     symbol = seed_stock_with_activity(db)

@@ -455,7 +455,8 @@ app.include_router(my_new_model_router)
 
 **Coverage and test types**:
 
-- **Target**: 80%+ line coverage on `backend/app`. Run `pytest backend/tests/ --cov=backend/app --cov-report=term` to measure.
+- **Target**: 80%+ line coverage on `backend/app`. Run `pytest backend/tests/ --cov=backend/app --cov-report=term-missing` to measure.
+- **Prioritize**: Consult the "Test coverage opportunities" table in this section for modules with the lowest coverage and suggested tests.
 - **Unit tests** (`@pytest.mark.unit`): Fast, isolated; test pure functions or logic with mocked dependencies. No DB, no external APIs.
 - **Integration tests** (`@pytest.mark.integration`): Hit DB or API routes. Use `TestClient` for endpoints; use test DB or mocks for external services. Mock Reddit/Yahoo/SEC when possible.
 
@@ -586,6 +587,21 @@ def test_service_get_by_id_not_found() -> None:
     result = service.get_by_id(999)
     assert result is None
 ```
+
+**Test coverage opportunities** — When improving coverage, target these gaps first. Run `pytest backend/tests/ --cov=backend/app --cov-report=term-missing` to refresh the analysis:
+
+| Module | Priority | Gap | Suggested tests |
+|--------|----------|-----|-----------------|
+| `api/symbol_universe.py` | High | 57% — error paths, refresh API | Test ExternalAPIError, DataAccessError handling; refresh failure; stats endpoint errors |
+| `services/scheduler_service.py` | High | 66% — catch-up, job execution | Test catch-up logic with mocked job_repo; job failure handling; price/notification job paths |
+| `services/symbol_universe_service.py` | High | 69% — refresh, SEC parsing | Test refresh failure paths; SEC response parsing edge cases; empty/invalid data |
+| `api/paper_trading.py` | Medium | 82% — error paths | Test 404 on trade close; validation errors; portfolio edge cases |
+| `api/jobs.py` | Medium | 85% — exception handlers | Test 500 on job failure; scheduler unavailable (503) |
+| `services/paper_trading_service.py` | Medium | 88% — exit trade, portfolio | Test trade not found; portfolio with no trades |
+| `data/repositories/reddit_post_repo.py` | Medium | 78% — error paths | Test DataAccessError on commit/flush |
+| `data/repositories/reddit_symbol_mention_repo.py` | Medium | 78% | Test add/get error paths |
+| `data/database.py` | Low | 80% — migrations | Test migration idempotency; skip on :memory: |
+| `main.py` | Low | 77% — lifespan, SPA | Test SPA routing; frontend mount when dist exists |
 
 **Checklist**:
 - [ ] Uses `from __future__ import annotations`

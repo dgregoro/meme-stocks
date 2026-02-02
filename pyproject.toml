@@ -1,3 +1,20 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "meme-stocks"
+version = "0.1.0"
+description = "Meme Stocks Trading Application"
+requires-python = ">=3.11"
+
+[project.scripts]
+meme-stocks = "backend.cli.main:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["backend*"]
+
 [tool.black]
 line-length = 120
 target-version = ["py311"]
@@ -33,6 +50,10 @@ exclude = [
 
 [[tool.mypy.overrides]]
 module = "backend.tests.*"
+disallow_untyped_defs = false
+
+[[tool.mypy.overrides]]
+module = "backend.cli.*"
 disallow_untyped_defs = false
 
 [tool.coverage.run]
