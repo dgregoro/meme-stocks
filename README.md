@@ -4,13 +4,14 @@ A web application for analyzing meme stocks using social sentiment (Reddit) and 
 
 ## Status
 
-**All planned milestones (0-6) are complete!** The application is fully functional with:
+**All planned milestones (M0-M7) are complete!** The application is fully functional with:
 - ✅ Data collection from Reddit and Yahoo Finance
 - ✅ Sentiment and price pattern analysis
 - ✅ RESTful API with all endpoints
 - ✅ React frontend (MVP)
 - ✅ Background jobs with catch-up functionality
 - ✅ Paper trading system
+- ✅ Symbol universe for ticker validation
 
 ## Features
 

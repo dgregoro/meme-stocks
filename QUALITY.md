@@ -256,56 +256,6 @@ pip-audit
 
 ---
 
-## Automated Quality Check Script
-
-Create `scripts/quality-check.sh`:
-
-```bash
-#!/bin/bash
-# Automated quality measurement
-
-echo "================================"
-echo "  Quality Check Report"
-echo "  $(date)"
-echo "================================"
-echo ""
-
-# Test coverage
-echo "## Test Coverage"
-coverage_output=$(pytest backend/tests/ --cov=backend/app --cov-report=term 2>/dev/null | grep "TOTAL")
-coverage_pct=$(echo "$coverage_output" | awk '{print $4}' | tr -d '%')
-echo "Coverage: ${coverage_pct}%"
-echo ""
-
-# Test pass rate
-echo "## Test Results"
-test_output=$(pytest backend/tests/ -v --tb=no 2>/dev/null | tail -1)
-echo "$test_output"
-echo ""
-
-# Type checking
-echo "## Type Errors (mypy)"
-mypy_errors=$(mypy backend/app/ --ignore-missing-imports 2>&1 | grep -c "error:" || echo "0")
-echo "Errors: $mypy_errors"
-echo ""
-
-# Linting
-echo "## Lint Errors (flake8)"
-flake8_errors=$(flake8 backend/app/ --count 2>&1 | tail -1 || echo "0")
-echo "Errors: $flake8_errors"
-echo ""
-
-# Summary
-echo "================================"
-echo "  Summary"
-echo "================================"
-echo "Coverage:    ${coverage_pct:-N/A}%"
-echo "Type Errors: $mypy_errors"
-echo "Lint Errors: $flake8_errors"
-```
-
----
-
 ## Quality Tracking Over Time
 
 ### Baseline Measurement
