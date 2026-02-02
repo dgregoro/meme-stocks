@@ -1,6 +1,6 @@
 # Agent Prompt Templates
 
-Reference this file in Cursor chat with `@.prompts.md` then say which template to use.
+Reference this file in Cursor chat with `@docs/prompts.md` then say which template to use.
 
 ---
 

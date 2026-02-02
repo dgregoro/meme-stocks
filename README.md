@@ -59,7 +59,7 @@ Use `python -m backend.cli.main --help` for all commands. Set `MEME_STOCKS_API_U
 
 ## Getting Started
 
-See **[GETTING_STARTED.md](GETTING_STARTED.md)** for setup, configuration, and development instructions.
+See **[GETTING_STARTED.md](docs/GETTING_STARTED.md)** for setup, configuration, and development instructions.
 
 **Quick run with containers** (portable, local editing supported):
 
@@ -89,8 +89,12 @@ meme-stocks/
 │   │   ├── services/            # API client
 │   │   └── App.tsx              # Main app component
 │   └── package.json
-├── GETTING_STARTED.md            # Setup and development guide
-├── PLAN.md                      # Detailed project plan and milestones
+├── docs/                        # Documentation
+│   ├── GETTING_STARTED.md       # Setup and development guide
+│   ├── ARCHITECTURE.md          # Implementation patterns
+│   ├── PRD.md                   # Product requirements
+│   ├── ROADMAP.md               # Development roadmap
+│   └── ...                      # Other docs
 └── README.md                    # This file
 ```
 
@@ -111,8 +115,11 @@ meme-stocks/
 
 ## Documentation
 
-- **`GETTING_STARTED.md`** - Setup, configuration, and development instructions
-- **`PLAN.md`** - Detailed project plan, milestones, business logic, and trading strategies
+- **[docs/GETTING_STARTED.md](docs/GETTING_STARTED.md)** - Setup, configuration, and development instructions
+- **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** - Implementation patterns for new features
+- **[docs/PRD.md](docs/PRD.md)** - Product requirements and feature status
+- **[docs/ROADMAP.md](docs/ROADMAP.md)** - Development roadmap and future work
+- **[docs/PLAN.md](docs/PLAN.md)** - Business logic and trading algorithms
 - **API Docs** - Available at `/docs` when the server is running
 - **Code comments** - Inline documentation throughout the codebase
 

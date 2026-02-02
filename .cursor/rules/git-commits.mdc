@@ -20,7 +20,7 @@ When saving changes to git (e.g., "save to git", "commit", "git save"):
 
 ## Example
 
-If `git status` shows changes to Containerfile, compose.yaml, scripts/verify.sh, and ROADMAP.md:
+If `git status` shows changes to Containerfile, compose.yaml, scripts/verify.sh, and docs/ROADMAP.md:
 - Commit 1: Containerfile + compose.yaml (container deployment fixes)
 - Commit 2: scripts/verify.sh (verify script changes)
-- Commit 3: ROADMAP.md (roadmap update)
+- Commit 3: docs/ROADMAP.md (roadmap update)

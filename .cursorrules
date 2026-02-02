@@ -1,14 +1,14 @@
 # High-level goals
-- Always keep work aligned with PLAN.md and the defined milestones.
+- Always keep work aligned with docs/ROADMAP.md and the defined phases.
 - Prefer explicit failures over silent behavior.
 - Always add or update tests when adding or changing backend logic.
 - **Follow PRD Section 5.0 (Reliability Principles)** for all code changes.
 - **Be skeptical; do not oversell.** Verify before claiming completion. Describe limitations and unknowns.
 
 # Planning & scope
-- Before implementing features, read PLAN.md and identify the current milestone and subtask.
-- Do not add new features or endpoints that are not part of the current milestone unless:
-  - PLAN.md is updated to include them, and
+- Before implementing features, read docs/ROADMAP.md and identify the current phase and task.
+- Do not add new features or endpoints that are not part of the current roadmap unless:
+  - docs/ROADMAP.md is updated to include them, and
   - The change is clearly documented in a commit/description.
 - When unsure about scope, prefer asking the user to clarify rather than assuming behavior.
 
@@ -40,7 +40,7 @@
 - Keep modules small and focused: services, repositories, models, and API routes should be clearly separated.
 - Avoid mixing business logic directly inside API route functions; instead, delegate to services.
 - Prefer pure functions for analysis logic (sentiment, indicators, scoring) to improve testability and refactorability.
-- If a change requires substantial restructuring, update PLAN.md or add a short “Refactor notes” section before proceeding.
+- If a change requires substantial restructuring, update docs/ROADMAP.md or add a short “Refactor notes” section before proceeding.
 
 # Logging & observability
 - Log at least at error and warning levels for failures in external API calls and background jobs.
@@ -51,7 +51,7 @@
 - Handle API errors visibly in the UI; do not fail silently.
 
 # How to add a new feature
-1. **Read ARCHITECTURE.md** for the pattern to follow.
+1. **Read docs/ARCHITECTURE.md** for the pattern to follow.
 2. **Create in order**: Model → Repository → Service → API Route → Tests.
 3. **Register the router** in main.py.
 4. **Run verification** before considering done: `./scripts/verify.sh` (or manually: pytest + pre-commit).
@@ -66,7 +66,7 @@
 - [ ] All tests pass: `pytest backend/tests/ -v`
 - [ ] Coverage reported (run `pytest --cov=backend/app`); no intentional reduction in coverage
 - [ ] Router registered in main.py (if new endpoint)
-- [ ] PLAN.md or PRD.md updated if scope changed
+- [ ] docs/ROADMAP.md or docs/PRD.md updated if scope changed
 
 # Common mistakes to avoid
 - Don't put business logic in API routes - delegate to services
@@ -74,7 +74,7 @@
 - Don't swallow exceptions - log and re-raise or handle explicitly
 - Don't use `datetime.utcnow()` - use `datetime.now(timezone.utc)`
 - Don't hardcode thresholds - add to config.py with defaults
-- Don't add features not in PLAN.md or PRD.md without updating them first
+- Don't add features not in docs/ROADMAP.md or docs/PRD.md without updating them first
 - Don't skip tests - every service/repo/endpoint needs tests
 
 # Git commits
@@ -86,8 +86,17 @@ When saving changes to git (e.g., in response to "save to git", "commit", "git s
 
 # Task completion protocol
 When completing a task:
-1. Implement the feature following ARCHITECTURE.md patterns
+1. Implement the feature following docs/ARCHITECTURE.md patterns
 2. Write tests (happy path + error cases)
 3. Run `./scripts/verify.sh` or equivalent checks
 4. Report what was done, what tests were added, and any issues found
 5. If verification fails, fix issues before reporting completion
+
+# Documentation
+All documentation is in the `docs/` folder:
+- `docs/ROADMAP.md` - Development roadmap and agent instructions
+- `docs/ARCHITECTURE.md` - Implementation patterns
+- `docs/PRD.md` - Product requirements
+- `docs/PLAN.md` - Business logic and algorithms
+- `docs/QUALITY.md` - Quality metrics
+- `docs/GETTING_STARTED.md` - Setup guide
