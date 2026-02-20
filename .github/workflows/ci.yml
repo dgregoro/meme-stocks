@@ -9,11 +9,8 @@ on:
 jobs:
   lint-and-test:
     runs-on: ubuntu-latest
-    container: fedora:latest
     timeout-minutes: 20
     steps:
-      - name: Install git and lsb_release
-        run: dnf install -y git lsb_release
       - name: Checkout
         uses: actions/checkout@v4
 
