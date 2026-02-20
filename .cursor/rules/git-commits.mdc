@@ -11,6 +11,7 @@ When saving changes to git (e.g., "save to git", "commit", "git save"):
 
 1. **Inspect the actual changes.** Run `git status` and `git diff` (or `git diff <file>`) to see what each file changed. Do not assume—look at the diffs.
 2. **Group changes by concern.** Identify distinct concerns (e.g., "container fixes", "add coverage", "update docs", "fix bug in X").
+3. **Run the same checks CI runs.** Run `pre-commit run --all-files`. If any hook modifies files (e.g. trailing-whitespace, end-of-file-fixer), re-stage those files. Do not commit until pre-commit passes with no modifications—otherwise CI will fail on the same hook.
 
 ## Commit strategy
 
