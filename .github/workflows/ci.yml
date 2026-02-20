@@ -12,8 +12,8 @@ jobs:
     container: fedora:latest
     timeout-minutes: 20
     steps:
-      - name: Install git
-        run: dnf install -y git
+      - name: Install git and lsb_release
+        run: dnf install -y git redhat-lsb-core
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -50,8 +50,8 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - name: Install git
-        run: dnf install -y git
+      - name: Install git and lsb_release
+        run: dnf install -y git redhat-lsb-core
       - name: Checkout
         uses: actions/checkout@v4
 
