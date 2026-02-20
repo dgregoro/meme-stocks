@@ -1,0 +1,84 @@
+# Deploy meme-stocks to VPS after push to main
+# Requires: VPS_SSH_PRIVATE_KEY, VPS_HOST (and optionally VPS_USER) in repo secrets.
+# See docs/DEPLOYMENT.md for setup.
+
+name: Deploy to VPS
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.meta.outputs.tags }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata and build image
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/meme-stocks
+          tags: |
+            type=sha,prefix=
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Containerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    steps:
+      - name: Set up SSH key and known_hosts
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.VPS_SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${{ secrets.VPS_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Deploy on VPS
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          IMAGE: ghcr.io/${{ github.repository_owner }}/meme-stocks:latest
+        run: |
+          VPS_USER="${VPS_USER:-ec2-user}"
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes "${VPS_USER}@${VPS_HOST}" "set -e
+            echo 'Pulling image...'
+            podman pull ${IMAGE}
+            echo 'Stopping existing container (if any)...'
+            podman stop meme-stocks-backend 2>/dev/null || true
+            podman rm meme-stocks-backend 2>/dev/null || true
+            echo 'Starting new container...'
+            if [ -f /opt/meme-stocks/.env ]; then
+              podman run -d --name meme-stocks-backend -p 8000:8000 -v meme-stocks-data:/app/data --restart unless-stopped --env-file /opt/meme-stocks/.env ${IMAGE}
+            else
+              podman run -d --name meme-stocks-backend -p 8000:8000 -v meme-stocks-data:/app/data --restart unless-stopped ${IMAGE}
+            fi
+            echo 'Deploy done.'"
