@@ -250,7 +250,6 @@ def jobs_recent_posts_cmd(*, limit: int, base_url: str, output_fmt: str) -> None
         return
     headers = ["id", "symbol", "subreddit", "title", "upvotes"]
     rows = [
-        [p["id"], p.get("stock_symbol", "") or "-", p["subreddit"], (p["title"] or "")[:40], p["upvotes"]]
-        for p in data
+        [p["id"], p.get("stock_symbol", "") or "-", p["subreddit"], (p["title"] or "")[:40], p["upvotes"]] for p in data
     ]
     output.print_table(headers, rows)
