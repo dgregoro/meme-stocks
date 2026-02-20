@@ -58,10 +58,10 @@ On the VPS (one-time):
 
    The deploy workflow uses this file when starting the container (`--env-file /opt/meme-stocks/.env`). If the file is missing, the app still starts but Reddit collection will fail until you add it.
 
-3. **Allow GitHub Actions to SSH**  
+3. **Allow GitHub Actions to SSH**
    Use the same key you use locally (e.g. the one you added to the EC2 key pair when creating the instance). Put that key’s **private** part in `VPS_SSH_PRIVATE_KEY`. No extra user is needed on the VPS for GitHub.
 
-4. **Open port 8000**  
+4. **Open port 8000**
    In the VPS security group / firewall, allow TCP 8000 from the internet (or from your IP only) so you can reach `http://<VPS>:8000`.
 
 ### 3. GitHub Container Registry (GHCR)

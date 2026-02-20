@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
 
 from backend.app.data.database import Base, get_session
 from backend.app.main import create_app
@@ -35,7 +36,9 @@ def client_and_session() -> tuple[TestClient, Session]:
     return TestClient(app), TestSessionLocal()
 
 
-def test_refresh_symbol_universe_success(client_and_session) -> None:
+def test_refresh_symbol_universe_success(
+    client_and_session: tuple[TestClient, Session],
+) -> None:
     """Test POST /refresh returns stats on success."""
     client, _ = client_and_session
 
@@ -60,7 +63,9 @@ def test_refresh_symbol_universe_success(client_and_session) -> None:
     assert data["errors"] == []
 
 
-def test_refresh_symbol_universe_external_api_error_returns_502(client_and_session) -> None:
+def test_refresh_symbol_universe_external_api_error_returns_502(
+    client_and_session: tuple[TestClient, Session],
+) -> None:
     """Test POST /refresh returns 502 when service raises ExternalAPIError."""
     client, _ = client_and_session
 
@@ -77,7 +82,9 @@ def test_refresh_symbol_universe_external_api_error_returns_502(client_and_sessi
     assert "SEC API unreachable" in data["detail"]["message"]
 
 
-def test_refresh_symbol_universe_generic_error_returns_500(client_and_session) -> None:
+def test_refresh_symbol_universe_generic_error_returns_500(
+    client_and_session: tuple[TestClient, Session],
+) -> None:
     """Test POST /refresh returns 500 when service raises generic Exception."""
     client, _ = client_and_session
 
@@ -94,7 +101,9 @@ def test_refresh_symbol_universe_generic_error_returns_500(client_and_session) -
     assert "Unexpected parse error" in data["detail"]["message"]
 
 
-def test_get_universe_stats_success(client_and_session) -> None:
+def test_get_universe_stats_success(
+    client_and_session: tuple[TestClient, Session],
+) -> None:
     """Test GET /stats returns total and active counts."""
     client, _ = client_and_session
 
@@ -111,7 +120,9 @@ def test_get_universe_stats_success(client_and_session) -> None:
     assert data["active_symbols"] == 95
 
 
-def test_get_universe_stats_error_returns_500(client_and_session) -> None:
+def test_get_universe_stats_error_returns_500(
+    client_and_session: tuple[TestClient, Session],
+) -> None:
     """Test GET /stats returns 500 when service raises Exception."""
     client, _ = client_and_session
 

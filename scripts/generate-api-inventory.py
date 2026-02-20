@@ -22,11 +22,11 @@ from backend.app.main import app  # noqa: E402
 def generate_inventory() -> str:
     """Generate markdown inventory from FastAPI app."""
     openapi = app.openapi()
-    
+
     lines = [
         "# API Endpoint Inventory",
         "",
-        f"**Generated from**: FastAPI OpenAPI schema",
+        "**Generated from**: FastAPI OpenAPI schema",
         f"**Total Endpoints**: {count_endpoints(openapi)}",
         "",
         "## Endpoints",
@@ -34,7 +34,7 @@ def generate_inventory() -> str:
         "| Method | Path | Summary | Tags |",
         "|--------|------|---------|------|",
     ]
-    
+
     paths = openapi.get("paths", {})
     for path, methods in sorted(paths.items()):
         for method, details in methods.items():
@@ -42,14 +42,16 @@ def generate_inventory() -> str:
                 summary = details.get("summary", "-")
                 tags = ", ".join(details.get("tags", ["-"]))
                 lines.append(f"| {method.upper()} | `{path}` | {summary} | {tags} |")
-    
+
     # Group by tag for easier reading
-    lines.extend([
-        "",
-        "## Endpoints by Category",
-        "",
-    ])
-    
+    lines.extend(
+        [
+            "",
+            "## Endpoints by Category",
+            "",
+        ]
+    )
+
     # Collect endpoints by tag
     by_tag: dict[str, list[tuple[str, str, str]]] = {}
     for path, methods in paths.items():
@@ -61,7 +63,7 @@ def generate_inventory() -> str:
                     if tag not in by_tag:
                         by_tag[tag] = []
                     by_tag[tag].append((method.upper(), path, summary))
-    
+
     for tag in sorted(by_tag.keys()):
         lines.append(f"### {tag}")
         lines.append("")
@@ -70,15 +72,17 @@ def generate_inventory() -> str:
         for method, path, summary in sorted(by_tag[tag], key=lambda x: x[1]):
             lines.append(f"| {method} | `{path}` | {summary} |")
         lines.append("")
-    
+
     # Add schema models section
-    lines.extend([
-        "## Request/Response Models",
-        "",
-        "| Model | Description |",
-        "|-------|-------------|",
-    ])
-    
+    lines.extend(
+        [
+            "## Request/Response Models",
+            "",
+            "| Model | Description |",
+            "|-------|-------------|",
+        ]
+    )
+
     schemas = openapi.get("components", {}).get("schemas", {})
     for name, schema in sorted(schemas.items()):
         desc = schema.get("description", schema.get("title", "-"))
@@ -86,24 +90,26 @@ def generate_inventory() -> str:
         if len(desc) > 60:
             desc = desc[:57] + "..."
         lines.append(f"| `{name}` | {desc} |")
-    
-    lines.extend([
-        "",
-        "## How This File is Generated",
-        "",
-        "This file is auto-generated from FastAPI's OpenAPI schema.",
-        "",
-        "To regenerate:",
-        "```bash",
-        "python scripts/generate-api-inventory.py",
-        "```",
-        "",
-        "Or include in quality check by running:",
-        "```bash",
-        "./scripts/quality-check.sh",
-        "```",
-    ])
-    
+
+    lines.extend(
+        [
+            "",
+            "## How This File is Generated",
+            "",
+            "This file is auto-generated from FastAPI's OpenAPI schema.",
+            "",
+            "To regenerate:",
+            "```bash",
+            "python scripts/generate-api-inventory.py",
+            "```",
+            "",
+            "Or include in quality check by running:",
+            "```bash",
+            "./scripts/quality-check.sh",
+            "```",
+        ]
+    )
+
     return "\n".join(lines)
 
 
@@ -119,7 +125,7 @@ def count_endpoints(openapi: dict) -> int:
 
 if __name__ == "__main__":
     output_path = project_root / ".api-inventory.md"
-    
+
     try:
         inventory = generate_inventory()
         output_path.write_text(inventory)
