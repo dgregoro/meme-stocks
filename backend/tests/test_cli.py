@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-import pytest
-
 from backend.cli import client, commands
 
 
@@ -23,7 +21,7 @@ def test_analysis_cmd_json_output() -> None:
         mock_get.return_value.json.return_value = [
             {"symbol": "GME", "sentiment_score": 0.5, "mention_count": 10, "price_trend": "up", "composite_score": 0.7},
         ]
-        with patch("backend.cli.commands.output.print_json") as mock_json:
+        with patch("backend.cli.output.print_json") as mock_json:
             commands.analysis_cmd(base_url="http://localhost:8000", output_fmt="json")
             mock_json.assert_called_once()
 
@@ -50,6 +48,6 @@ def test_stocks_list_cmd_empty() -> None:
     """Stocks list with no data prints message."""
     with patch.object(client, "get") as mock_get:
         mock_get.return_value.json.return_value = []
-        with patch("backend.cli.commands.output.print_table") as mock_table:
+        with patch("backend.cli.output.print_table") as mock_table:
             commands.stocks_list_cmd(base_url="http://localhost:8000", output_fmt="table")
             mock_table.assert_not_called()

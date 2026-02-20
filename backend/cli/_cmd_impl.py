@@ -96,10 +96,7 @@ def stocks_list_cmd(*, base_url: str, output_fmt: str) -> None:
         print("No stocks tracked.")
         return
     headers = ["symbol", "name", "sector", "market_cap"]
-    rows = [
-        [s["symbol"], s["name"], s["sector"] or "-", s["market_cap"] if s["market_cap"] else "-"]
-        for s in data
-    ]
+    rows = [[s["symbol"], s["name"], s["sector"] or "-", s["market_cap"] if s["market_cap"] else "-"] for s in data]
     output.print_table(headers, rows)
 
 
@@ -135,15 +132,17 @@ def trades_list_cmd(*, base_url: str, output_fmt: str) -> None:
     rows = []
     for t in data:
         typ = t.get("instrument_type") or "stock"
-        rows.append([
-            t["id"],
-            t["stock_symbol"],
-            typ,
-            t["action"],
-            t["quantity"],
-            t["entry_price"],
-            t["exit_price"] if t["exit_price"] is not None else "-",
-        ])
+        rows.append(
+            [
+                t["id"],
+                t["stock_symbol"],
+                typ,
+                t["action"],
+                t["quantity"],
+                t["entry_price"],
+                t["exit_price"] if t["exit_price"] is not None else "-",
+            ]
+        )
     output.print_table(headers, rows)
 
 
@@ -196,7 +195,9 @@ def symbols_refresh_cmd(*, base_url: str, output_fmt: str) -> None:
     if output_fmt == "json":
         output.print_json(data)
         return
-    print(f"Refresh: inserted={data.get('inserted', 0)}, updated={data.get('updated', 0)}, total={data.get('total', 0)}")
+    print(
+        f"Refresh: inserted={data.get('inserted', 0)}, updated={data.get('updated', 0)}, total={data.get('total', 0)}"
+    )
 
 
 def symbols_stats_cmd(*, base_url: str, output_fmt: str) -> None:

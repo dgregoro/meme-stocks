@@ -38,9 +38,7 @@ def print_table(headers: list[str], rows: list[list[Any]], max_col_width: int = 
     print(header_line)
     print("-" * len(header_line))
     for row in rows:
-        line = "  ".join(
-            cell(row[i] if i < len(row) else "", col_widths[i]) for i in range(len(headers))
-        )
+        line = "  ".join(cell(row[i] if i < len(row) else "", col_widths[i]) for i in range(len(headers)))
         print(line)
 
 

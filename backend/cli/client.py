@@ -26,7 +26,8 @@ def get_base_url() -> str:
 def _extract_message(detail: object) -> str:
     """Extract human-readable message from API error detail."""
     if isinstance(detail, dict):
-        return detail.get("message", detail.get("detail", str(detail)))
+        out = detail.get("message", detail.get("detail", detail))
+        return str(out) if out is not None else str(detail)
     return str(detail)
 
 
