@@ -1,0 +1,21 @@
+---
+description: How to find and fix CI failures when the user has downloaded logs or says CI failed
+alwaysApply: true
+---
+
+# CI failure: let the AI find the issue
+
+When the user says **CI failed**, **the run failed**, or that they **downloaded the logs**:
+
+1. **Get the failure report** by running from repo root:
+   ```bash
+   ./scripts/ci-failure-report.sh
+   ```
+   If they gave a path to the zip, use it: `./scripts/ci-failure-report.sh path/to/logs_12345.zip`
+   The script uses the latest `logs_*.zip` in the repo root if no path is given.
+
+2. **Use the output** to see the failing job, step, and exact error (e.g. mypy missing stubs, flake8 error, pytest failure). Fix the reported issue in the codebase.
+
+3. **Verify** with `./scripts/verify.sh` or the commands in docs/CI_DEBUGGING.md before suggesting they push again.
+
+If no `logs_*.zip` exists, ask the user to download the log archive from the failed run (Actions → run → “Download log archive”) and save it in the repo root as `logs_<run_id>.zip`, then run the script again.
