@@ -8,7 +8,7 @@ This guide sets up a CI/CD pipeline so that pushes to `main` run tests (existing
 |-------|--------|------|
 | **Local** | Your machine | Develop, run `./scripts/verify.sh`, push/PR to GitHub |
 | **CI** | GitHub Actions | On every push/PR: lint, test, frontend build (`.github/workflows/ci.yml`) |
-| **CD** | GitHub Actions | On push to `main`: build image → push to GHCR → SSH to VPS → pull & restart (`.github/workflows/deploy.yml`) |
+| **CD** | GitHub Actions | After **CI - Lint and Test** succeeds on `main`: build image → push to GHCR → SSH to VPS → pull & restart (`.github/workflows/deploy.yml`). Also runnable manually. |
 | **VPS** | EC2 / your server | Podman runs `meme-stocks:latest` from GHCR; data in volume `meme-stocks-data` |
 
 ## One-time setup
@@ -19,7 +19,7 @@ In the repo: **Settings → Secrets and variables → Actions**, add:
 
 | Secret | Description |
 |--------|-------------|
-| `VPS_SSH_PRIVATE_KEY` | Full contents of your SSH private key (e.g. `~/.ssh/aws-meme-stocks`) used to log in as `ec2-user` (or your VPS user). |
+| `VPS_SSH_PRIVATE_KEY` | Your SSH **private** key, **base64-encoded** so newlines are preserved. From your machine run: `base64 -w0 ~/.ssh/aws-meme-stocks` (Linux) or `base64 -i ~/.ssh/aws-meme-stocks` (macOS), then paste the single line into the secret. Must be the key whose public half is on the VPS (e.g. the EC2 key pair you chose at launch). |
 | `VPS_HOST` | VPS hostname or IP (e.g. `18.118.189.110` or `meme-stocks-vps` if you use `/etc/hosts`). |
 | `VPS_USER` | (Optional.) SSH user; default is `ec2-user`. Set if your image uses a different user (e.g. `ubuntu`). |
 
@@ -74,7 +74,7 @@ On the VPS (one-time):
 ## Workflow behavior
 
 - **Deploy workflow** (`.github/workflows/deploy.yml`):
-  - **Triggers:** Push to `main`, or manual **Run workflow** from the Actions tab.
+  - **Triggers:** When the **CI - Lint and Test** workflow completes successfully on `main` (so deploy runs only if tests pass), or manual **Run workflow** from the Actions tab.
   - **Build:** Builds the image from the repo `Containerfile`, tags it `ghcr.io/<owner>/meme-stocks:<sha>` and `:latest`, pushes to GHCR.
   - **Deploy:** SSHs to the VPS, runs `podman pull`, stops/removes the existing `meme-stocks-backend` container (if any), starts a new one with the same name, port 8000, and volume `meme-stocks-data`. Uses `/opt/meme-stocks/.env` if present.
 
@@ -84,7 +84,7 @@ On the VPS (one-time):
 
 1. Work on a branch, run `./scripts/verify.sh` and push.
 2. Open a PR; CI runs (lint, tests, frontend build).
-3. Merge to `main`; deploy workflow runs and updates the VPS.
+3. Merge to `main`; CI runs, then the deploy workflow runs (only if CI succeeded) and updates the VPS.
 4. Check the app at `http://<VPS_HOST>:8000` and API docs at `http://<VPS_HOST>:8000/docs`.
 
 ## Manual deploy / rollback on VPS
@@ -106,7 +106,7 @@ Or use `compose.prod.yaml`: replace `REPLACE_OWNER` with your GitHub username/or
 
 ## Troubleshooting
 
-- **Deploy job fails at SSH:** Check `VPS_SSH_PRIVATE_KEY`, `VPS_HOST`, and `VPS_USER`. Ensure the key has access to the VPS (same key as in the EC2 key pair or in `authorized_keys`).
+- **Deploy job fails at SSH (Permission denied (publickey,...)):** Usually the private key lost its newlines when pasted. Store it **base64-encoded**: run `base64 -w0 ~/.ssh/aws-meme-stocks` (Linux) or `base64 -i ~/.ssh/aws-meme-stocks` (macOS), paste that single line into `VPS_SSH_PRIVATE_KEY`, and update the secret. Also confirm the key is the one on the VPS (EC2 key pair or `authorized_keys`).
 - **Deploy fails at `podman pull`:** If the image is private, make the package public or log in to GHCR on the VPS (see “GitHub Container Registry” above).
 - **App 500 or Reddit errors:** Ensure `/opt/meme-stocks/.env` exists and has valid `REDDIT_*` (and any other required) variables.
 - **Port 8000 not reachable:** Check the VPS security group and OS firewall (e.g. `sudo firewall-cmd` or iptables).
