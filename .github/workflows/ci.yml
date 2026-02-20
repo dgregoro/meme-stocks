@@ -13,7 +13,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Install git and lsb_release
-        run: dnf install -y git redhat-lsb-core
+        run: dnf install -y git lsb_release
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -46,12 +46,9 @@ jobs:
     runs-on: ubuntu-latest
     container: fedora:latest
     timeout-minutes: 10
-    defaults:
-      run:
-        working-directory: frontend
     steps:
       - name: Install git and lsb_release
-        run: dnf install -y git redhat-lsb-core
+        run: dnf install -y git lsb_release
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -64,9 +61,12 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+        working-directory: frontend
 
       - name: Lint
         run: npm run lint
+        working-directory: frontend
 
       - name: Build
         run: npm run build
+        working-directory: frontend
