@@ -336,8 +336,8 @@ async def notification_websocket(websocket: WebSocket):
 | 6.3 | User authentication | Large |
 | 6.4 | Rate limiting | Small |
 | 6.5 | Monitoring and alerting | Medium |
-| 6.6 | CI/CD pipeline | Medium |
-| 6.7 | Production deployment guide | Small |
+| 6.6 | CI/CD pipeline | Medium | ✅ Deploy workflow added (see docs/DEPLOYMENT.md) |
+| 6.7 | Production deployment guide | Small | ✅ docs/DEPLOYMENT.md |
 
 ### 6.1 PostgreSQL Migration
 
