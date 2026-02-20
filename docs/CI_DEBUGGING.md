@@ -30,8 +30,8 @@ Note: `verify.sh` runs pre-commit (which includes mypy). CI also runs a separate
 ## When a run has already failed
 
 1. **Download logs** from the failed run (Actions → run → “Download log archive”). Save the zip in the repo root as `logs_<run_id>.zip` (or pass its path to the script).
-2. **Have the AI find the issue**: from repo root run  
-   `./scripts/ci-failure-report.sh`  
+2. **Have the AI find the issue**: from repo root run
+   `./scripts/ci-failure-report.sh`
    (or `./scripts/ci-failure-report.sh path/to/logs_12345.zip`). The script prints the failing job/step and the relevant log excerpt so the AI (or you) can fix it without opening the zip manually.
 3. **Fix** the reported issue, then run the local commands above and push again.
 
