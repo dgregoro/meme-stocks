@@ -9,6 +9,9 @@ __pycache__/
 dist/
 build/
 
+# GitHub Actions log downloads
+logs_*.zip
+
 # Generated reports (by quality-check.sh and scripts/)
 .coverage
 .coverage-report.md
