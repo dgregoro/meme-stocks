@@ -59,7 +59,8 @@ Use `python -m backend.cli.main --help` for all commands. Set `MEME_STOCKS_API_U
 
 ## Getting Started
 
-See **[GETTING_STARTED.md](docs/GETTING_STARTED.md)** for setup, configuration, and development instructions.
+- **[GETTING_STARTED.md](docs/GETTING_STARTED.md)** — Setup, configuration, and development instructions.
+- **[USAGE.md](docs/USAGE.md)** — How to use the app (web UI and CLI).
 
 **Quick run with containers** (portable, local editing supported):
 
