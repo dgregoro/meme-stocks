@@ -13,6 +13,14 @@ The Meme Stocks Trading Application is a web-based tool designed for retail inve
 
 This is a decision-support tool for manual trading—it does not execute trades automatically or integrate with brokers. It is intended as a single-user application for personal use (for now). A command-line interface (CLI) provides full parity with the web UI for terminal users and scripting.
 
+### 1.1 Spec-driven development
+
+Before making functional changes to the application, update the spec to clarify the desired behavior. Then implement and test against the spec.
+
+1. **Decide the behavior** — What should the system do? (e.g. "Per-symbol fetch failures are logged and do not stop the job.")
+2. **Update the spec** — In this PRD: add or edit the relevant requirement in Section 5 (Features and Requirements), and if needed the API in Appendix A or user stories in Section 6. Update ROADMAP.md if the work is scheduled in a phase.
+3. **Implement** — Code and tests should satisfy the updated PRD; follow ARCHITECTURE.md for structure.
+
 ---
 
 ## 2. Problem Statement
@@ -109,6 +117,7 @@ These principles apply to all code in this project. They ensure the application 
 3. **Graceful Degradation**
    - If Reddit or Yahoo is unavailable, return an error or "no data" response—do not crash the application or return fabricated defaults.
    - Background jobs must not crash the app on external API failure; log the error and continue (e.g., run the next scheduled job).
+   - **Per-symbol failures**: When fetching data for a single symbol fails (e.g. price fetch for an invalid or unsupported ticker), log the symbol and the failure reason, then continue with the remaining symbols and jobs. The failure of one symbol must not stop the job or the application.
 
 4. **Actionable Error Messages**
    - Error messages must be specific: include what failed, why (when known), and any relevant context (e.g., symbol, job name, subreddit).
@@ -197,6 +206,7 @@ These principles apply to all code in this project. They ensure the application 
 | FR-7.4 | Scheduled notification checks | Must Have | ✅ Complete |
 | FR-7.5 | Catch-up logic for missed jobs on startup | Must Have | ✅ Complete |
 | FR-7.6 | Job execution tracking in database | Must Have | ✅ Complete |
+| FR-7.7 | Per-symbol fetch failures (e.g. invalid ticker, Yahoo/Reddit error) are logged with symbol and reason; job and application continue | Must Have | ✅ Complete |
 
 #### FR-8: Command-Line Interface (CLI)
 
