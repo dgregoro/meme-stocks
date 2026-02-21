@@ -30,15 +30,33 @@ jobs:
 
       - name: Verify required workflows passed
         env:
+          GH_TOKEN: ${{ github.token }}
           SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
         run: |
-          for wf in "CI - Lint and Test" "Security and Dependency Hygiene"; do
-            run_id=$(gh api "repos/${{ github.repository }}/actions/runs?head_sha=${SHA}&per_page=20" --jq ".workflow_runs[] | select(.name == \"$wf\" and .conclusion == \"success\") | .id" | head -1)
-            if [ -z "$run_id" ]; then
-              echo "::error::No successful run of '$wf' for commit ${SHA}"
+          REQUIRED=("CI - Lint and Test" "Security and Dependency Hygiene")
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            missing=""
+            for wf in "${REQUIRED[@]}"; do
+              run_id=$(gh api "repos/${{ github.repository }}/actions/runs?head_sha=${SHA}&per_page=20" --jq ".workflow_runs[] | select(.name == \"$wf\" and .conclusion == \"success\") | .id" | head -1)
+              if [ -z "$run_id" ]; then
+                missing="$missing $wf"
+              else
+                echo "Found successful run of '$wf'"
+              fi
+            done
+            if [ -z "$missing" ]; then
+              echo "All required workflows passed for ${SHA}"
+              exit 0
+            fi
+            if [ "$attempt" -lt 10 ]; then
+              echo "Waiting for:${missing} (attempt $attempt/10, retry in 30s)"
+              sleep 30
+            else
+              echo "::error::No successful run for:${missing} for commit ${SHA}"
+              echo "Runs for this commit:"
+              gh api "repos/${{ github.repository }}/actions/runs?head_sha=${SHA}&per_page=20" --jq '.workflow_runs[] | "  \(.name): \(.conclusion // "in_progress")"' || true
               exit 1
             fi
-            echo "Found successful run of '$wf'"
           done
 
       - name: Set up Docker Buildx
