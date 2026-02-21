@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import timedelta
 from typing import List
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
@@ -20,6 +20,22 @@ from backend.app.services.sentiment_analyzer import (
 
 
 router = APIRouter(prefix="/api/stocks", tags=["stocks"])
+
+
+class RedditMentionResponse(BaseModel):
+    """Single Reddit mention with source (subreddit, url) for display in web/CLI."""
+
+    id: str
+    subreddit: str
+    title: str
+    url: str
+    author: str
+    upvotes: int
+    comments: int
+    posted_at: str
+    collected_at: str
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class SentimentResponse(BaseModel):
@@ -60,6 +76,36 @@ def get_stock_sentiment(symbol: str, db: Session = Depends(get_session)) -> Sent
         window_hours=int(summary.window.total_seconds() // 3600),
         classification=classification,
     )
+
+
+@router.get("/{symbol}/mentions", response_model=List[RedditMentionResponse])
+def get_stock_mentions(
+    symbol: str,
+    limit: int = Query(default=20, ge=1, le=100),
+    db: Session = Depends(get_session),
+) -> List[RedditMentionResponse]:
+    """Get recent Reddit mentions for a stock, with source (subreddit, url) for web/CLI."""
+    require_stock(db, symbol)
+
+    reddit_repo = RedditPostRepository(db)
+    posts = reddit_repo.list_for_stock(symbol)
+
+    result = []
+    for post in posts[:limit]:
+        result.append(
+            RedditMentionResponse(
+                id=post.id,
+                subreddit=post.subreddit,
+                title=post.title,
+                url=post.url,
+                author=post.author,
+                upvotes=post.upvotes,
+                comments=post.comments,
+                posted_at=post.posted_at.isoformat(),
+                collected_at=post.collected_at.isoformat(),
+            )
+        )
+    return result
 
 
 @router.get("/{symbol}/prices", response_model=List[PricePointResponse])

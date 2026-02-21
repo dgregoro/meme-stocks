@@ -128,3 +128,33 @@ def test_get_sentiment_and_prices_for_stock() -> None:
     assert isinstance(p_data, list)
     assert len(p_data) == 1
     assert p_data[0]["close"] == 11.5
+
+    # Mentions (source: subreddit, url)
+    m_resp = client.get("/api/stocks/AMC/mentions")
+    assert m_resp.status_code == 200
+    m_data = m_resp.json()
+    assert isinstance(m_data, list)
+    assert len(m_data) == 1
+    assert m_data[0]["subreddit"] == "wallstreetbets"
+    assert m_data[0]["url"] == "https://reddit.com/post1"
+    assert m_data[0]["title"] == "AMC to the moon buy buy"
+    assert "id" in m_data[0] and "posted_at" in m_data[0]
+
+
+def test_get_mentions_not_found_returns_404() -> None:
+    client, _ = build_test_app_with_db()
+    resp = client.get("/api/stocks/UNKNOWN/mentions")
+    assert resp.status_code == 404
+    body = resp.json()
+    assert body["detail"]["error_type"] == "NotFoundError"
+
+
+def test_get_mentions_empty_list_for_stock_with_no_posts() -> None:
+    client, db = build_test_app_with_db()
+    stock = Stock(symbol="XYZ", name="XYZ Corp", sector=None, market_cap=None)
+    db.add(stock)
+    db.commit()
+
+    resp = client.get("/api/stocks/XYZ/mentions")
+    assert resp.status_code == 200
+    assert resp.json() == []
