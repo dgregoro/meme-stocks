@@ -140,7 +140,8 @@ These principles apply to all code in this project. They ensure the application 
 | FR-1.5 | Apply time decay to older posts | Must Have | ✅ Complete |
 | FR-1.6 | Aggregate sentiment per stock symbol | Must Have | ✅ Complete |
 | FR-1.7 | Track sentiment trends over time (momentum) | Should Have | ✅ Complete |
-| FR-1.8 | Support ML-based sentiment analysis | Could Have | ❌ Future |
+| FR-1.8 | Capture source of Reddit mentions (subreddit, post URL) and expose in web and CLI UIs | Must Have | ✅ Complete |
+| FR-1.9 | Support ML-based sentiment analysis | Could Have | ❌ Future |
 
 #### FR-2: Price Pattern Analysis
 
@@ -239,6 +240,7 @@ The CLI is invoked as `meme-stocks` (or `python -m backend.cli`) with subcommand
 | `meme-stocks stocks show SYMBOL` | Show stock details | `GET /api/stocks/{symbol}` |
 | `meme-stocks stocks add SYMBOL [--name NAME]` | Add a stock to tracking | `POST /api/stocks` |
 | `meme-stocks sentiment SYMBOL` | Show sentiment analysis | `GET /api/stocks/{symbol}/sentiment` |
+| `meme-stocks stocks mentions SYMBOL` | Recent Reddit mentions for symbol (with source) | `GET /api/stocks/{symbol}/mentions` |
 | `meme-stocks prices SYMBOL` | Show price history | `GET /api/stocks/{symbol}/prices` |
 | `meme-stocks analysis` | Daily ranked analysis | `GET /api/analysis/daily` |
 | `meme-stocks notifications` | List unread notifications | `GET /api/notifications` |
@@ -343,6 +345,8 @@ The CLI is invoked as `meme-stocks` (or `python -m backend.cli`) with subcommand
 **US-1.1** As a retail investor, I want to see the current sentiment score for a stock so that I can gauge market mood before trading.
 
 **US-1.2** As a retail investor, I want to know how many times a stock was mentioned on Reddit today so that I can understand its popularity.
+
+**US-1.2a** As a retail investor, I want to see the source of each Reddit mention (subreddit and link to the post) so that I can verify and dive into the discussion.
 
 **US-1.3** As a retail investor, I want to see if sentiment is improving or declining so that I can anticipate momentum shifts.
 
@@ -454,7 +458,7 @@ The CLI is invoked as `meme-stocks` (or `python -m backend.cli`) with subcommand
 |-------|-------------|------------|
 | Stock | Tracked stock symbols | symbol (PK), name, sector, market_cap |
 | SymbolUniverse | Valid stock symbols whitelist | symbol (PK), exchange, is_active |
-| RedditPost | Reddit submissions | id (PK), subreddit, title, author, upvotes, comments, url, posted_at, collected_at |
+| RedditPost | Reddit submissions (source = subreddit + url) | id (PK), subreddit, title, author, upvotes, comments, url, posted_at, collected_at |
 | RedditSymbolMention | Links posts to symbols | post_id + symbol (composite PK) |
 | PriceData | Historical OHLCV data | stock_symbol, date, open, high, low, close, volume |
 | Notification | Activity alerts | stock_symbol, type, severity, message, read |
@@ -592,6 +596,7 @@ See FR-8 "CLI Command Structure" for the mapping between CLI commands and API en
 | GET | /api/stocks | List tracked stocks |
 | GET | /api/stocks/{symbol} | Get stock details |
 | GET | /api/stocks/{symbol}/sentiment | Get sentiment analysis |
+| GET | /api/stocks/{symbol}/mentions | Get recent Reddit mentions for symbol (with source: subreddit, url) |
 | GET | /api/stocks/{symbol}/prices | Get price history |
 | GET | /api/analysis/daily | Get daily ranked analysis |
 | GET | /api/notifications | List unread notifications |
@@ -608,7 +613,7 @@ When implemented, the CLI will support:
 
 ```bash
 meme-stocks health
-meme-stocks stocks list | show SYMBOL | add SYMBOL
+meme-stocks stocks list | show SYMBOL | mentions SYMBOL | add SYMBOL
 meme-stocks sentiment SYMBOL
 meme-stocks prices SYMBOL
 meme-stocks analysis
