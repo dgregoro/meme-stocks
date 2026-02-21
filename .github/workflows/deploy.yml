@@ -1,4 +1,5 @@
-# Deploy meme-stocks to VPS after both CI and Security pass on main (workflow_run) or manually (workflow_dispatch).
+# Deploy meme-stocks to VPS after Security → CI → Deploy pipeline passes on main (workflow_run) or manually (workflow_dispatch).
+# Pipeline order: Security runs first, then CI (if Security passes), then Deploy (if CI passes). One deploy run per push.
 # Requires: VPS_SSH_PRIVATE_KEY, VPS_HOST (and optionally VPS_USER) in repo secrets.
 # See docs/DEPLOYMENT.md for setup.
 
@@ -6,7 +7,7 @@ name: Deploy to VPS
 
 on:
   workflow_run:
-    workflows: ["CI - Lint and Test", "Security and Dependency Hygiene"]
+    workflows: ["CI - Lint and Test"]
     types:
       - completed
     branches: [main]
