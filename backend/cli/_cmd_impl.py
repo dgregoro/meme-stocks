@@ -110,6 +110,40 @@ def stocks_show_cmd(*, symbol: str, base_url: str, output_fmt: str) -> None:
         print(f"  {k}: {v}")
 
 
+def stocks_mentions_cmd(
+    *,
+    symbol: str,
+    limit: int,
+    base_url: str,
+    output_fmt: str,
+) -> None:
+    """Recent Reddit mentions for a symbol, with source (subreddit, url)."""
+    resp = client.get(
+        f"/api/stocks/{symbol}/mentions",
+        params={"limit": limit},
+        base_url=base_url,
+    )
+    data = resp.json()
+    if output_fmt == "json":
+        output.print_json(data)
+        return
+    if not data:
+        print("No Reddit mentions for this symbol.")
+        return
+    headers = ["subreddit", "title", "url", "upvotes", "posted_at"]
+    rows = [
+        [
+            m["subreddit"],
+            (m["title"] or "")[:40],
+            (m["url"] or "")[:50],
+            m["upvotes"],
+            m["posted_at"][:19] if m.get("posted_at") else "-",
+        ]
+        for m in data
+    ]
+    output.print_table(headers, rows)
+
+
 def stocks_add_cmd(*, symbol: str, name: str, base_url: str, output_fmt: str) -> None:
     resp = client.post("/api/stocks", json={"symbol": symbol, "name": name}, base_url=base_url)
     data = resp.json()
@@ -248,8 +282,16 @@ def jobs_recent_posts_cmd(*, limit: int, base_url: str, output_fmt: str) -> None
     if not data:
         print("No recent posts.")
         return
-    headers = ["id", "symbol", "subreddit", "title", "upvotes"]
+    headers = ["id", "symbol", "subreddit", "title", "url", "upvotes"]
     rows = [
-        [p["id"], p.get("stock_symbol", "") or "-", p["subreddit"], (p["title"] or "")[:40], p["upvotes"]] for p in data
+        [
+            p["id"],
+            p.get("stock_symbol", "") or "-",
+            p["subreddit"],
+            (p["title"] or "")[:36],
+            (p.get("url") or "")[:44],
+            p["upvotes"],
+        ]
+        for p in data
     ]
     output.print_table(headers, rows)

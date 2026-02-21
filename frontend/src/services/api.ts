@@ -29,6 +29,18 @@ export type Sentiment = {
   classification: string
 }
 
+export type RedditMention = {
+  id: string
+  subreddit: string
+  title: string
+  url: string
+  author: string
+  upvotes: number
+  comments: number
+  posted_at: string
+  collected_at: string
+}
+
 export type PricePoint = {
   date: string
   open: number
@@ -107,6 +119,8 @@ export const api = {
   getStock: (symbol: string) => handle(client.get<Stock>(`/api/stocks/${symbol}`)),
   getSentiment: (symbol: string) =>
     handle(client.get<Sentiment>(`/api/stocks/${symbol}/sentiment`)),
+  getMentions: (symbol: string, limit = 20) =>
+    handle(client.get<RedditMention[]>(`/api/stocks/${symbol}/mentions`, { params: { limit } })),
   getPrices: (symbol: string) =>
     handle(client.get<PricePoint[]>(`/api/stocks/${symbol}/prices`)),
   listNotifications: () => handle(client.get<NotificationItem[]>('/api/notifications')),

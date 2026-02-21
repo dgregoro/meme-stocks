@@ -113,6 +113,22 @@ def stocks_show(
     commands.stocks_show_cmd(symbol=symbol.upper(), base_url=base_url, output_fmt=output)
 
 
+@stocks_app.command("mentions")
+def stocks_mentions(
+    symbol: str = typer.Argument(..., help="Stock symbol"),
+    limit: int = typer.Option(20, "--limit", "-n", help="Max mentions to show"),
+    base_url: str = base_url_opt,
+    output: str = output_opt,
+) -> None:
+    """Recent Reddit mentions for a symbol (source: subreddit, url)."""
+    commands.stocks_mentions_cmd(
+        symbol=symbol.upper(),
+        limit=limit,
+        base_url=base_url,
+        output_fmt=output,
+    )
+
+
 @stocks_app.command("add")
 def stocks_add(
     symbol: str = typer.Argument(..., help="Stock symbol"),
