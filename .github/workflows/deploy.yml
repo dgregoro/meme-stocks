@@ -1,4 +1,4 @@
-# Deploy meme-stocks to VPS after CI passes on main (workflow_run) or manually (workflow_dispatch).
+# Deploy meme-stocks to VPS after both CI and Security pass on main (workflow_run) or manually (workflow_dispatch).
 # Requires: VPS_SSH_PRIVATE_KEY, VPS_HOST (and optionally VPS_USER) in repo secrets.
 # See docs/DEPLOYMENT.md for setup.
 
@@ -6,7 +6,7 @@ name: Deploy to VPS
 
 on:
   workflow_run:
-    workflows: ["CI - Lint and Test"]
+    workflows: ["CI - Lint and Test", "Security and Dependency Hygiene"]
     types:
       - completed
     branches: [main]
@@ -19,6 +19,7 @@ jobs:
     permissions:
       contents: read
       packages: write
+      actions: read
     outputs:
       image: ${{ steps.meta.outputs.tags }}
     steps:
@@ -26,6 +27,19 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Verify required workflows passed
+        env:
+          SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+        run: |
+          for wf in "CI - Lint and Test" "Security and Dependency Hygiene"; do
+            run_id=$(gh api "repos/${{ github.repository }}/actions/runs?head_sha=${SHA}&per_page=20" --jq ".workflow_runs[] | select(.name == \"$wf\" and .conclusion == \"success\") | .id" | head -1)
+            if [ -z "$run_id" ]; then
+              echo "::error::No successful run of '$wf' for commit ${SHA}"
+              exit 1
+            fi
+            echo "Found successful run of '$wf'"
+          done
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -66,12 +80,25 @@ jobs:
           mkdir -p ~/.ssh
           KEY="${{ secrets.VPS_SSH_PRIVATE_KEY }}"
           if [[ "$KEY" == -----BEGIN* ]]; then
+            echo "Using raw PEM key (starts with -----BEGIN)"
             echo "$KEY" > ~/.ssh/deploy_key
           else
+            echo "Decoding base64 key"
             echo "$KEY" | base64 -d > ~/.ssh/deploy_key
           fi
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H "${{ secrets.VPS_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Debug SSH key and target
+        run: |
+          echo "Key file: $(ls -la ~/.ssh/deploy_key)"
+          echo "Key first line: $(head -1 ~/.ssh/deploy_key)"
+          if ssh-keygen -y -f ~/.ssh/deploy_key &>/dev/null; then
+            echo "Key format: valid (ssh-keygen -y succeeded)"
+          else
+            echo "::warning::Key format invalid or passphrase-protected (ssh-keygen -y failed)"
+          fi
+          echo "Target: VPS_HOST and VPS_USER are set (values hidden in logs)"
 
       - name: Deploy on VPS
         env:
@@ -80,7 +107,8 @@ jobs:
           IMAGE: ghcr.io/${{ github.repository_owner }}/meme-stocks:latest
         run: |
           VPS_USER="${VPS_USER:-ec2-user}"
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes "${VPS_USER}@${VPS_HOST}" "set -e
+          echo "Connecting to VPS as ${VPS_USER}@<host> (run with SSH verbose)"
+          ssh -v -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes "${VPS_USER}@${VPS_HOST}" "set -e
             echo 'Pulling image...'
             podman pull ${IMAGE}
             echo 'Stopping existing container (if any)...'
