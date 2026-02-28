@@ -55,6 +55,9 @@ class Settings(BaseSettings):
     # SEC EDGAR (requires User-Agent; use contact email for compliance)
     sec_user_agent: str = "MemeStocksApp/1.0 (contact@example.com)"
 
+    # Optional: use HuggingFace ticker NER model for extra candidates (default off)
+    enable_ticker_ner: bool = False
+
     model_config = SettingsConfigDict(
         env_file=(".env", "backend/.env"),
         env_file_encoding="utf-8",
