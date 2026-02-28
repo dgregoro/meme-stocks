@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 from datetime import date, datetime, timedelta, timezone
 
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -29,8 +30,9 @@ logger = logging.getLogger(__name__)
 class SchedulerService:
     """Manages scheduled background jobs with catch-up support.
 
-    On startup, checks for missed jobs and runs them. Then schedules periodic
-    jobs going forward. All errors are logged but do not stop the scheduler.
+    On startup, the scheduler and periodic jobs start immediately so the app
+    can serve requests. Catch-up (if enabled) runs in a separate thread so
+    it does not block startup. All errors are logged but do not stop the scheduler.
     """
 
     def __init__(self) -> None:
@@ -40,20 +42,29 @@ class SchedulerService:
         self._yahoo_service = YahooFinanceService()
 
     def start(self) -> None:
-        """Start the scheduler and run catch-up if enabled."""
-        if self._settings.enable_catch_up:
-            logger.info("Running catch-up for missed jobs...")
-            self._run_catch_up()
-
-        # Schedule periodic jobs
+        """Start the scheduler; run catch-up in background if enabled."""
+        # Schedule periodic jobs and start scheduler so the app is ready to serve
         self._schedule_jobs()
         self._scheduler.start()
         logger.info("Scheduler started")
+
+        if self._settings.enable_catch_up:
+            thread = threading.Thread(target=self._run_catch_up_guarded, daemon=True)
+            thread.start()
+            logger.info("Catch-up running in background")
 
     def shutdown(self) -> None:
         """Shutdown the scheduler gracefully."""
         self._scheduler.shutdown()
         logger.info("Scheduler stopped")
+
+    def _run_catch_up_guarded(self) -> None:
+        """Run catch-up in a background thread; log and swallow exceptions."""
+        try:
+            logger.info("Running catch-up for missed jobs...")
+            self._run_catch_up()
+        except Exception as exc:
+            logger.error(f"Error during catch-up: {exc}", exc_info=True)
 
     def _run_catch_up(self) -> None:
         """Check for missed jobs and run them."""
