@@ -79,7 +79,9 @@ def main() -> None:
         unread = [n for n in notifs if not n.get("read")]
         digest_lines.append(f"Unread notifications: {len(unread)}")
         for n in unread[:10]:
-            digest_lines.append(f"  [{n.get('severity', '?')}] {n.get('stock_symbol', '?')}: {n.get('message', '')[:60]}")
+            digest_lines.append(
+                f"  [{n.get('severity', '?')}] {n.get('stock_symbol', '?')}: {n.get('message', '')[:60]}"
+            )
         digest_lines.append("")
     elif notifs is None and (not digest_lines or "Error" not in digest_lines[-1]):
         digest_lines.append("Notifications – failed to fetch")
