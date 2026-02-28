@@ -284,8 +284,8 @@ def extract_tickers(
             from backend.app.utils.ticker_ner import extract_ner_candidates
 
             ner_candidates = extract_ner_candidates(text)
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("Optional NER candidates skipped: %s", exc)
 
     # Regex candidates
     matches = TICKER_PATTERN.findall(text.upper())
