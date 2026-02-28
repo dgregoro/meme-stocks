@@ -2,7 +2,7 @@
 ## Meme Stocks Trading Application
 
 **Version:** 1.0
-**Last Updated:** January 31, 2026
+**Last Updated:** February 28, 2026
 **Status:** MVP Complete
 
 ---
@@ -336,6 +336,65 @@ The CLI is invoked as `meme-stocks` (or `python -m backend.cli`) with subcommand
 | NFR-7.3 | Table output fits 80-column terminals | Columns truncate or wrap gracefully |
 | NFR-7.4 | Scriptable (non-interactive) | All commands work without TTY |
 
+### 5.3 Web UI Enhancement Ideas
+
+The following are candidate improvements to the web UI. They are not yet committed requirements; prioritize via ROADMAP.md and user feedback.
+
+#### Visual design & branding
+
+| Idea | Description | Priority (suggested) |
+|------|-------------|----------------------|
+| Theming | Light/dark mode toggle with persistence (e.g. localStorage). | High |
+| Typography & spacing | Distinct font stack, consistent spacing scale, and clear hierarchy so screens are scannable. | High |
+| Color semantics | Use color consistently (e.g. green/red for positive/negative sentiment and P/L, severity for notifications). | High |
+| Branding | App name, favicon, and optional header/footer to reinforce product identity. | Medium |
+
+#### Navigation & layout
+
+| Idea | Description | Priority (suggested) |
+|------|-------------|----------------------|
+| Persistent navigation | Sidebar or top nav with clear sections (Dashboard, Stocks, Notifications, Paper Trading) and active state. | High |
+| Stock-centric flow | From Dashboard or Stocks list, drill into a stock detail view (sentiment, mentions, price, trend) without losing context. | High |
+| Breadcrumbs or back | When drilling into a stock or trade, easy way to return to list or dashboard. | Medium |
+| Landing / empty states | First-time or empty state (no stocks, no notifications) with short guidance or call-to-action. | Medium |
+
+#### Data presentation
+
+| Idea | Description | Priority (suggested) |
+|------|-------------|----------------------|
+| Dashboard summary cards | At-a-glance counts or highlights (e.g. unread notifications, top mover, last job run) on Dashboard. | High |
+| Sortable/filterable tables | Sort columns on Dashboard (composite, sentiment, mentions) and filter stocks or notifications. | High |
+| Price charts | Sparklines or a small price chart (e.g. last 7–30 days) per symbol on Dashboard or stock detail. | High |
+| Sentiment visualization | Simple gauge, bar, or badge for sentiment score and classification (positive/neutral/negative). | Medium |
+| Relative time | Show “2 hours ago” for notifications and job runs where helpful; keep exact time on hover or detail. | Medium |
+| Reddit mentions list | Structured list of mentions (subreddit, title, link, upvotes) with optional expand/collapse. | Medium |
+
+#### Interactivity & feedback
+
+| Idea | Description | Priority (suggested) |
+|------|-------------|----------------------|
+| Auto-refresh | Optional periodic refresh for Dashboard or notifications (e.g. every N minutes) with indicator. | High (NFR-6.3) |
+| Loading states | Skeleton or spinner for list/detail loads so the UI doesn’t feel stuck. | High |
+| Toasts or inline success/error | Confirm actions (e.g. trade created, stock added) and surface API errors clearly. | High |
+| Confirm destructive actions | Confirm before closing a trade or removing data. | Medium |
+| Mark notification read | Per-notification or “mark all read” with immediate UI update. | Medium |
+
+#### Responsiveness & accessibility
+
+| Idea | Description | Priority (suggested) |
+|------|-------------|----------------------|
+| Mobile-friendly tables | On small screens, cards or stacked layout instead of wide tables; primary actions visible. | High |
+| Keyboard & focus | Logical tab order, focus indicators, and key shortcuts (e.g. Escape to close modals). | Medium |
+| Screen reader support | Semantic HTML, ARIA where needed, and labels so core flows work with assistive tech. | Medium |
+
+#### Performance & polish
+
+| Idea | Description | Priority (suggested) |
+|------|-------------|----------------------|
+| Per-route code splitting | Lazy-load Dashboard, Stocks, Paper Trading so initial load stays fast. | Medium |
+| Optimistic updates | For create/close trade, update UI immediately and reconcile on server response. | Low |
+| Last-updated indicator | Show when data was last refreshed (e.g. “Prices as of 14:32 UTC”) to set expectations. | Low |
+
 ---
 
 ## 6. User Stories
@@ -397,6 +456,24 @@ The CLI is invoked as `meme-stocks` (or `python -m backend.cli`) with subcommand
 **US-7.4** As a paper trader, I want to create and close trades from the terminal so that I can integrate paper trading into my existing workflow.
 
 **US-7.5** As a user, I want clear error messages when the backend is down so that I know how to fix the problem.
+
+### Epic 8: Web UI/UX
+
+**US-8.1** As a user, I want a clear navigation (sidebar or top nav) so that I can move between Dashboard, Stocks, Notifications, and Paper Trading without guessing.
+
+**US-8.2** As a user, I want to open a stock from the list and see sentiment, Reddit mentions, and price in one place so that I can decide quickly.
+
+**US-8.3** As a user, I want the Dashboard to show summary info (e.g. unread count, top symbols) at a glance so that I know what needs attention.
+
+**US-8.4** As a user, I want tables I can sort (e.g. by composite score or sentiment) so that I can focus on the most relevant rows.
+
+**US-8.5** As a user, I want loading and error states (spinners, messages) so that I know when data is updating or when something failed.
+
+**US-8.6** As a user, I want dark/light mode so that I can use the app comfortably in different environments.
+
+**US-8.7** As a user, I want the app to work on my phone (readable, tappable) so that I can check alerts or rankings on the go.
+
+**US-8.8** As a user, I want optional auto-refresh for the Dashboard or notifications so that I see updates without manually reloading.
 
 ---
 
