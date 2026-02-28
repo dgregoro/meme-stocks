@@ -96,6 +96,12 @@ export type PortfolioSummary = {
   average_loss: number | null
 }
 
+export type JobRun = {
+  id: number
+  job_name: string
+  run_at: string
+}
+
 const client = axios.create({
   baseURL: BASE_URL,
   timeout: 10000,
@@ -130,4 +136,10 @@ export const api = {
   closeTrade: (id: number, exit_price: number) =>
     handle(client.post<Trade>(`/api/trades/${id}/close`, { exit_price })),
   getPortfolio: () => handle(client.get<PortfolioSummary>('/api/portfolio')),
+  getJobRuns: (jobName: string, limit = 1) =>
+    handle(
+      client.get<JobRun[]>(`/api/jobs/${encodeURIComponent(jobName)}/runs`, {
+        params: { limit },
+      }),
+    ),
 }
