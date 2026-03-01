@@ -18,7 +18,7 @@ from backend.app.config import get_settings
 from backend.app.data.repositories.intraday_ingest_repo import IntradayIngestRepository
 from backend.app.data.repositories.stock_repo import StockRepository
 from backend.app.feature_store.parquet_store import ParquetFeatureStore
-from backend.app.utils.errors import ExternalAPIError
+from backend.app.utils.errors import ExternalAPIError, IngestionAlreadyRunningError
 
 logger = logging.getLogger(__name__)
 
@@ -40,18 +40,31 @@ def _parse_bar_ts(bar: dict) -> datetime | None:
 def run_intraday_ingestion(
     db: Session,
     universe: list[str] | None = None,
+    owner: str = "scheduler",
 ) -> dict:
     """Run incremental intraday minute-bar ingestion for the given or default universe.
 
     Args:
         db: Database session (caller commits).
         universe: Optional list of symbols. If None, uses tracked stocks from DB.
+        owner: Lock owner id (e.g. "scheduler" or "api:<uuid>") for governance.
 
     Returns:
         Run summary: symbols_processed, bars_written, errors_count, start_utc, end_utc,
         safe_end_used, feed, etc.
+
+    Raises:
+        IngestionAlreadyRunningError: When lock is enabled and another run holds the lock,
+            or when heartbeat fails (lock lost).
     """
     settings = get_settings()
+    lock_enabled = getattr(settings, "intraday_lock_enabled", True)
+    lock_name = getattr(settings, "intraday_lock_name", "intraday_ingestion")
+    lock_ttl = getattr(settings, "intraday_lock_ttl_seconds", 1800)
+
+    if not lock_enabled:
+        logger.warning("Intraday ingestion lock is disabled; overlapping runs are possible")
+
     client = AlpacaDataClient(
         free_plan_mode=settings.alpaca_free_plan_mode,
         end_time_safety_minutes=settings.alpaca_end_time_safety_minutes,
@@ -86,21 +99,34 @@ def run_intraday_ingestion(
         }
 
     repo = IntradayIngestRepository(db)
-    # Global lock: do not start if another ingestion run is in progress
-    if repo.get_running_run() is not None:
-        logger.info("Intraday ingestion skipped: another run already in progress")
-        return {
-            "skipped": True,
-            "reason": "already_running",
-            "symbols_processed": 0,
-            "bars_written": 0,
-            "errors_count": 0,
-            "start_utc": None,
-            "end_utc": safe_end.isoformat(),
-            "safe_end_used": safe_end.isoformat(),
-            "feed": settings.alpaca_data_feed,
-            "free_plan_mode": settings.alpaca_free_plan_mode,
-        }
+    lock_repo = None
+    lock_acquired = False
+    if lock_enabled:
+        from backend.app.data.repositories.job_lock_repo import JobLockRepository
+
+        lock_repo = JobLockRepository(db)
+        if not lock_repo.try_acquire_lock(lock_name, owner, lock_ttl, now):
+            current = lock_repo.get_lock(lock_name)
+            owner_str = current.owner if current else "unknown"
+            expires_str = current.expires_at.isoformat() if current and current.expires_at else None
+            raise IngestionAlreadyRunningError(
+                "Intraday ingestion already in progress",
+                owner=owner_str,
+                expires_at=expires_str,
+            )
+        lock_acquired = True
+    else:
+        running = repo.get_running_run()
+        if running is not None:
+            logger.warning(
+                "Intraday ingestion lock disabled; another run in progress (run_id=%s) - failing explicitly",
+                running.id,
+            )
+            raise IngestionAlreadyRunningError(
+                "Intraday ingestion already in progress (lock disabled; run state detected)",
+                owner=f"run_id:{running.id}",
+                expires_at=None,
+            )
 
     repo.ensure_symbols(symbols)
     db.commit()
@@ -205,7 +231,18 @@ def run_intraday_ingestion(
                     logger.warning("Failed to update state for %s: %s", sym, e)
                     repo.mark_error(sym, str(e))
                     errors_count += 1
+
+            # Heartbeat to keep lock alive (extend lease by full TTL)
+            if lock_acquired and lock_repo:
+                if not lock_repo.heartbeat(lock_name, owner, lock_ttl, datetime.now(timezone.utc)):
+                    raise IngestionAlreadyRunningError(
+                        "Intraday ingestion lock lost (heartbeat failed); aborting.",
+                        owner=owner,
+                        expires_at=None,
+                    )
     finally:
+        if lock_acquired and lock_repo:
+            lock_repo.release_lock(lock_name, owner)
         repo.finish_run(
             run.id,
             bars_written=total_bars,
