@@ -1,15 +1,22 @@
 import React, { useEffect, useState } from 'react'
 import { api, NotificationItem } from '../services/api'
+import { LoadingSpinner } from '../components/LoadingSpinner'
 
 export const Notifications: React.FC = () => {
   const [items, setItems] = useState<NotificationItem[]>([])
   const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    api.listNotifications().then(setItems).catch((e) => setError(String(e)))
+    api
+      .listNotifications()
+      .then(setItems)
+      .catch((e) => setError(String(e)))
+      .finally(() => setLoading(false))
   }, [])
 
   if (error) return <div style={{ color: 'red' }}>Error: {error}</div>
+  if (loading) return <LoadingSpinner message="Loading notifications…" />
 
   return (
     <div>

@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react'
 import { api, type AnalysisRow, type JobRun } from '../services/api'
 import { formatRelativeTime, sentimentClass } from '../utils/dashboardUtils'
+import { LoadingSpinner } from '../components/LoadingSpinner'
 
 type SortKey = 'symbol' | 'composite_score' | 'price_trend' | 'sentiment_score' | 'mention_count'
 type SortDir = 'asc' | 'desc'
@@ -54,7 +55,7 @@ export const Dashboard: React.FC = () => {
     }
   }
 
-  if (loading) return <div>Loading...</div>
+  if (loading) return <LoadingSpinner message="Loading..." />
   if (error) return <div style={{ color: 'red' }}>Error: {error}</div>
 
   return (
