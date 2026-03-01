@@ -51,6 +51,7 @@ export const PaperTrading: React.FC = () => {
   }
 
   const doClose = async (id: number) => {
+    if (!window.confirm('Close this position? You will be asked for the exit price.')) return
     const exit = Number(prompt('Exit price?'))
     if (!exit || isNaN(exit)) return
     setError(null)
