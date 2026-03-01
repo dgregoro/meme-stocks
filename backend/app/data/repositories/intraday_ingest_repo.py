@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Sequence
 
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
@@ -138,11 +137,7 @@ class IntradayIngestRepository:
 
     def get_latest_run(self) -> IntradayIngestRun | None:
         """Return the most recent run by started_at, or None."""
-        stmt = (
-            select(IntradayIngestRun)
-            .order_by(IntradayIngestRun.started_at.desc())
-            .limit(1)
-        )
+        stmt = select(IntradayIngestRun).order_by(IntradayIngestRun.started_at.desc()).limit(1)
         try:
             return self._session.execute(stmt).scalar_one_or_none()
         except SQLAlchemyError as exc:
@@ -165,9 +160,7 @@ class IntradayIngestRepository:
         """Return the newest last_ts across all symbols, or None."""
         from sqlalchemy import func
 
-        stmt = select(func.max(IntradayIngestState.last_ts)).where(
-            IntradayIngestState.last_ts.isnot(None)
-        )
+        stmt = select(func.max(IntradayIngestState.last_ts)).where(IntradayIngestState.last_ts.isnot(None))
         try:
             return self._session.execute(stmt).scalar_one_or_none()
         except SQLAlchemyError as exc:
@@ -177,9 +170,7 @@ class IntradayIngestRepository:
         """Return the oldest last_ts across all symbols (laggards), or None."""
         from sqlalchemy import func
 
-        stmt = select(func.min(IntradayIngestState.last_ts)).where(
-            IntradayIngestState.last_ts.isnot(None)
-        )
+        stmt = select(func.min(IntradayIngestState.last_ts)).where(IntradayIngestState.last_ts.isnot(None))
         try:
             return self._session.execute(stmt).scalar_one_or_none()
         except SQLAlchemyError as exc:

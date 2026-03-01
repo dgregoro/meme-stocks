@@ -79,9 +79,13 @@ def test_fetch_bars_page_paging_continues_until_no_token() -> None:
 
     with patch.object(requests, "get") as mock_get:
         # First call: return token
-        r1 = type("R", (), {"status_code": 200, "json": lambda self=None: {"bars": {"AAPL": []}, "next_page_token": "token1"}})()
+        r1 = type(
+            "R", (), {"status_code": 200, "json": lambda self=None: {"bars": {"AAPL": []}, "next_page_token": "token1"}}
+        )()
         # Second call: no token
-        r2 = type("R", (), {"status_code": 200, "json": lambda self=None: {"bars": {"AAPL": []}, "next_page_token": None}})()
+        r2 = type(
+            "R", (), {"status_code": 200, "json": lambda self=None: {"bars": {"AAPL": []}, "next_page_token": None}}
+        )()
         mock_get.side_effect = [r1, r2]
 
         bars1, token1 = client.fetch_bars_page(

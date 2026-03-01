@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime
 
-from sqlalchemy import BigInteger, Integer, String, Text, DateTime
+from sqlalchemy import BigInteger, Integer, Text, DateTime
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.app.data.database import Base

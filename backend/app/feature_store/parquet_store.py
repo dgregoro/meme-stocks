@@ -13,17 +13,19 @@ import pyarrow.parquet as pq
 logger = logging.getLogger(__name__)
 
 # Schema for one bar row (UTC ts, OHLCV, optional n/vw, source)
-BAR_SCHEMA = pa.schema([
-    ("ts", pa.timestamp("us", tz="UTC")),
-    ("o", pa.float64()),
-    ("h", pa.float64()),
-    ("l", pa.float64()),
-    ("c", pa.float64()),
-    ("v", pa.float64()),  # int64 acceptable but float64 for consistency with optional vw
-    ("n", pa.int64()),
-    ("vw", pa.float64()),
-    ("source", pa.string()),
-])
+BAR_SCHEMA = pa.schema(
+    [
+        ("ts", pa.timestamp("us", tz="UTC")),
+        ("o", pa.float64()),
+        ("h", pa.float64()),
+        ("l", pa.float64()),
+        ("c", pa.float64()),
+        ("v", pa.float64()),  # int64 acceptable but float64 for consistency with optional vw
+        ("n", pa.int64()),
+        ("vw", pa.float64()),
+        ("source", pa.string()),
+    ]
+)
 
 SOURCE_DEFAULT = "alpaca"
 
