@@ -15,6 +15,8 @@ from .utils.logging_config import configure_logging
 
 # Import all models so SQLAlchemy knows about them for schema creation
 from .models import (  # noqa: F401
+    intraday_ingest_run,
+    intraday_ingest_state,
     job_execution,
     job_run_history,
     notification,
