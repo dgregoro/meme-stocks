@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { BrowserRouter } from 'react-router-dom'
 import { App } from './App'
 import * as apiModule from './services/api'
 
@@ -30,31 +31,43 @@ describe('App', () => {
   })
 
   it('renders app title and main navigation', async () => {
-    render(<App />)
+    render(
+      <BrowserRouter>
+        <App />
+      </BrowserRouter>,
+    )
     await waitFor(() => { expect(screen.getByRole('heading', { name: /meme stocks/i })).toBeInTheDocument() })
     const nav = screen.getByRole('navigation', { name: /main navigation/i })
     expect(nav).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Dashboard' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Stocks' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Notifications' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Paper Trading' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Dashboard' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Stocks' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Notifications' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Paper Trading' })).toBeInTheDocument()
   })
 
   it('marks Dashboard as current page by default', async () => {
-    render(<App />)
-    await waitFor(() => { expect(screen.getByRole('button', { name: 'Dashboard' })).toHaveAttribute('aria-current', 'page') })
+    render(
+      <BrowserRouter>
+        <App />
+      </BrowserRouter>,
+    )
+    await waitFor(() => { expect(screen.getByRole('link', { name: 'Dashboard' })).toHaveAttribute('aria-current', 'page') })
   })
 
   it('marks active tab with aria-current when switching', async () => {
     const user = userEvent.setup()
-    render(<App />)
-    const dashboardBtn = screen.getByRole('button', { name: 'Dashboard' })
-    const stocksBtn = screen.getByRole('button', { name: 'Stocks' })
-    expect(dashboardBtn).toHaveAttribute('aria-current', 'page')
-    expect(stocksBtn).not.toHaveAttribute('aria-current')
+    render(
+      <BrowserRouter>
+        <App />
+      </BrowserRouter>,
+    )
+    const dashboardLink = screen.getByRole('link', { name: 'Dashboard' })
+    const stocksLink = screen.getByRole('link', { name: 'Stocks' })
+    expect(dashboardLink).toHaveAttribute('aria-current', 'page')
+    expect(stocksLink).not.toHaveAttribute('aria-current')
 
-    await user.click(stocksBtn)
-    expect(stocksBtn).toHaveAttribute('aria-current', 'page')
-    expect(dashboardBtn).not.toHaveAttribute('aria-current')
+    await user.click(stocksLink)
+    expect(stocksLink).toHaveAttribute('aria-current', 'page')
+    expect(dashboardLink).not.toHaveAttribute('aria-current')
   })
 })

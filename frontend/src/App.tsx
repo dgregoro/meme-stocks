@@ -1,18 +1,20 @@
 import React, { useEffect, useState } from 'react'
+import { Routes, Route, Navigate, Link, useLocation } from 'react-router-dom'
 import { api } from './services/api'
 import { fontFamily, spacing } from './theme'
 import { Dashboard } from './pages/Dashboard'
 import { Stocks } from './pages/Stocks'
+import { StockDetail } from './pages/StockDetail'
 import { Notifications } from './pages/Notifications'
 import { PaperTrading } from './pages/PaperTrading'
 
 export type Tab = 'dashboard' | 'stocks' | 'notifications' | 'paper'
 
-const NAV_SECTIONS: { id: Tab; label: string }[] = [
-  { id: 'dashboard', label: 'Dashboard' },
-  { id: 'stocks', label: 'Stocks' },
-  { id: 'notifications', label: 'Notifications' },
-  { id: 'paper', label: 'Paper Trading' },
+const NAV_SECTIONS: { id: Tab; path: string; label: string }[] = [
+  { id: 'dashboard', path: '/dashboard', label: 'Dashboard' },
+  { id: 'stocks', path: '/stocks', label: 'Stocks' },
+  { id: 'notifications', path: '/notifications', label: 'Notifications' },
+  { id: 'paper', path: '/paper', label: 'Paper Trading' },
 ]
 
 const THEME_STORAGE_KEY = 'meme-stocks-theme'
@@ -25,7 +27,8 @@ function getInitialTheme(): 'light' | 'dark' {
 }
 
 export const App: React.FC = () => {
-  const [tab, setTab] = useState<Tab>('dashboard')
+  const location = useLocation()
+  const pathname = location.pathname
   const [error, setError] = useState<string | null>(null)
   const [theme, setTheme] = useState<'light' | 'dark'>(getInitialTheme)
 
@@ -73,18 +76,20 @@ export const App: React.FC = () => {
           <div>
             <h1 style={{ margin: `0 0 ${spacing.md}px 0`, fontSize: '1.5rem' }}>Meme Stocks</h1>
             <nav aria-label="Main navigation" style={{ display: 'flex', gap: spacing.sm, flexWrap: 'wrap' }}>
-              {NAV_SECTIONS.map(({ id, label }) => {
-                const isActive = tab === id
+              {NAV_SECTIONS.map(({ id, path, label }) => {
+                const isActive = id === 'stocks' ? pathname.startsWith('/stocks') : pathname === path
                 return (
-                  <button
+                  <Link
                     key={id}
-                    type="button"
-                    onClick={() => setTab(id)}
-                    style={isActive ? activeNavButton : baseNavButton}
+                    to={path}
+                    style={{
+                      ...(isActive ? activeNavButton : baseNavButton),
+                      textDecoration: 'none',
+                    }}
                     aria-current={isActive ? 'page' : undefined}
                   >
                     {label}
-                  </button>
+                  </Link>
                 )
               })}
             </nav>
@@ -103,14 +108,15 @@ export const App: React.FC = () => {
       <main style={{ maxWidth: 960, margin: '0 auto', padding: `0 ${spacing.xl}px ${spacing.xl}px` }}>
         {error ? (
           <div style={{ color: isDark ? '#f87171' : '#b91c1c' }} role="alert">Error: {error}</div>
-        ) : tab === 'dashboard' ? (
-          <Dashboard />
-        ) : tab === 'stocks' ? (
-          <Stocks />
-        ) : tab === 'notifications' ? (
-          <Notifications />
         ) : (
-          <PaperTrading />
+          <Routes>
+            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/stocks" element={<Stocks />} />
+            <Route path="/stocks/:symbol" element={<StockDetail />} />
+            <Route path="/notifications" element={<Notifications />} />
+            <Route path="/paper" element={<PaperTrading />} />
+          </Routes>
         )}
       </main>
     </div>

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, within, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { BrowserRouter } from 'react-router-dom'
 import { Dashboard } from './Dashboard'
 import * as apiModule from '../services/api'
 
@@ -9,6 +10,7 @@ vi.mock('../services/api', () => ({
     analysisDaily: vi.fn(),
     listNotifications: vi.fn(),
     getJobRuns: vi.fn(),
+    getPrices: vi.fn(),
   },
 }))
 
@@ -48,10 +50,11 @@ describe('Dashboard', () => {
     vi.mocked(api.getJobRuns).mockResolvedValue([
       { id: 1, job_name: 'reddit_collection', run_at: '2026-02-28T11:30:00.000Z' },
     ])
+    vi.mocked(api.getPrices).mockResolvedValue([])
   })
 
   it('shows loading then daily analysis content', async () => {
-    render(<Dashboard />)
+    render(<BrowserRouter><Dashboard /></BrowserRouter>)
     expect(screen.getByText('Loading...')).toBeInTheDocument()
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'Daily Analysis' })).toBeInTheDocument()
@@ -60,7 +63,7 @@ describe('Dashboard', () => {
   })
 
   it('shows summary cards: stocks count, unread notifications, last run', async () => {
-    render(<Dashboard />)
+    render(<BrowserRouter><Dashboard /></BrowserRouter>)
     await waitFor(() => {
       expect(screen.getByText('Daily Analysis')).toBeInTheDocument()
     })
@@ -76,7 +79,7 @@ describe('Dashboard', () => {
 
   it('shows error when API fails', async () => {
     vi.mocked(api.analysisDaily).mockRejectedValue(new Error('Network error'))
-    render(<Dashboard />)
+    render(<BrowserRouter><Dashboard /></BrowserRouter>)
     await waitFor(() => {
       expect(screen.getByText(/Error:/)).toBeInTheDocument()
       expect(screen.getByText(/Network error/)).toBeInTheDocument()
@@ -84,7 +87,7 @@ describe('Dashboard', () => {
   })
 
   it('renders analysis table with sortable columns', async () => {
-    render(<Dashboard />)
+    render(<BrowserRouter><Dashboard /></BrowserRouter>)
     await waitFor(() => {
       expect(screen.getByText('GME')).toBeInTheDocument()
     })
@@ -96,7 +99,7 @@ describe('Dashboard', () => {
 
   it('sorts by column when header is clicked', async () => {
     const user = userEvent.setup()
-    render(<Dashboard />)
+    render(<BrowserRouter><Dashboard /></BrowserRouter>)
     await waitFor(() => {
       expect(screen.getByText('GME')).toBeInTheDocument()
     })
@@ -109,7 +112,7 @@ describe('Dashboard', () => {
   })
 
   it('shows sentiment scores with n/a for null', async () => {
-    render(<Dashboard />)
+    render(<BrowserRouter><Dashboard /></BrowserRouter>)
     await waitFor(() => {
       expect(screen.getByText('0.40')).toBeInTheDocument()
     })
@@ -119,7 +122,7 @@ describe('Dashboard', () => {
 
   it('shows empty state when no analysis rows', async () => {
     vi.mocked(api.analysisDaily).mockResolvedValue([])
-    render(<Dashboard />)
+    render(<BrowserRouter><Dashboard /></BrowserRouter>)
     await waitFor(() => {
       expect(screen.getByText('No analysis yet')).toBeInTheDocument()
     })

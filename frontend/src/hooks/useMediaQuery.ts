@@ -12,10 +12,13 @@ export function useMediaQuery(query: string): boolean {
   useEffect(() => {
     if (!window.matchMedia) return
     const m = window.matchMedia(query)
-    setMatches(m.matches)
     const handler = (e: MediaQueryListEvent) => setMatches(e.matches)
     m.addEventListener('change', handler)
-    return () => m.removeEventListener('change', handler)
+    const id = requestAnimationFrame(() => setMatches(m.matches))
+    return () => {
+      cancelAnimationFrame(id)
+      m.removeEventListener('change', handler)
+    }
   }, [query])
 
   return matches

@@ -1,8 +1,10 @@
 import React, { useEffect, useState, useMemo } from 'react'
-import { api, type AnalysisRow, type JobRun } from '../services/api'
+import { Link } from 'react-router-dom'
+import { api, type AnalysisRow, type JobRun, type PricePoint } from '../services/api'
 import { formatRelativeTime, sentimentClass } from '../utils/dashboardUtils'
 import { LoadingSpinner } from '../components/LoadingSpinner'
 import { EmptyState } from '../components/EmptyState'
+import { Sparkline } from '../components/Sparkline'
 import { useMediaQuery } from '../hooks/useMediaQuery'
 
 type SortKey = 'symbol' | 'composite_score' | 'price_trend' | 'sentiment_score' | 'mention_count'
@@ -17,7 +19,20 @@ export const Dashboard: React.FC = () => {
   const [sortKey, setSortKey] = useState<SortKey>('composite_score')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
   const [lastUpdated, setLastUpdated] = useState<string | null>(null)
+  const [sparklineData, setSparklineData] = useState<Record<string, PricePoint[]>>({})
   const isNarrow = useMediaQuery('(max-width: 640px)')
+
+  useEffect(() => {
+    if (rows.length === 0) return
+    const symbolsToFetch = rows.slice(0, 10).map((r) => r.symbol)
+    Promise.all(symbolsToFetch.map((sym) => api.getPrices(sym).then((data) => ({ sym, data }))))
+      .then((results) => {
+        const next: Record<string, PricePoint[]> = {}
+        results.forEach(({ sym, data }) => { next[sym] = data })
+        setSparklineData((prev) => ({ ...prev, ...next }))
+      })
+      .catch(() => {})
+  }, [rows])
 
   const fetchData = () => {
     Promise.all([
@@ -147,7 +162,12 @@ export const Dashboard: React.FC = () => {
                   backgroundColor: '#f9fafb',
                 }}
               >
-                <div style={{ fontWeight: 600, fontSize: 18, marginBottom: 8 }}>{r.symbol}</div>
+                <div style={{ fontWeight: 600, fontSize: 18, marginBottom: 8 }}>
+                  <Link to={`/stocks/${r.symbol}`} style={{ color: 'inherit', textDecoration: 'none' }}>{r.symbol}</Link>
+                </div>
+                <div style={{ marginBottom: 8 }}>
+                  <Sparkline data={sparklineData[r.symbol] ?? []} width={100} height={32} />
+                </div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 16px', fontSize: 14 }}>
                   <span>Composite: {r.composite_score.toFixed(2)}</span>
                   <span>Trend: {r.price_trend}</span>
@@ -186,6 +206,7 @@ export const Dashboard: React.FC = () => {
               <th style={{ textAlign: 'left', cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('price_trend')}>
                 Trend {sortKey === 'price_trend' && (sortDir === 'asc' ? '↑' : '↓')}
               </th>
+              <th style={{ textAlign: 'center' }}>Price</th>
               <th style={{ textAlign: 'right', cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('sentiment_score')}>
                 Sentiment {sortKey === 'sentiment_score' && (sortDir === 'asc' ? '↑' : '↓')}
               </th>
@@ -199,9 +220,14 @@ export const Dashboard: React.FC = () => {
               const sentClass = sentimentClass(r.sentiment_score)
               return (
                 <tr key={r.symbol} style={{ borderBottom: '1px solid #eee' }}>
-                  <td style={{ fontWeight: 600 }}>{r.symbol}</td>
+                  <td style={{ fontWeight: 600 }}>
+                    <Link to={`/stocks/${r.symbol}`} style={{ color: 'inherit', textDecoration: 'none' }}>{r.symbol}</Link>
+                  </td>
                   <td style={{ textAlign: 'right' }}>{r.composite_score.toFixed(2)}</td>
                   <td>{r.price_trend}</td>
+                  <td style={{ textAlign: 'center', verticalAlign: 'middle' }}>
+                    <Sparkline data={sparklineData[r.symbol] ?? []} />
+                  </td>
                   <td style={{ textAlign: 'right' }}>
                     <span
                       style={{
