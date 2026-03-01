@@ -5,12 +5,26 @@
 - **Follow PRD Section 5.0 (Reliability Principles)** for all code changes.
 - **Be skeptical; do not oversell.** Verify before claiming completion. Describe limitations and unknowns.
 
+# Always read these docs first (in this order)
+Before planning or implementing any change, open and summarize:
+1) docs/ROADMAP.md (current phase + current task)
+2) docs/PRD.md §5.0 (Reliability Principles) + Appendix C (Structured API errors)
+3) docs/ARCHITECTURE.md (patterns to follow)
+If any of these files are missing or unclear, stop and ask the user before proceeding.
+
 # Planning & scope
 - Before implementing features, read docs/ROADMAP.md and identify the current phase and task.
 - Do not add new features or endpoints that are not part of the current roadmap unless:
   - docs/ROADMAP.md is updated to include them, and
   - The change is clearly documented in a commit/description.
 - When unsure about scope, prefer asking the user to clarify rather than assuming behavior.
+
+# Allowed without ROADMAP update
+The following internal-only changes are allowed without updating docs/ROADMAP.md (as long as external behavior does not change):
+- Refactors that reduce duplication or improve testability
+- Reliability/observability improvements (logging, error handling, retries)
+- Small scaffolding needed to implement an already-planned roadmap item (e.g., a shared retry helper, a new client module)
+If a change alters external behavior (API contract, scheduling behavior, persistence format), update docs/ROADMAP.md first.
 
 # Testing
 - For each new service, repository, or API endpoint, add at least one corresponding test in backend/tests.
@@ -31,10 +45,23 @@
 - Background jobs must not crash the app on external API failure; log the error and continue.
 - Return structured API errors (PRD Appendix C); never expose raw stack traces to clients.
 
+# External API client pattern (consistency requirement)
+- All external API calls must go through a dedicated client module under backend/app/clients/.
+- Use a shared retry/backoff helper (e.g., backend/app/utils/retry.py) rather than re-implementing ad-hoc retries.
+- External API failures should raise typed exceptions (e.g., ExternalAPIError, RateLimitedError) with provider + endpoint context.
+- Include correlation context in logs when possible (provider, endpoint, status code).
+
 # Configuration & thresholds
 - Do not hard-code API keys, secrets, or environment-dependent values.
 - Expose thresholds (e.g., sentiment, volume spike, price move) via configuration/constants, not magic numbers scattered in code.
 - Use environment variables (with sane defaults) read through a single config module.
+
+# Caching rules
+- Avoid global caches unless necessary.
+- Any in-memory cache MUST:
+  - have a TTL,
+  - have a clear_*_cache() function,
+  - be covered by at least one test that clears the cache between cases.
 
 # Code organization & refactoring
 - Keep modules small and focused: services, repositories, models, and API routes should be clearly separated.
@@ -46,6 +73,14 @@
 - Log at least at error and warning levels for failures in external API calls and background jobs.
 - Do not log secrets or sensitive configuration values.
 
+# Scheduler / background jobs guardrails
+- Jobs must be idempotent and safe to retry.
+- When adding/updating APScheduler jobs, always set:
+  - max_instances=1
+  - coalesce=True
+  - misfire_grace_time set appropriately for the interval
+- Each job must log a summary (duration, items processed, errors).
+
 # Frontend (when added)
 - Keep frontend API calls centralized in a dedicated client/service layer.
 - Handle API errors visibly in the UI; do not fail silently.
@@ -55,6 +90,17 @@
 2. **Create in order**: Model → Repository → Service → API Route → Tests.
 3. **Register the router** in main.py.
 4. **Run verification** before considering done: `./scripts/verify.sh` (or manually: pytest + pre-commit).
+
+# Structured API errors (Appendix C) — example shape
+- All API errors must be returned in a structured format (never raw tracebacks).
+- Example (shape only; codes/messages depend on the endpoint):
+  {
+    "error": {
+      "code": "RATE_LIMITED",
+      "message": "External provider rate limit exceeded",
+      "details": {"provider": "alpaca", "retry_after_seconds": 10}
+    }
+  }
 
 # Verification checklist (run before marking task complete)
 - [ ] All new code has type hints
@@ -76,6 +122,11 @@
 - Don't hardcode thresholds - add to config.py with defaults
 - Don't add features not in docs/ROADMAP.md or docs/PRD.md without updating them first
 - Don't skip tests - every service/repo/endpoint needs tests
+
+# Diff hygiene (Auto mode safety)
+- Prefer minimal diffs: touch the fewest files possible.
+- Do not reformat or reorder unrelated code.
+- Avoid drive-by renames or reorganizations unless required by the current ROADMAP task.
 
 # Git commits
 When saving changes to git (e.g., in response to "save to git", "commit", "git save"):
