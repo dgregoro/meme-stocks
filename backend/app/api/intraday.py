@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -121,8 +121,6 @@ def post_intraday_run_once(db: Session = Depends(get_session)) -> RunOnceRespons
     try:
         summary = run_intraday_ingestion(db, universe=None, owner=owner)
     except IngestionAlreadyRunningError as e:
-        from fastapi import HTTPException
-
         detail = error_detail(
             "ConflictError",
             e.args[0] if e.args else "Intraday ingestion already in progress",
