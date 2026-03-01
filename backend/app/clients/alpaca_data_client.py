@@ -167,7 +167,7 @@ class AlpacaDataClient:
 
             if attempt < ALPACA_MAX_RETRIES - 1:
                 delay = min(
-                    ALPACA_BASE_DELAY * (2**attempt) + random.uniform(0, 1),
+                    ALPACA_BASE_DELAY * (2**attempt) + random.uniform(0, 1),  # nosec B311
                     ALPACA_MAX_DELAY,
                 )
                 logger.warning(

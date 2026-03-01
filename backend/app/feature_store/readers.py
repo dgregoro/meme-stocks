@@ -70,7 +70,7 @@ def read_bars(
             try:
                 t = pq.read_table(f)
                 tables.append(t)
-            except Exception:
+            except Exception:  # nosec B112
                 continue
 
     if not tables:
