@@ -67,6 +67,15 @@ class Settings(BaseSettings):
         "A,IT,OR,ON,ALL,ONE,RUN,FOR,LOVE,OPEN,REAL,HOPE,RIDE,SAVE,SOLO,TALK,WORK,PLAN,LIVE,PLAY"
     )
 
+    # Alpaca market data (intraday minute bars)
+    # Free plan: full-market SIP is delayed; use delayed_sip (15-min delay).
+    # Do not query the last ~15 minutes when using delayed SIP on free—requests can fail.
+    # Real-time on free is IEX-only, not consolidated; we use delayed_sip for broad market.
+    alpaca_data_feed: str = "delayed_sip"
+    alpaca_free_plan_mode: bool = True
+    alpaca_sip_delay_minutes: int = 15
+    alpaca_end_time_safety_minutes: int = 20  # end = now - this (default 20 > 15 for clock skew)
+
     model_config = SettingsConfigDict(
         env_file=(".env", "backend/.env"),
         env_file_encoding="utf-8",
