@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react'
 import { api, type AnalysisRow, type JobRun } from '../services/api'
 import { formatRelativeTime, sentimentClass } from '../utils/dashboardUtils'
 import { LoadingSpinner } from '../components/LoadingSpinner'
+import { EmptyState } from '../components/EmptyState'
 
 type SortKey = 'symbol' | 'composite_score' | 'price_trend' | 'sentiment_score' | 'mention_count'
 type SortDir = 'asc' | 'desc'
@@ -57,6 +58,19 @@ export const Dashboard: React.FC = () => {
 
   if (loading) return <LoadingSpinner message="Loading..." />
   if (error) return <div style={{ color: 'red' }}>Error: {error}</div>
+
+  if (rows.length === 0) {
+    return (
+      <div>
+        <h2>Daily Analysis</h2>
+        <EmptyState
+          title="No analysis yet"
+          message="Daily analysis ranks stocks by sentiment and price trend."
+          action="Trigger Reddit collection and daily analysis jobs to populate this view."
+        />
+      </div>
+    )
+  }
 
   return (
     <div>

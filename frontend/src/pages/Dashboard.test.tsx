@@ -116,4 +116,13 @@ describe('Dashboard', () => {
     expect(screen.getByText('-0.30')).toBeInTheDocument()
     expect(screen.getByText('n/a')).toBeInTheDocument()
   })
+
+  it('shows empty state when no analysis rows', async () => {
+    vi.mocked(api.analysisDaily).mockResolvedValue([])
+    render(<Dashboard />)
+    await waitFor(() => {
+      expect(screen.getByText('No analysis yet')).toBeInTheDocument()
+    })
+    expect(screen.getByText(/Daily analysis ranks stocks/)).toBeInTheDocument()
+  })
 })
