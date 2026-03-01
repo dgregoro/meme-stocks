@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { api } from './services/api'
+import { fontFamily, spacing } from './theme'
 import { Dashboard } from './pages/Dashboard'
 import { Stocks } from './pages/Stocks'
 import { Notifications } from './pages/Notifications'
@@ -40,11 +41,11 @@ export const App: React.FC = () => {
   }, [])
 
   return (
-    <div style={{ fontFamily: 'system-ui, sans-serif', minHeight: '100vh' }}>
-      <header style={{ borderBottom: '1px solid #e0e0e0', marginBottom: 24 }}>
-        <div style={{ maxWidth: 960, margin: '0 auto', padding: '16px 20px' }}>
-          <h1 style={{ margin: '0 0 12px 0', fontSize: '1.5rem' }}>Meme Stocks</h1>
-          <nav aria-label="Main navigation" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+    <div style={{ fontFamily, minHeight: '100vh' }}>
+      <header style={{ borderBottom: '1px solid #e0e0e0', marginBottom: spacing.xl }}>
+        <div style={{ maxWidth: 960, margin: '0 auto', padding: `${spacing.lg}px ${spacing.xl}px` }}>
+          <h1 style={{ margin: `0 0 ${spacing.md}px 0`, fontSize: '1.5rem' }}>Meme Stocks</h1>
+          <nav aria-label="Main navigation" style={{ display: 'flex', gap: spacing.sm, flexWrap: 'wrap' }}>
             {NAV_SECTIONS.map(({ id, label }) => {
               const isActive = tab === id
               return (
@@ -62,7 +63,7 @@ export const App: React.FC = () => {
           </nav>
         </div>
       </header>
-      <main style={{ maxWidth: 960, margin: '0 auto', padding: '0 20px 24px' }}>
+      <main style={{ maxWidth: 960, margin: '0 auto', padding: `0 ${spacing.xl}px ${spacing.xl}px` }}>
         {error ? (
           <div style={{ color: '#c00' }} role="alert">Error: {error}</div>
         ) : tab === 'dashboard' ? (
