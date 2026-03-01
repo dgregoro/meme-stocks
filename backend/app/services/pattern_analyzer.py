@@ -14,8 +14,8 @@ class PriceTrend:
     direction: str  # 'uptrend', 'downtrend', or 'sideways'
     sma_short: float | None
     sma_long: float | None
-    rsi: float | None
-    rsi_signal: str | None  # 'overbought', 'oversold', or 'neutral'
+    rsi: float | None = None
+    rsi_signal: str | None = None  # 'overbought', 'oversold', or 'neutral'
 
 
 def relative_strength_index(values: list[float], period: int) -> float | None:

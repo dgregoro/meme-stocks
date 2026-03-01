@@ -8,7 +8,6 @@ from unittest.mock import patch
 import pytest
 
 from backend.app.services.pattern_analyzer import (
-    PriceTrend,
     analyze_price_trend,
     relative_strength_index,
 )
@@ -123,3 +122,19 @@ def test_analyze_price_trend_rsi_signal_neutral() -> None:
         trend = analyze_price_trend(bars)
     assert trend.rsi == 50.0
     assert trend.rsi_signal == "neutral"
+
+
+@pytest.mark.unit
+def test_analyze_price_trend_insufficient_sma_returns_complete_price_trend() -> None:
+    """SMA-insufficient path: ~15 bars enough for RSI but not for SMA 20/50; no exception, full PriceTrend."""
+    bars = [_make_bar("GME", date(2024, 1, 1), close=100.0 + i) for i in range(15)]
+    with patch("backend.app.services.pattern_analyzer.get_settings") as mock:
+        mock.return_value.rsi_period = 14
+        mock.return_value.rsi_overbought = 70.0
+        mock.return_value.rsi_oversold = 30.0
+        trend = analyze_price_trend(bars)
+    assert trend.direction == "sideways"
+    assert trend.sma_short is None
+    assert trend.sma_long is None
+    assert trend.rsi is not None
+    assert trend.rsi_signal in {"overbought", "oversold", "neutral"}
