@@ -135,6 +135,19 @@ class IntradayIngestRepository:
         except SQLAlchemyError as exc:
             raise DataAccessError(f"Failed to finish run {run_id}") from exc
 
+    def get_running_run(self) -> IntradayIngestRun | None:
+        """Return the current run (ended_at IS NULL), if any. Used for ingestion lock."""
+        stmt = (
+            select(IntradayIngestRun)
+            .where(IntradayIngestRun.ended_at.is_(None))
+            .order_by(IntradayIngestRun.started_at.desc())
+            .limit(1)
+        )
+        try:
+            return self._session.execute(stmt).scalar_one_or_none()
+        except SQLAlchemyError as exc:
+            raise DataAccessError("Failed to get running intraday run") from exc
+
     def get_latest_run(self) -> IntradayIngestRun | None:
         """Return the most recent run by started_at, or None."""
         stmt = select(IntradayIngestRun).order_by(IntradayIngestRun.started_at.desc()).limit(1)

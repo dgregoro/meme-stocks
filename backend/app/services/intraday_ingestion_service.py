@@ -86,6 +86,22 @@ def run_intraday_ingestion(
         }
 
     repo = IntradayIngestRepository(db)
+    # Global lock: do not start if another ingestion run is in progress
+    if repo.get_running_run() is not None:
+        logger.info("Intraday ingestion skipped: another run already in progress")
+        return {
+            "skipped": True,
+            "reason": "already_running",
+            "symbols_processed": 0,
+            "bars_written": 0,
+            "errors_count": 0,
+            "start_utc": None,
+            "end_utc": safe_end.isoformat(),
+            "safe_end_used": safe_end.isoformat(),
+            "feed": settings.alpaca_data_feed,
+            "free_plan_mode": settings.alpaca_free_plan_mode,
+        }
+
     repo.ensure_symbols(symbols)
     db.commit()
 
@@ -104,98 +120,99 @@ def run_intraday_ingestion(
     errors_count = 0
     start_utc_used: datetime | None = None
 
-    for i in range(0, len(symbols), batch_size):
-        batch = symbols[i : i + batch_size]  # noqa: E203 (black style)
-        # Compute start/end per symbol for this batch (same end for all: safe_end)
-        symbol_starts: dict[str, datetime] = {}
-        for sym in batch:
-            st = states.get(sym)
-            if st and st.status == "paused":
-                continue
-            if st and st.last_ts is not None:
-                # next minute after last
-                last = st.last_ts
-                if last.tzinfo is None:
-                    last = last.replace(tzinfo=timezone.utc)
-                start_sym = last + timedelta(minutes=1)
-            else:
-                start_sym = safe_end - timedelta(days=lookback_days)
-            if start_sym >= safe_end:
-                continue
-            symbol_starts[sym] = start_sym
-            if start_utc_used is None or start_sym < start_utc_used:
-                start_utc_used = start_sym
-
-        if not symbol_starts:
-            continue
-
-        batch_list = sorted(symbol_starts.keys(), key=lambda s: symbol_starts[s])
-        # Use single start/end for the batch (min start, safe_end)
-        batch_start = min(symbol_starts[s] for s in batch_list)
-        page_token: str | None = None
-        pages_done = 0
-        max_ts_by_symbol: dict[str, datetime] = {}
-
-        while pages_done < max_pages:
-            try:
-                bars_page, page_token = client.fetch_bars_page(
-                    symbols=batch_list,
-                    start=batch_start,
-                    end=safe_end,
-                    timeframe="1Min",
-                    feed=settings.alpaca_data_feed,
-                    page_token=page_token,
-                    limit=10000,
-                )
-            except ExternalAPIError as e:
-                logger.error("Alpaca fetch failed for batch: %s", e)
-                for sym in batch_list:
-                    repo.mark_error(sym, str(e))
-                    errors_count += 1
-                break
-
-            if not bars_page:
-                if page_token:
-                    pages_done += 1
+    try:
+        for i in range(0, len(symbols), batch_size):
+            batch = symbols[i : i + batch_size]  # noqa: E203 (black style)
+            # Compute start/end per symbol for this batch (same end for all: safe_end)
+            symbol_starts: dict[str, datetime] = {}
+            for sym in batch:
+                st = states.get(sym)
+                if st and st.status == "paused":
                     continue
-                break
+                if st and st.last_ts is not None:
+                    # next minute after last
+                    last = st.last_ts
+                    if last.tzinfo is None:
+                        last = last.replace(tzinfo=timezone.utc)
+                    start_sym = last + timedelta(minutes=1)
+                else:
+                    start_sym = safe_end - timedelta(days=lookback_days)
+                if start_sym >= safe_end:
+                    continue
+                symbol_starts[sym] = start_sym
+                if start_utc_used is None or start_sym < start_utc_used:
+                    start_utc_used = start_sym
 
-            try:
-                written = store.write_bars(bars_page)
-                total_bars += written
-            except Exception as e:
-                logger.exception("Parquet write failed: %s", e)
-                for sym in bars_page.keys():
+            if not symbol_starts:
+                continue
+
+            batch_list = sorted(symbol_starts.keys(), key=lambda s: symbol_starts[s])
+            # Use single start/end for the batch (min start, safe_end)
+            batch_start = min(symbol_starts[s] for s in batch_list)
+            page_token: str | None = None
+            pages_done = 0
+            max_ts_by_symbol: dict[str, datetime] = {}
+
+            while pages_done < max_pages:
+                try:
+                    bars_page, page_token = client.fetch_bars_page(
+                        symbols=batch_list,
+                        start=batch_start,
+                        end=safe_end,
+                        timeframe="1Min",
+                        feed=settings.alpaca_data_feed,
+                        page_token=page_token,
+                        limit=10000,
+                    )
+                except ExternalAPIError as e:
+                    logger.error("Alpaca fetch failed for batch: %s", e)
+                    for sym in batch_list:
+                        repo.mark_error(sym, str(e))
+                        errors_count += 1
+                    break
+
+                if not bars_page:
+                    if page_token:
+                        pages_done += 1
+                        continue
+                    break
+
+                try:
+                    written = store.write_bars(bars_page)
+                    total_bars += written
+                except Exception as e:
+                    logger.exception("Parquet write failed: %s", e)
+                    for sym in bars_page.keys():
+                        repo.mark_error(sym, str(e))
+                        errors_count += 1
+                    break
+
+                for sym, bar_list in bars_page.items():
+                    for b in bar_list:
+                        ts = _parse_bar_ts(b)
+                        if ts and (sym not in max_ts_by_symbol or ts > max_ts_by_symbol[sym]):
+                            max_ts_by_symbol[sym] = ts
+
+                pages_done += 1
+                if not page_token:
+                    break
+
+            # Persist last_ts for symbols we got data for
+            for sym, ts in max_ts_by_symbol.items():
+                try:
+                    repo.update_success(sym, ts)
+                except Exception as e:
+                    logger.warning("Failed to update state for %s: %s", sym, e)
                     repo.mark_error(sym, str(e))
                     errors_count += 1
-                break
-
-            for sym, bar_list in bars_page.items():
-                for b in bar_list:
-                    ts = _parse_bar_ts(b)
-                    if ts and (sym not in max_ts_by_symbol or ts > max_ts_by_symbol[sym]):
-                        max_ts_by_symbol[sym] = ts
-
-            pages_done += 1
-            if not page_token:
-                break
-
-        # Persist last_ts for symbols we got data for
-        for sym, ts in max_ts_by_symbol.items():
-            try:
-                repo.update_success(sym, ts)
-            except Exception as e:
-                logger.warning("Failed to update state for %s: %s", sym, e)
-                repo.mark_error(sym, str(e))
-                errors_count += 1
-
-    repo.finish_run(
-        run.id,
-        bars_written=total_bars,
-        errors_count=errors_count,
-        notes=None,
-    )
-    db.commit()
+    finally:
+        repo.finish_run(
+            run.id,
+            bars_written=total_bars,
+            errors_count=errors_count,
+            notes=None,
+        )
+        db.commit()
 
     logger.info(
         "Intraday ingestion: symbols=%s bars_written=%s errors=%s safe_end=%s",

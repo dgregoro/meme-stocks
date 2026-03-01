@@ -86,6 +86,8 @@ class Settings(BaseSettings):
     intraday_feature_store_root: str = "data/intraday"
     intraday_max_pages_per_batch: int = 100
     intraday_interval_minutes: int = 15  # scheduler interval
+    # Feature store: when True, read_bars raises if any partition file is unreadable
+    feature_store_strict_reads: bool = False
 
     model_config = SettingsConfigDict(
         env_file=(".env", "backend/.env"),
