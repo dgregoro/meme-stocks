@@ -207,8 +207,15 @@ class SchedulerService:
         stocks_created = 0
 
         for post_data in posts:
-            # Extract tickers from title (using symbol universe as whitelist if available)
-            tickers = extract_tickers(post_data.title, known_symbols=None, use_symbol_universe=True)
+            # Extract tickers from title (pass subreddit for disambiguation context)
+            tickers_set = extract_tickers(
+                post_data.title,
+                known_symbols=None,
+                use_symbol_universe=True,
+                subreddit=post_data.subreddit,
+                flair=None,
+            )
+            tickers = tickers_set if isinstance(tickers_set, set) else tickers_set[0]
 
             # If no ticker found, skip this post
             if not tickers:
