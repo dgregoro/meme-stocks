@@ -18,6 +18,7 @@ from backend.app.data.repositories.stock_repo import StockRepository
 from backend.app.models.price_data import PriceData
 from backend.app.models.reddit_post import RedditPost
 from backend.app.models.stock import Stock
+from backend.app.services.intraday_ingestion_service import run_intraday_ingestion
 from backend.app.services.notification_service import generate_notifications_for_stock
 from backend.app.services.reddit_service import RedditService
 from backend.app.services.yahoo_service import YahooFinanceService
@@ -153,6 +154,18 @@ class SchedulerService:
             id="notification_check",
             replace_existing=True,
         )
+
+        # Intraday minute-bar ingestion (when enabled; no overlap)
+        if getattr(self._settings, "intraday_ingestion_enabled", False):
+            self._scheduler.add_job(
+                self._intraday_ingestion_job,
+                trigger=IntervalTrigger(minutes=getattr(self._settings, "intraday_interval_minutes", 15)),
+                id="intraday_ingestion",
+                replace_existing=True,
+                max_instances=1,
+                coalesce=True,
+                misfire_grace_time=900,
+            )
 
     def _collect_reddit_data_job(self) -> None:
         """Scheduled job wrapper for Reddit collection."""
@@ -381,3 +394,24 @@ class SchedulerService:
 
         if total_notifications > 0:
             logger.info(f"Generated {total_notifications} notifications")
+
+    def _intraday_ingestion_job(self) -> None:
+        """Scheduled job for intraday minute-bar ingestion (batched, incremental)."""
+        db = SessionLocal()
+        try:
+            summary = run_intraday_ingestion(db, universe=None)
+            job_repo = JobExecutionRepository(db)
+            job_repo.record_run("intraday_ingestion")
+            db.commit()
+            logger.info(
+                "Intraday ingestion job: bars_written=%s errors=%s symbols=%s safe_end=%s",
+                summary.get("bars_written", 0),
+                summary.get("errors_count", 0),
+                summary.get("symbols_processed", 0),
+                summary.get("safe_end_used", ""),
+            )
+        except Exception as exc:
+            logger.error("Error in intraday ingestion job: %s", exc, exc_info=True)
+            db.rollback()
+        finally:
+            db.close()
