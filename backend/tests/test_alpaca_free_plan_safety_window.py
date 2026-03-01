@@ -46,30 +46,22 @@ def test_ingestion_service_uses_safe_end_time() -> None:
     """Ingestion service uses compute_safe_end_time when building request params."""
     from datetime import datetime as real_dt, timedelta, timezone
 
-    with patch(
-        "backend.app.services.intraday_ingestion_service.get_settings"
-    ) as mock_get_settings:
+    with patch("backend.app.services.intraday_ingestion_service.get_settings") as mock_get_settings:
         mock_settings = MagicMock()
         mock_settings.alpaca_free_plan_mode = True
         mock_settings.alpaca_end_time_safety_minutes = 20
         mock_settings.alpaca_data_feed = "delayed_sip"
         mock_get_settings.return_value = mock_settings
 
-        with patch(
-            "backend.app.services.intraday_ingestion_service.AlpacaDataClient"
-        ) as mock_client_class:
+        with patch("backend.app.services.intraday_ingestion_service.AlpacaDataClient") as mock_client_class:
             mock_client = MagicMock()
             fixed_end = real_dt(2026, 3, 1, 11, 40, 0, tzinfo=timezone.utc)
             mock_client.compute_safe_end_time.return_value = fixed_end
             mock_client.get_minute_bars.return_value = []
             mock_client_class.return_value = mock_client
 
-            with patch(
-                "backend.app.services.intraday_ingestion_service.datetime"
-            ) as mock_dt:
-                mock_dt.now.return_value = real_dt(
-                    2026, 3, 1, 12, 0, 0, tzinfo=timezone.utc
-                )
+            with patch("backend.app.services.intraday_ingestion_service.datetime") as mock_dt:
+                mock_dt.now.return_value = real_dt(2026, 3, 1, 12, 0, 0, tzinfo=timezone.utc)
                 mock_dt.timedelta = timedelta
                 mock_dt.timezone = timezone
 

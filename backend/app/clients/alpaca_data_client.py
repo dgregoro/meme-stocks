@@ -7,7 +7,7 @@ callers use a safe end time (now - safety_minutes) when free_plan_mode is True.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
 
 def compute_safe_end_time(
