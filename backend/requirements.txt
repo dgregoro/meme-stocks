@@ -21,3 +21,4 @@ mypy
 python-dotenv
 backoff
 apscheduler
+pyarrow
