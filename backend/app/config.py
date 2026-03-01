@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from pydantic import ValidationError
+from pydantic import ValidationError, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -40,6 +40,11 @@ class Settings(BaseSettings):
     sentiment_window_hours: int = 24  # Window for sentiment aggregation
     reddit_max_age_days: int = 2  # Max age of Reddit posts to fetch
     price_history_days: int = 30  # Days of price history for analysis
+
+    # RSI (Relative Strength Index) — PLAN.md / Phase 2.3
+    rsi_period: int = 14
+    rsi_overbought: float = 70.0
+    rsi_oversold: float = 30.0
 
     # CORS
     cors_allowed_origins: str = "http://127.0.0.1:5173,http://localhost:5173"
@@ -94,6 +99,26 @@ class Settings(BaseSettings):
     intraday_lock_ttl_seconds: int = 1800  # 30 min; must be longer than worst-case run
     intraday_lock_heartbeat_seconds: int = 60
     intraday_lock_name: str = "intraday_ingestion"
+
+    @field_validator("rsi_period")
+    @classmethod
+    def rsi_period_at_least_two(cls, v: int) -> int:
+        if v < 2:
+            raise ValueError("rsi_period must be >= 2")
+        return v
+
+    @field_validator("rsi_overbought", "rsi_oversold")
+    @classmethod
+    def rsi_threshold_0_100(cls, v: float) -> float:
+        if not 0 <= v <= 100:
+            raise ValueError("RSI thresholds must be between 0 and 100")
+        return v
+
+    @model_validator(mode="after")
+    def rsi_oversold_less_than_overbought(self) -> "Settings":
+        if self.rsi_oversold >= self.rsi_overbought:
+            raise ValueError("rsi_oversold must be < rsi_overbought")
+        return self
 
     model_config = SettingsConfigDict(
         env_file=(".env", "backend/.env"),

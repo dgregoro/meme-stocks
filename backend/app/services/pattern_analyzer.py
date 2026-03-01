@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Iterable, List
 
+from backend.app.config import get_settings
 from backend.app.services.yahoo_service import PriceBar
 
 
@@ -13,6 +14,35 @@ class PriceTrend:
     direction: str  # 'uptrend', 'downtrend', or 'sideways'
     sma_short: float | None
     sma_long: float | None
+    rsi: float | None
+    rsi_signal: str | None  # 'overbought', 'oversold', or 'neutral'
+
+
+def relative_strength_index(values: list[float], period: int) -> float | None:
+    """Compute RSI (Relative Strength Index) over the last `period` price changes.
+
+    Returns None if insufficient data (len(values) < period + 1), invalid period, or empty.
+    Uses standard formula: RSI = 100 - (100 / (1 + RS)), RS = avg_gain / avg_loss.
+    avg_loss == 0 and avg_gain > 0 → 100; avg_loss == 0 and avg_gain == 0 → 50.
+    Result clamped to [0, 100].
+    """
+    if not values or period <= 0 or len(values) < period + 1:
+        return None
+    changes: list[float] = []
+    for i in range(1, len(values)):
+        changes.append(values[i] - values[i - 1])
+    recent = changes[-period:]
+    gains = [c if c > 0 else 0.0 for c in recent]
+    losses = [-c if c < 0 else 0.0 for c in recent]
+    avg_gain = sum(gains) / period
+    avg_loss = sum(losses) / period
+    if avg_loss == 0:
+        if avg_gain > 0:
+            return 100.0
+        return 50.0
+    rs = avg_gain / avg_loss
+    rsi = 100.0 - (100.0 / (1.0 + rs))
+    return max(0.0, min(100.0, rsi))
 
 
 def simple_moving_average(values: List[float], window: int) -> float | None:
@@ -23,23 +53,50 @@ def simple_moving_average(values: List[float], window: int) -> float | None:
     return sum(subset) / float(window)
 
 
-def analyze_price_trend(bars: Iterable[PriceBar], short_window: int = 20, long_window: int = 50) -> PriceTrend:
-    """Classify trend based on simple moving averages of close prices.
+def analyze_price_trend(
+    bars: Iterable[PriceBar],
+    short_window: int = 20,
+    long_window: int = 50,
+) -> PriceTrend:
+    """Classify trend based on simple moving averages and RSI of close prices.
 
     - uptrend: sma_short > sma_long
     - downtrend: sma_short < sma_long
     - sideways: otherwise or insufficient data
+    - rsi_signal: overbought/oversold/neutral from config thresholds
     """
-
+    settings = get_settings()
     closes = [b.close for b in bars]
     if not closes:
-        return PriceTrend(direction="sideways", sma_short=None, sma_long=None)
+        return PriceTrend(
+            direction="sideways",
+            sma_short=None,
+            sma_long=None,
+            rsi=None,
+            rsi_signal=None,
+        )
 
     sma_s = simple_moving_average(closes, short_window)
     sma_l = simple_moving_average(closes, long_window)
+    rsi = relative_strength_index(closes, settings.rsi_period)
+
+    if rsi is None:
+        rsi_signal = None
+    elif rsi >= settings.rsi_overbought:
+        rsi_signal = "overbought"
+    elif rsi <= settings.rsi_oversold:
+        rsi_signal = "oversold"
+    else:
+        rsi_signal = "neutral"
 
     if sma_s is None or sma_l is None:
-        return PriceTrend(direction="sideways", sma_short=sma_s, sma_long=sma_l)
+        return PriceTrend(
+            direction="sideways",
+            sma_short=sma_s,
+            sma_long=sma_l,
+            rsi=rsi,
+            rsi_signal=rsi_signal,
+        )
 
     if sma_s > sma_l:
         direction = "uptrend"
@@ -48,4 +105,10 @@ def analyze_price_trend(bars: Iterable[PriceBar], short_window: int = 20, long_w
     else:
         direction = "sideways"
 
-    return PriceTrend(direction=direction, sma_short=sma_s, sma_long=sma_l)
+    return PriceTrend(
+        direction=direction,
+        sma_short=sma_s,
+        sma_long=sma_l,
+        rsi=rsi,
+        rsi_signal=rsi_signal,
+    )
