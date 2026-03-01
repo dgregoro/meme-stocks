@@ -78,7 +78,7 @@ On the VPS (one-time):
 - **Deploy workflow** (`.github/workflows/deploy.yml`):
   - **Triggers:** When the **CI - Lint and Test** workflow completes successfully on `main` (so deploy runs only if tests pass), or manual **Run workflow** from the Actions tab.
   - **Build:** Builds the image from the repo `Containerfile`, tags it `ghcr.io/<owner>/meme-stocks:<sha>` and `:latest`, pushes to GHCR.
-  - **Deploy:** SSHs to the VPS, runs `podman pull`, stops/removes the existing `meme-stocks-backend` container (if any), starts a new one with the same name, port 8000, and volume `meme-stocks-data`. Uses `/opt/meme-stocks/.env` if present.
+  - **Deploy:** SSHs to the VPS, runs `podman pull`, stops/removes the existing `meme-stocks-backend` container (if any), starts a new one with the same name, port 8000, and volume `meme-stocks-data`. Uses `/opt/meme-stocks/.env` if present. After starting, the workflow waits ~12s and runs a health check (`curl http://localhost:8000/health` on the VPS); if the app does not respond, the deploy job **fails** and the run log includes container status and the last 30 log lines so the failure is visible in GitHub Actions (no silent shutdown).
 
 - **Existing CI** (`.github/workflows/ci.yml`) continues to run on every push/PR; it does not deploy.
 
@@ -170,6 +170,73 @@ podman run -d --name meme-stocks-backend -p 8000:8000 \
 Or use `compose.prod.yaml`: replace `REPLACE_OWNER` with your GitHub username/org, copy the file to the VPS, and run `podman-compose -f compose.prod.yaml up -d` (if you have podman-compose installed).
 
 ## Troubleshooting
+
+### Why did the app shut down on the VPS?
+
+SSH to the VPS and run these in order to find the cause.
+
+1. **Is the container running?**
+
+   ```bash
+   podman ps -a --filter name=meme-stocks-backend
+   ```
+
+   - **STATUS "Up"**: Container is running; if the app is unreachable, check firewall/security group and `podman logs meme-stocks-backend`.
+   - **STATUS "Exited"**: Container stopped. Check exit code and logs (steps 2–3).
+
+2. **Why did the container exit?**
+
+   ```bash
+   podman inspect meme-stocks-backend --format '{{.State.Status}} {{.State.ExitCode}} {{.State.Error}}'
+   podman logs meme-stocks-backend --tail 200
+   ```
+
+   - **ExitCode 0**: Usually intentional stop (e.g. `podman stop`).
+   - **ExitCode 137**: Often OOM killed (out of memory). Check `dmesg | tail -50` or `journalctl -k -n 50` for OOM messages.
+   - **ExitCode 1 or 255**: App or runtime crash. The last lines of `podman logs` usually show the error.
+
+3. **Host and resources**
+
+   ```bash
+   # Disk full? (SQLite and logs live in the volume)
+   df -h
+   du -sh ~/.local/share/containers/storage/volumes/meme-stocks-data 2>/dev/null || podman volume inspect meme-stocks-data
+
+   # Recent OOM or reboots
+   dmesg | tail -30
+   uptime
+   ```
+
+   If the disk is full, free space or move the volume; then start the container again.
+
+4. **Restart the app**
+
+   ```bash
+   podman start meme-stocks-backend
+   # Or full recreate (same as deploy workflow):
+   podman stop meme-stocks-backend 2>/dev/null; podman rm meme-stocks-backend 2>/dev/null
+   podman run -d --name meme-stocks-backend -p 8000:8000 -v meme-stocks-data:/app/data \
+     --restart unless-stopped --env-file /opt/meme-stocks/.env \
+     ghcr.io/<your-github-owner>/meme-stocks:latest
+   ```
+
+5. **After a host reboot**
+
+   With `--restart unless-stopped`, Podman usually restarts the container when the host boots. If it did not, start the container manually (step 4) and ensure Podman (and socket) are enabled: `systemctl --user enable --now podman.socket` (rootless) or `systemctl enable --now podman` (root).
+
+**Common causes**
+
+| Cause | What to check |
+|-------|----------------|
+| OOM kill | Exit code 137; `dmesg` / `journalctl -k`; add swap or larger instance |
+| App crash | Non-zero exit code; last lines of `podman logs` |
+| Disk full | `df -h`; clear logs or resize volume |
+| Deploy left container stopped | Re-run deploy or run the `podman run` command above |
+| Reboot and no auto-start | Start container manually; enable podman (see step 5) |
+
+**If you suspect the latest GitHub deploy:** A deploy stops the old container and starts a new one. If the new container exits soon after start (e.g. crash or OOM), the app stays down and the workflow used to still report success. The workflow now runs a **post-deploy health check**; if the app does not respond within ~12s, the deploy job fails and the Actions log shows container status and recent logs. After merging this change, a bad deploy will show as a failed run instead of a quiet shutdown.
+
+---
 
 - **Deploy job fails at SSH (Permission denied (publickey,...)):** Usually the private key lost its newlines when pasted. Store it **base64-encoded**: run `base64 -w0 ~/.ssh/aws-meme-stocks` (Linux) or `base64 -i ~/.ssh/aws-meme-stocks` (macOS), paste that single line into `VPS_SSH_PRIVATE_KEY`, and update the secret. Also confirm the key is the one on the VPS (EC2 key pair or `authorized_keys`).
 - **Deploy fails at `podman pull`:** If the image is private, make the package public or log in to GHCR on the VPS (see “GitHub Container Registry” above).

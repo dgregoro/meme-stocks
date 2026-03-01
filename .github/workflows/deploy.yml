@@ -139,4 +139,14 @@ jobs:
             else
               podman run -d --name meme-stocks-backend -p 8000:8000 -v meme-stocks-data:/app/data --restart unless-stopped ${IMAGE}
             fi
-            echo 'Deploy done.'"
+            echo 'Waiting for app to respond...'
+            sleep 12
+            if ! curl -sf http://localhost:8000/health >/dev/null; then
+              echo '::error::Health check failed after deploy. Container may have crashed.'
+              echo 'Container status:'
+              podman inspect meme-stocks-backend --format '  Status={{.State.Status}} ExitCode={{.State.ExitCode}}' 2>/dev/null || true
+              echo 'Last 30 log lines:'
+              podman logs meme-stocks-backend --tail 30 2>/dev/null || true
+              exit 1
+            fi
+            echo 'Deploy done. App is healthy.'"
