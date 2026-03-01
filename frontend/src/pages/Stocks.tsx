@@ -71,6 +71,7 @@ export const Stocks: React.FC = () => {
           <EmptyState title="Select a stock" message="Choose a symbol from the list to see sentiment, price history, and Reddit mentions." />
         ) : (
           <div>
+            <button type="button" onClick={() => setSelected(null)} style={{ marginBottom: 12, padding: '4px 8px' }}>← Back to list</button>
             <h3>{selected}</h3>
             <div>
               <strong>Sentiment:</strong>{' '}
