@@ -39,6 +39,14 @@ export const Stocks: React.FC = () => {
     api.getMentions(selected).then(setMentions).catch(() => setMentions([]))
   }, [selected])
 
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && selected) setSelected(null)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [selected])
+
   if (stocksLoading) return <LoadingSpinner message="Loading stocks…" />
   if (stocks.length === 0 && !error) {
     return (
