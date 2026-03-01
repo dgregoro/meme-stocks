@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone, timedelta
+from typing import cast
 
 from sqlalchemy import delete, select, update
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import Session
 
 from backend.app.models.job_lock import JobLock
@@ -95,7 +97,7 @@ class JobLockRepository:
             .values(heartbeat_at=now, expires_at=new_expires)
         )
         try:
-            result = self._session.execute(stmt)
+            result = cast(CursorResult[object], self._session.execute(stmt))
             return result.rowcount == 1
         except SQLAlchemyError as exc:
             raise DataAccessError("Failed to heartbeat job lock") from exc
@@ -104,7 +106,7 @@ class JobLockRepository:
         """Release the lock only if owner matches (delete row)."""
         stmt = delete(JobLock).where(JobLock.name == name, JobLock.owner == owner)
         try:
-            result = self._session.execute(stmt)
+            result = cast(CursorResult[object], self._session.execute(stmt))
             return result.rowcount == 1
         except SQLAlchemyError as exc:
             raise DataAccessError("Failed to release job lock") from exc
