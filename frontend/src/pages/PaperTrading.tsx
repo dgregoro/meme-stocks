@@ -13,6 +13,7 @@ export const PaperTrading: React.FC = () => {
   const [trades, setTrades] = useState<Trade[]>([])
   const [summary, setSummary] = useState<PortfolioSummary | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState<string | null>(null)
 
   const refresh = () => {
     api.listTrades().then(setTrades).catch((e) => setError(String(e)))
@@ -25,6 +26,7 @@ export const PaperTrading: React.FC = () => {
 
   const submit = async () => {
     setError(null)
+    setSuccess(null)
     const payload: CreateTradePayload = {
       stock_symbol: symbol,
       action,
@@ -40,6 +42,8 @@ export const PaperTrading: React.FC = () => {
     try {
       await api.createTrade(payload)
       refresh()
+      setSuccess('Trade created.')
+      setTimeout(() => setSuccess(null), 5000)
     } catch (e: unknown) {
       setError(String(e))
     }
@@ -48,9 +52,13 @@ export const PaperTrading: React.FC = () => {
   const doClose = async (id: number) => {
     const exit = Number(prompt('Exit price?'))
     if (!exit || isNaN(exit)) return
+    setError(null)
+    setSuccess(null)
     try {
       await api.closeTrade(id, exit)
       refresh()
+      setSuccess('Position closed.')
+      setTimeout(() => setSuccess(null), 5000)
     } catch (e: unknown) {
       setError(String(e))
     }
@@ -59,7 +67,16 @@ export const PaperTrading: React.FC = () => {
   return (
     <div>
       <h3>Paper Trading</h3>
-      {error && <div style={{ color: 'red' }}>Error: {error}</div>}
+      {error && (
+        <div style={{ color: '#b91c1c', padding: '8px 12px', marginBottom: 12, backgroundColor: '#fef2f2', borderRadius: 6 }} role="alert">
+          Error: {error}
+        </div>
+      )}
+      {success && (
+        <div style={{ color: '#166534', padding: '8px 12px', marginBottom: 12, backgroundColor: '#dcfce7', borderRadius: 6 }} role="status">
+          {success}
+        </div>
+      )}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
         <input value={symbol} onChange={(e) => setSymbol(e.target.value.toUpperCase())} placeholder="Symbol" />
         <select value={action} onChange={(e) => setAction(e.target.value as 'buy' | 'sell')}>
