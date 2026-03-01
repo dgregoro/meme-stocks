@@ -28,6 +28,8 @@ class StockAnalysisRow:
         mention_count: Number of Reddit posts in the analysis window.
         price_trend: 'uptrend', 'downtrend', or 'sideways'.
         composite_score: Combined score [0, 1] used for ranking (higher = better opportunity).
+        rsi: RSI value if available, else None.
+        rsi_signal: 'overbought', 'oversold', or 'neutral' if RSI available, else None.
     """
 
     symbol: str
@@ -35,6 +37,8 @@ class StockAnalysisRow:
     mention_count: int
     price_trend: str
     composite_score: float
+    rsi: float | None = None
+    rsi_signal: str | None = None
 
 
 def build_price_bars_for_stock(symbol: str, repo: PriceDataRepository) -> List[PriceBar]:
@@ -123,6 +127,8 @@ def run_daily_analysis(
                 mention_count=sentiment.mention_count,
                 price_trend=trend.direction,
                 composite_score=composite,
+                rsi=trend.rsi,
+                rsi_signal=trend.rsi_signal,
             )
         )
 

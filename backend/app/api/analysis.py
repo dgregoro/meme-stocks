@@ -19,6 +19,8 @@ class StockAnalysisResponse(BaseModel):
     mention_count: int
     price_trend: str
     composite_score: float
+    rsi: float | None = None
+    rsi_signal: str | None = None
 
 
 @router.get("/daily", response_model=List[StockAnalysisResponse])
@@ -34,6 +36,8 @@ def get_daily_analysis(
             mention_count=r.mention_count,
             price_trend=r.price_trend,
             composite_score=r.composite_score,
+            rsi=r.rsi,
+            rsi_signal=r.rsi_signal,
         )
         for r in rows
     ]

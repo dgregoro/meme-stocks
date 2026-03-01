@@ -25,6 +25,8 @@ def test_analyze_price_trend_no_data_is_sideways() -> None:
     assert trend.direction == "sideways"
     assert trend.sma_short is None
     assert trend.sma_long is None
+    assert trend.rsi is None
+    assert trend.rsi_signal is None
 
 
 def test_analyze_price_trend_uptrend_when_short_sma_above_long() -> None:
