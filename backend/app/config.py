@@ -75,6 +75,17 @@ class Settings(BaseSettings):
     alpaca_free_plan_mode: bool = True
     alpaca_sip_delay_minutes: int = 15
     alpaca_end_time_safety_minutes: int = 20  # end = now - this (default 20 > 15 for clock skew)
+    alpaca_api_key_id: str | None = None
+    alpaca_api_secret_key: str | None = None
+    alpaca_data_base_url: str = "https://data.alpaca.markets"
+    # Intraday ingestion
+    intraday_ingestion_enabled: bool = False
+    intraday_symbols_batch_size: int = 200
+    intraday_lookback_days: int = 30
+    intraday_universe_mode: str = "tracked"  # tracked | top_liquidity | all_active (future)
+    intraday_feature_store_root: str = "data/intraday"
+    intraday_max_pages_per_batch: int = 100
+    intraday_interval_minutes: int = 15  # scheduler interval
 
     model_config = SettingsConfigDict(
         env_file=(".env", "backend/.env"),
