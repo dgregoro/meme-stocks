@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { api, Stock, Sentiment, PricePoint, RedditMention } from '../services/api'
+import { EmptyState } from '../components/EmptyState'
+import { LoadingSpinner } from '../components/LoadingSpinner'
 
 function redditUrl(url: string): string {
   if (!url) return '#'
@@ -14,9 +16,14 @@ export const Stocks: React.FC = () => {
   const [prices, setPrices] = useState<PricePoint[]>([])
   const [mentions, setMentions] = useState<RedditMention[]>([])
   const [error, setError] = useState<string | null>(null)
+  const [stocksLoading, setStocksLoading] = useState(true)
 
   useEffect(() => {
-    api.listStocks().then(setStocks).catch((e) => setError(String(e)))
+    api
+      .listStocks()
+      .then(setStocks)
+      .catch((e) => setError(String(e)))
+      .finally(() => setStocksLoading(false))
   }, [])
 
   useEffect(() => {
@@ -31,6 +38,20 @@ export const Stocks: React.FC = () => {
     api.getPrices(selected).then(setPrices).catch((e) => setError(String(e)))
     api.getMentions(selected).then(setMentions).catch(() => setMentions([]))
   }, [selected])
+
+  if (stocksLoading) return <LoadingSpinner message="Loading stocks…" />
+  if (stocks.length === 0 && !error) {
+    return (
+      <div>
+        <h3>Stocks</h3>
+        <EmptyState
+          title="No stocks tracked"
+          message="Stocks are added when they appear in Reddit mentions or via the API."
+          action="Trigger Reddit collection or refresh symbol universe to discover stocks."
+        />
+      </div>
+    )
+  }
 
   return (
     <div style={{ display: 'flex', gap: 24 }}>
@@ -47,7 +68,7 @@ export const Stocks: React.FC = () => {
       <div style={{ flex: 1 }}>
         {error && <div style={{ color: '#b91c1c', padding: '8px 12px', marginBottom: 12, backgroundColor: '#fef2f2', borderRadius: 6 }} role="alert">Error: {error}</div>}
         {!selected ? (
-          <div>Select a stock…</div>
+          <EmptyState title="Select a stock" message="Choose a symbol from the list to see sentiment, price history, and Reddit mentions." />
         ) : (
           <div>
             <h3>{selected}</h3>
