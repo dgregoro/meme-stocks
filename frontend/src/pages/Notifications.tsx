@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { api, NotificationItem } from '../services/api'
 import { LoadingSpinner } from '../components/LoadingSpinner'
 import { EmptyState } from '../components/EmptyState'
+import { severityColor } from '../utils/colors'
 
 export const Notifications: React.FC = () => {
   const [items, setItems] = useState<NotificationItem[]>([])
@@ -16,7 +17,7 @@ export const Notifications: React.FC = () => {
       .finally(() => setLoading(false))
   }, [])
 
-  if (error) return <div style={{ color: 'red' }}>Error: {error}</div>
+  if (error) return <div style={{ color: '#b91c1c' }} role="alert">Error: {error}</div>
   if (loading) return <LoadingSpinner message="Loading notifications…" />
 
   if (items.length === 0) {
@@ -34,10 +35,21 @@ export const Notifications: React.FC = () => {
   return (
     <div>
       <h3>Notifications</h3>
-      <ul>
+      <ul style={{ listStyle: 'none', paddingLeft: 0 }}>
         {items.map((n) => (
-          <li key={n.id}>
-            [{n.severity}] {n.stock_symbol}: {n.message} <em>{new Date(n.created_at).toLocaleString()}</em>
+          <li
+            key={n.id}
+            style={{
+              padding: '8px 12px',
+              marginBottom: 8,
+              borderLeft: `4px solid ${severityColor(n.severity)}`,
+              backgroundColor: '#f9fafb',
+              borderRadius: 4,
+            }}
+          >
+            <span style={{ fontWeight: 600, color: severityColor(n.severity) }}>{n.severity}</span>
+            {' '}{n.stock_symbol}: {n.message}{' '}
+            <em style={{ color: '#6b7280', fontSize: '0.9em' }}>{new Date(n.created_at).toLocaleString()}</em>
           </li>
         ))}
       </ul>
