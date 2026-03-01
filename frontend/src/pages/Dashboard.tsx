@@ -57,7 +57,7 @@ export const Dashboard: React.FC = () => {
   }
 
   if (loading) return <LoadingSpinner message="Loading..." />
-  if (error) return <div style={{ color: 'red' }}>Error: {error}</div>
+  if (error) return <div style={{ color: '#b91c1c', padding: '8px 12px', backgroundColor: '#fef2f2', borderRadius: 6 }} role="alert">Error: {error}</div>
 
   if (rows.length === 0) {
     return (

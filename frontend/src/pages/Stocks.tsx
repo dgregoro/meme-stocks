@@ -45,7 +45,7 @@ export const Stocks: React.FC = () => {
         </ul>
       </div>
       <div style={{ flex: 1 }}>
-        {error && <div style={{ color: 'red' }}>Error: {error}</div>}
+        {error && <div style={{ color: '#b91c1c', padding: '8px 12px', marginBottom: 12, backgroundColor: '#fef2f2', borderRadius: 6 }} role="alert">Error: {error}</div>}
         {!selected ? (
           <div>Select a stock…</div>
         ) : (
