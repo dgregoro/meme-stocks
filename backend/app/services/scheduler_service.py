@@ -165,6 +165,7 @@ class SchedulerService:
                 max_instances=1,
                 coalesce=True,
                 misfire_grace_time=900,
+                next_run_time=datetime.now(timezone.utc),
             )
 
     def _collect_reddit_data_job(self) -> None:

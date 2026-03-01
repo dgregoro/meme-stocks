@@ -18,6 +18,7 @@ from .models import (  # noqa: F401
     intraday_ingest_run,
     intraday_ingest_state,
     job_execution,
+    job_lock,
     job_run_history,
     notification,
     paper_trade,

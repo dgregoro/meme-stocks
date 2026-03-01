@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query
+from datetime import datetime, timezone
+from uuid import uuid4
+
+from fastapi import APIRouter, Depends, Query, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -10,6 +13,8 @@ from backend.app.config import get_settings
 from backend.app.data.database import get_session
 from backend.app.data.repositories.intraday_ingest_repo import IntradayIngestRepository
 from backend.app.services.intraday_ingestion_service import run_intraday_ingestion
+from backend.app.utils.api_errors import error_detail
+from backend.app.utils.errors import IngestionAlreadyRunningError
 
 router = APIRouter(prefix="/api/intraday", tags=["intraday"])
 
@@ -29,6 +34,7 @@ class IntradayStatusResponse(BaseModel):
     oldest_last_ts: str | None
     latest_run: dict | None
     intraday_ingestion_enabled: bool
+    lock: dict  # Governance: enabled, held, owner?, expires_at?, heartbeat_at?
 
 
 @router.get("/status", response_model=IntradayStatusResponse)
@@ -61,6 +67,24 @@ def get_intraday_status(db: Session = Depends(get_session)) -> IntradayStatusRes
             "notes": latest.notes,
         }
 
+    lock_enabled = getattr(settings, "intraday_lock_enabled", True)
+    lock_name = getattr(settings, "intraday_lock_name", "intraday_ingestion")
+    lock_info: dict = {"enabled": lock_enabled, "held": False}
+    if lock_enabled:
+        from backend.app.data.repositories.job_lock_repo import JobLockRepository
+
+        lock_repo = JobLockRepository(db)
+        current_lock = lock_repo.get_lock(lock_name)
+        now = datetime.now(timezone.utc)
+        if current_lock and current_lock.expires_at and current_lock.expires_at > now:
+            lock_info["held"] = True
+            lock_info["owner"] = current_lock.owner
+            lock_info["expires_at"] = current_lock.expires_at.isoformat()
+            lock_info["heartbeat_at"] = current_lock.heartbeat_at.isoformat() if current_lock.heartbeat_at else None
+        elif current_lock:
+            lock_info["owner"] = current_lock.owner
+            lock_info["expires_at"] = current_lock.expires_at.isoformat() if current_lock.expires_at else None
+
     return IntradayStatusResponse(
         alpaca_feed=settings.alpaca_data_feed,
         free_plan_mode=settings.alpaca_free_plan_mode,
@@ -73,6 +97,7 @@ def get_intraday_status(db: Session = Depends(get_session)) -> IntradayStatusRes
         oldest_last_ts=oldest.isoformat() if oldest else None,
         latest_run=latest_run_dict,
         intraday_ingestion_enabled=getattr(settings, "intraday_ingestion_enabled", False),
+        lock=lock_info,
     )
 
 
@@ -91,8 +116,19 @@ class RunOnceResponse(BaseModel):
 
 @router.post("/run-once", response_model=RunOnceResponse)
 def post_intraday_run_once(db: Session = Depends(get_session)) -> RunOnceResponse:
-    """Trigger one intraday ingestion run (tracked universe)."""
-    summary = run_intraday_ingestion(db, universe=None)
+    """Trigger one intraday ingestion run (tracked universe). Returns 409 if already running."""
+    owner = f"api:{uuid4()}"
+    try:
+        summary = run_intraday_ingestion(db, universe=None, owner=owner)
+    except IngestionAlreadyRunningError as e:
+        from fastapi import HTTPException
+
+        detail = error_detail(
+            "ConflictError",
+            e.args[0] if e.args else "Intraday ingestion already in progress",
+            details={"owner": e.owner, "expires_at": e.expires_at} if (e.owner or e.expires_at) else None,
+        )
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail) from e
     db.commit()
     return RunOnceResponse(
         symbols_processed=summary["symbols_processed"],

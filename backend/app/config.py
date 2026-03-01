@@ -89,6 +89,12 @@ class Settings(BaseSettings):
     # Feature store: when True, read_bars raises if any partition file is unreadable
     feature_store_strict_reads: bool = False
 
+    # Intraday ingestion governance: global lock to prevent overlapping runs (scheduler + API)
+    intraday_lock_enabled: bool = True
+    intraday_lock_ttl_seconds: int = 1800  # 30 min; must be longer than worst-case run
+    intraday_lock_heartbeat_seconds: int = 60
+    intraday_lock_name: str = "intraday_ingestion"
+
     model_config = SettingsConfigDict(
         env_file=(".env", "backend/.env"),
         env_file_encoding="utf-8",

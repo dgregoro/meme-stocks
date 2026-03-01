@@ -721,6 +721,8 @@ This project does **not** use Alembic. Schema changes are handled as follows:
 
 To adopt Alembic in the future, add it to requirements and initialize with `alembic init`; then generate migrations from model changes.
 
+**Governance lock**: The `job_locks` table (see `backend/app/models/job_lock.py`) is created via `create_all()` like other models. It is used for intraday ingestion to prevent overlapping runs (scheduler and API). When moving to Postgres or formal migrations, add a migration for `job_locks` if needed.
+
 ---
 
 ## Quick Reference: File Locations

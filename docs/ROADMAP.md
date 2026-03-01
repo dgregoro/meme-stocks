@@ -90,6 +90,8 @@ cd frontend && npm run dev
 
 Items consolidated from codebase analysis. Address when doing maintenance or before major features.
 
+**Intraday ingestion (PR #17 / feature branch)**: When enabled, intraday ingestion uses a **global run lock** (job_locks table, TTL lease) to prevent overlapping runs between the scheduler and the API. See governance lock in codebase.
+
 #### Completed ✅
 
 | Item | Resolution |
