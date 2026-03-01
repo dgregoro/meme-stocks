@@ -15,6 +15,7 @@ export const Dashboard: React.FC = () => {
   const [loading, setLoading] = useState(true)
   const [sortKey, setSortKey] = useState<SortKey>('composite_score')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
+  const [lastUpdated, setLastUpdated] = useState<string | null>(null)
 
   useEffect(() => {
     Promise.all([
@@ -23,7 +24,10 @@ export const Dashboard: React.FC = () => {
       api.getJobRuns('reddit-collection').then((runs) => setLastRun(runs[0] ?? null)),
     ])
       .catch((e) => setError(String(e)))
-      .finally(() => setLoading(false))
+      .finally(() => {
+        setLoading(false)
+        setLastUpdated(new Date().toISOString())
+      })
   }, [])
 
   const sortedRows = useMemo(() => {
@@ -75,7 +79,11 @@ export const Dashboard: React.FC = () => {
   return (
     <div>
       <h2>Daily Analysis</h2>
-
+      {lastUpdated && (
+        <p style={{ margin: '0 0 16px 0', fontSize: 14, color: '#6b7280' }}>
+          Last updated: {formatRelativeTime(lastUpdated)}
+        </p>
+      )}
       <div style={{ display: 'flex', gap: 16, marginBottom: 24, flexWrap: 'wrap' }}>
         <div
           style={{
