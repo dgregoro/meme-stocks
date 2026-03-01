@@ -58,6 +58,15 @@ class Settings(BaseSettings):
     # Optional: use HuggingFace ticker NER model for extra candidates (default off)
     enable_ticker_ner: bool = False
 
+    # Ticker disambiguation (ticker vs common word)
+    ticker_disambiguation_enabled: bool = True
+    ticker_disambiguation_return_maybe: bool = False
+    ticker_disambiguation_window_tokens: int = 5
+    # Comma-separated list of high-collision tickers (tune without code changes)
+    ticker_high_collision_symbols: str = (
+        "A,IT,OR,ON,ALL,ONE,RUN,FOR,LOVE,OPEN,REAL,HOPE,RIDE,SAVE,SOLO,TALK,WORK,PLAN,LIVE,PLAY"
+    )
+
     model_config = SettingsConfigDict(
         env_file=(".env", "backend/.env"),
         env_file_encoding="utf-8",
