@@ -135,7 +135,9 @@ def test_toggle_off_returns_old_behavior() -> None:
             mock_settings.ticker_disambiguation_enabled = True
             mock_settings.ticker_disambiguation_return_maybe = False
             mock_settings.ticker_disambiguation_window_tokens = 5
-            mock_settings.ticker_high_collision_symbols = "A,IT,OR,ON,ALL,ONE,RUN,FOR,LOVE,OPEN,REAL,HOPE,RIDE,SAVE,SOLO,TALK,WORK,PLAN,LIVE,PLAY"
+            mock_settings.ticker_high_collision_symbols = (
+                "A,IT,OR,ON,ALL,ONE,RUN,FOR,LOVE,OPEN,REAL,HOPE,RIDE,SAVE,SOLO,TALK,WORK,PLAN,LIVE,PLAY"
+            )
             tickers_on = extract_tickers(
                 "ON the table",
                 use_symbol_universe=True,

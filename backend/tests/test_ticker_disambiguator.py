@@ -7,7 +7,6 @@ import pytest
 from backend.app.utils.ticker_disambiguator import (
     DEFAULT_HIGH_COLLISION_TICKERS,
     TickerDisambiguator,
-    DisambiguationResult,
 )
 
 

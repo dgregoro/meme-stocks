@@ -69,9 +69,7 @@ _FINANCE_KEYWORDS = frozenset(
     }
 )
 # Strong finance keywords: one occurrence in window is enough for STRONG_THRESHOLD
-_STRONG_FINANCE_KEYWORDS = frozenset(
-    {"earnings", "calls", "puts", "strike", "shares", "price", "target"}
-)
+_STRONG_FINANCE_KEYWORDS = frozenset({"earnings", "calls", "puts", "strike", "shares", "price", "target"})
 
 # Price/percent pattern
 _PRICE_PERCENT_PATTERN = re.compile(r"(\$?\d+\.?\d*%?|[\+\-]\d+\.?\d*%?)")
@@ -146,11 +144,7 @@ def _score_context(
                     break
         # Ticker list: other tokens in window that are in valid_tickers (co-mention helps)
         ticker_like = [
-            t
-            for t in window
-            if re.match(r"^[A-Z]{1,5}$", t)
-            and t != symbol_upper
-            and (not valid or t in valid)
+            t for t in window if re.match(r"^[A-Z]{1,5}$", t) and t != symbol_upper and (not valid or t in valid)
         ]
         if len(ticker_like) >= 1:
             score += 3
@@ -197,9 +191,7 @@ class TickerDisambiguator:
             Dict with candidate, label ("ticker"|"maybe"|"word"), score, reasons.
         """
         _ = subreddit, flair  # reserved
-        score, reasons = _score_context(
-            text, candidate, self._window_tokens, valid_tickers=self._valid
-        )
+        score, reasons = _score_context(text, candidate, self._window_tokens, valid_tickers=self._valid)
         symbol_upper = candidate.upper()
         in_universe = symbol_upper in self._valid
         is_high_collision = symbol_upper in self._high_collision
@@ -264,7 +256,4 @@ class TickerDisambiguator:
         flair: str | None = None,
     ) -> list[DisambiguationResult]:
         """Classify multiple candidates. Returns one result per candidate."""
-        return [
-            self.classify(text, c, subreddit=subreddit, flair=flair)
-            for c in candidates
-        ]
+        return [self.classify(text, c, subreddit=subreddit, flair=flair) for c in candidates]
