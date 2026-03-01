@@ -17,7 +17,7 @@ export const Dashboard: React.FC = () => {
   const [sortDir, setSortDir] = useState<SortDir>('desc')
   const [lastUpdated, setLastUpdated] = useState<string | null>(null)
 
-  useEffect(() => {
+  const fetchData = () => {
     Promise.all([
       api.analysisDaily().then(setRows),
       api.listNotifications().then((n) => setUnreadCount(n.filter((x) => !x.read).length)),
@@ -28,6 +28,13 @@ export const Dashboard: React.FC = () => {
         setLoading(false)
         setLastUpdated(new Date().toISOString())
       })
+  }
+
+  useEffect(() => {
+    fetchData()
+    const intervalMs = 5 * 60 * 1000
+    const t = setInterval(fetchData, intervalMs)
+    return () => clearInterval(t)
   }, [])
 
   const sortedRows = useMemo(() => {
@@ -81,7 +88,7 @@ export const Dashboard: React.FC = () => {
       <h2>Daily Analysis</h2>
       {lastUpdated && (
         <p style={{ margin: '0 0 16px 0', fontSize: 14, color: '#6b7280' }}>
-          Last updated: {formatRelativeTime(lastUpdated)}
+          Last updated: {formatRelativeTime(lastUpdated)} · Auto-refresh every 5 min
         </p>
       )}
       <div style={{ display: 'flex', gap: 16, marginBottom: 24, flexWrap: 'wrap' }}>
