@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Generator
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -31,7 +32,7 @@ def _build_test_app_with_db() -> tuple[TestClient, Session]:
     session = TestSessionLocal()
     app = create_app()
 
-    def override_get_session() -> Session:
+    def override_get_session() -> Generator[Session, None, None]:
         db = TestSessionLocal()
         try:
             yield db
