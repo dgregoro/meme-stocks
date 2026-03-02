@@ -102,6 +102,69 @@ export type JobRun = {
   run_at: string
 }
 
+export type JobStatus = {
+  job_id: string
+  schedule: string | null
+  last_run_utc: string | null
+  last_status: 'ran' | 'never'
+  last_error: string | null
+  duration_seconds: number | null
+}
+
+export type RedditCollectionStatus = {
+  posts_last_1h: number
+  posts_last_24h: number
+  mentions_last_1h: number
+  mentions_last_24h: number
+  newest_post_posted_at_utc: string | null
+  newest_post_collected_at_utc: string | null
+  oldest_post_collected_at_utc: string | null
+}
+
+export type PriceCollectionStatus = {
+  newest_price_date: string | null
+  price_rows_last_7d: number
+  price_rows_last_30d: number
+}
+
+export type DailyFeatureStatus = {
+  newest_trading_day: string | null
+  rows_last_7d: number
+  rows_last_30d: number
+}
+
+export type CollectionHealth = {
+  reddit: 'ok' | 'stale' | 'empty'
+  prices: 'ok' | 'stale' | 'empty'
+  daily_features: 'ok' | 'stale' | 'empty'
+  jobs: 'ok' | 'warning'
+}
+
+export type CollectionThresholds = {
+  reddit_stale_after_minutes: number
+  prices_stale_after_days: number
+  features_stale_after_days: number
+}
+
+export type StaleSymbolStatus = {
+  symbol: string
+  last_reddit_collected_at_utc: string | null
+  last_price_date: string | null
+  last_daily_feature_day: string | null
+  stale_reasons: string[]
+}
+
+export type CollectionStatus = {
+  server_time_utc: string
+  market_time_local: string
+  jobs: JobStatus[]
+  reddit: RedditCollectionStatus
+  prices: PriceCollectionStatus
+  daily_features: DailyFeatureStatus
+  health: CollectionHealth
+  thresholds: CollectionThresholds
+}
+
 const client = axios.create({
   baseURL: BASE_URL,
   timeout: 10000,
@@ -139,6 +202,14 @@ export const api = {
   getJobRuns: (jobName: string, limit = 1) =>
     handle(
       client.get<JobRun[]>(`/api/jobs/${encodeURIComponent(jobName)}/runs`, {
+        params: { limit },
+      }),
+    ),
+  getCollectionStatus: () =>
+    handle(client.get<CollectionStatus>('/api/status/collection')),
+  getStaleSymbols: (limit = 25) =>
+    handle(
+      client.get<StaleSymbolStatus[]>('/api/status/symbols/stale', {
         params: { limit },
       }),
     ),

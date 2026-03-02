@@ -32,6 +32,7 @@ from .models import (  # noqa: F401
 from .api import stocks as stocks_api
 from .api import sentiment_price as sentiment_price_api
 from .api import analysis as analysis_api
+from .api import status as status_api
 from .api import notifications as notifications_api
 from .api import paper_trading as paper_trading_api
 from .api import jobs as jobs_api
@@ -113,6 +114,7 @@ def create_app(
     app.include_router(stocks_api.router)
     app.include_router(sentiment_price_api.router)
     app.include_router(analysis_api.router)
+    app.include_router(status_api.router)
     app.include_router(notifications_api.router)
     app.include_router(paper_trading_api.router)
     app.include_router(jobs_api.router)
