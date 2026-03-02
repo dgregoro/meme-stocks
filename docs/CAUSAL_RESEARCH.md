@@ -10,6 +10,8 @@ The goal of this research track is to evaluate whether changes in Reddit discuss
 - confusing “price reacts → Reddit reacts” with “Reddit leads → price moves”
 
 This document describes the data artifacts and experiment patterns needed to support this goal.
+Daily features are assigned based on **posted_at** in the market timezone (with after-hours rules), *not* on
+collected_at, to avoid collection-lag distortion and look-ahead leakage.
 
 ---
 

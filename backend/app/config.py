@@ -41,7 +41,7 @@ class Settings(BaseSettings):
     reddit_max_age_days: int = 2  # Max age of Reddit posts to fetch
     price_history_days: int = 30  # Days of price history for analysis
 
-    # RSI (Relative Strength Index) — PLAN.md / Phase 2.3
+    # RSI (Relative Strength Index) - PLAN.md / Phase 2.3
     rsi_period: int = 14
     rsi_overbought: float = 70.0
     rsi_oversold: float = 30.0
@@ -99,6 +99,13 @@ class Settings(BaseSettings):
     intraday_lock_ttl_seconds: int = 1800  # 30 min; must be longer than worst-case run
     intraday_lock_heartbeat_seconds: int = 60
     intraday_lock_name: str = "intraday_ingestion"
+
+    # Reddit daily features (causal research): trading-day assignment and aggregation job
+    market_timezone: str = "America/New_York"
+    market_close_hour_local: int = 16  # Local hour when market closes
+    market_close_minute_local: int = 0  # Local minute when market closes
+    reddit_daily_features_lookback_days: int = 30
+    reddit_daily_features_job_hour: int = 17  # Run after market close
 
     @field_validator("rsi_period")
     @classmethod
