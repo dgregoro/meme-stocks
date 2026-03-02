@@ -105,10 +105,8 @@ export type JobRun = {
 export type JobStatus = {
   job_id: string
   schedule: string | null
-  last_start_utc: string | null
-  last_end_utc: string | null
-  last_success_utc: string | null
-  last_status: 'success' | 'failure' | 'running' | 'never'
+  last_run_utc: string | null
+  last_status: 'ran' | 'never'
   last_error: string | null
   duration_seconds: number | null
 }
@@ -135,6 +133,27 @@ export type DailyFeatureStatus = {
   rows_last_30d: number
 }
 
+export type CollectionHealth = {
+  reddit: 'ok' | 'stale' | 'empty'
+  prices: 'ok' | 'stale' | 'empty'
+  daily_features: 'ok' | 'stale' | 'empty'
+  jobs: 'ok' | 'warning'
+}
+
+export type CollectionThresholds = {
+  reddit_stale_after_minutes: number
+  prices_stale_after_days: number
+  features_stale_after_days: number
+}
+
+export type StaleSymbolStatus = {
+  symbol: string
+  last_reddit_collected_at_utc: string | null
+  last_price_date: string | null
+  last_daily_feature_day: string | null
+  stale_reasons: string[]
+}
+
 export type CollectionStatus = {
   server_time_utc: string
   market_time_local: string
@@ -142,6 +161,8 @@ export type CollectionStatus = {
   reddit: RedditCollectionStatus
   prices: PriceCollectionStatus
   daily_features: DailyFeatureStatus
+  health: CollectionHealth
+  thresholds: CollectionThresholds
 }
 
 const client = axios.create({
@@ -186,4 +207,10 @@ export const api = {
     ),
   getCollectionStatus: () =>
     handle(client.get<CollectionStatus>('/api/status/collection')),
+  getStaleSymbols: (limit = 25) =>
+    handle(
+      client.get<StaleSymbolStatus[]>('/api/status/symbols/stale', {
+        params: { limit },
+      }),
+    ),
 }

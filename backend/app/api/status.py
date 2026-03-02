@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
@@ -11,10 +11,13 @@ from backend.app.data.database import get_session
 from backend.app.services.status_service import (
     CollectionStatusResult,
     DailyFeatureStatusResult,
+    HealthResult,
     JobStatusResult,
     PriceCollectionStatusResult,
     RedditCollectionStatusResult,
+    SymbolStalenessResult,
     get_collection_status,
+    get_stale_symbols,
 )
 from backend.app.utils.api_errors import error_detail
 from backend.app.utils.errors import DataAccessError
@@ -26,10 +29,8 @@ router = APIRouter(prefix="/api/status", tags=["status"])
 class JobStatus(BaseModel):
     job_id: str
     schedule: str | None = None
-    last_start_utc: datetime | None = None
-    last_end_utc: datetime | None = None
-    last_success_utc: datetime | None = None
-    last_status: Literal["success", "failure", "running", "never"]
+    last_run_utc: datetime | None = None
+    last_status: Literal["ran", "never"]
     last_error: str | None = None
     duration_seconds: float | None = None
 
@@ -64,6 +65,23 @@ class DailyFeatureStatus(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class CollectionHealth(BaseModel):
+    reddit: Literal["ok", "stale", "empty"]
+    prices: Literal["ok", "stale", "empty"]
+    daily_features: Literal["ok", "stale", "empty"]
+    jobs: Literal["ok", "warning"]
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class CollectionThresholds(BaseModel):
+    reddit_stale_after_minutes: int
+    prices_stale_after_days: int
+    features_stale_after_days: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class CollectionStatusResponse(BaseModel):
     server_time_utc: datetime
     market_time_local: datetime
@@ -71,6 +89,18 @@ class CollectionStatusResponse(BaseModel):
     reddit: RedditCollectionStatus
     prices: PriceCollectionStatus
     daily_features: DailyFeatureStatus
+    health: CollectionHealth
+    thresholds: CollectionThresholds
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class StaleSymbolStatus(BaseModel):
+    symbol: str
+    last_reddit_collected_at_utc: datetime | None = None
+    last_price_date: datetime | None = None
+    last_daily_feature_day: datetime | None = None
+    stale_reasons: list[str]
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -91,6 +121,10 @@ def _convert_daily_features(result: DailyFeatureStatusResult) -> DailyFeatureSta
     return DailyFeatureStatus.model_validate(result)
 
 
+def _convert_health(result: HealthResult) -> CollectionHealth:
+    return CollectionHealth.model_validate(result)
+
+
 @router.get("/collection", response_model=CollectionStatusResponse)
 def get_collection_status_api(db: Session = Depends(get_session)) -> CollectionStatusResponse:
     """Return current data collection / ingestion status."""
@@ -109,5 +143,27 @@ def get_collection_status_api(db: Session = Depends(get_session)) -> CollectionS
         reddit=_convert_reddit(status_result.reddit),
         prices=_convert_prices(status_result.prices),
         daily_features=_convert_daily_features(status_result.daily_features),
+        health=_convert_health(status_result.health),
+        thresholds=CollectionThresholds(
+            reddit_stale_after_minutes=status_result.health.reddit_stale_after_minutes,
+            prices_stale_after_days=status_result.health.prices_stale_after_days,
+            features_stale_after_days=status_result.health.features_stale_after_days,
+        ),
     )
 
+
+@router.get("/symbols/stale", response_model=list[StaleSymbolStatus])
+def get_stale_symbols_api(
+    limit: int = Query(25, ge=1, le=200),
+    db: Session = Depends(get_session),
+) -> list[StaleSymbolStatus]:
+    """Return top-N stalest symbols across Reddit, prices, and daily features."""
+    try:
+        results: list[SymbolStalenessResult] = get_stale_symbols(db, limit)
+    except DataAccessError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=error_detail("DataAccessError", str(exc)),
+        ) from exc
+
+    return [StaleSymbolStatus.model_validate(r) for r in results]

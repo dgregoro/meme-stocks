@@ -1,6 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react'
 
-import { api, type CollectionStatus, type JobStatus } from '../services/api'
+import {
+  api,
+  type CollectionStatus,
+  type JobStatus,
+  type StaleSymbolStatus,
+} from '../services/api'
 import { LoadingSpinner } from '../components/LoadingSpinner'
 import { spacing } from '../theme'
 
@@ -13,13 +18,14 @@ export const DataCollection: React.FC = () => {
   const [lastUpdatedIso, setLastUpdatedIso] = useState<string | null>(null)
   const [autoRefresh, setAutoRefresh] = useState(true)
   const [jobsFilter, setJobsFilter] = useState<StatusFilter>('bad')
+  const [staleSymbols, setStaleSymbols] = useState<StaleSymbolStatus[] | null>(null)
 
   const fetchStatus = () => {
     setError(null)
-    api
-      .getCollectionStatus()
-      .then((data) => {
-        setStatus(data)
+    Promise.all([api.getCollectionStatus(), api.getStaleSymbols(25)])
+      .then(([collection, stale]) => {
+        setStatus(collection)
+        setStaleSymbols(stale)
         setLastUpdatedIso(new Date().toISOString())
       })
       .catch((e) => setError(String(e)))
@@ -42,17 +48,15 @@ export const DataCollection: React.FC = () => {
     const copy = [...status.jobs]
     copy.sort((a, b) => {
       const order = (s: JobStatus['last_status']) => {
-        if (s === 'failure') return 0
-        if (s === 'never') return 1
-        if (s === 'running') return 2
-        return 3
+        if (s === 'never') return 0
+        return 1
       }
       const diff = order(a.last_status) - order(b.last_status)
       if (diff !== 0) return diff
       return a.job_id.localeCompare(b.job_id)
     })
     if (jobsFilter === 'bad') {
-      return copy.filter((j) => j.last_status !== 'success')
+      return copy.filter((j) => j.last_status === 'never')
     }
     return copy
   }, [status, jobsFilter])
@@ -121,21 +125,39 @@ export const DataCollection: React.FC = () => {
     flex: 1,
   }
 
-  const pill = (statusValue: JobStatus['last_status']) => {
+  const jobPill = (statusValue: JobStatus['last_status']) => {
     let bg = '#e5e7eb'
     let color = '#111827'
-    if (statusValue === 'failure') {
-      bg = '#fee2e2'
-      color = '#b91c1c'
-    } else if (statusValue === 'never') {
+    if (statusValue === 'never') {
       bg = '#fef3c7'
       color = '#92400e'
-    } else if (statusValue === 'running') {
-      bg = '#d1fae5'
-      color = '#065f46'
-    } else if (statusValue === 'success') {
+    } else if (statusValue === 'ran') {
       bg = '#dcfce7'
       color = '#166534'
+    }
+    return {
+      backgroundColor: bg,
+      color,
+      padding: '2px 8px',
+      borderRadius: 999,
+      fontSize: 12,
+      fontWeight: 500,
+      whiteSpace: 'nowrap' as const,
+    }
+  }
+
+  const healthPill = (value: 'ok' | 'stale' | 'empty') => {
+    let bg = '#e5e7eb'
+    let color = '#111827'
+    if (value === 'ok') {
+      bg = '#dcfce7'
+      color = '#166534'
+    } else if (value === 'stale') {
+      bg = '#fef3c7'
+      color = '#92400e'
+    } else if (value === 'empty') {
+      bg = '#fee2e2'
+      color = '#b91c1c'
     }
     return {
       backgroundColor: bg,
@@ -190,7 +212,12 @@ export const DataCollection: React.FC = () => {
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: spacing.md, marginBottom: spacing.lg }}>
         <div style={cardStyle}>
-          <h3 style={{ marginTop: 0, marginBottom: 8 }}>Reddit ingestion</h3>
+          <h3 style={{ marginTop: 0, marginBottom: 4 }}>Reddit ingestion</h3>
+          <div style={{ marginBottom: 6 }}>
+            <span style={healthPill(status.health.reddit)}>
+              {status.health.reddit.toUpperCase()}
+            </span>
+          </div>
           <div style={{ fontSize: 14 }}>
             <div>
               Posts: <strong>{status.reddit.posts_last_1h}</strong> (1h) ·{' '}
@@ -207,7 +234,12 @@ export const DataCollection: React.FC = () => {
         </div>
 
         <div style={cardStyle}>
-          <h3 style={{ marginTop: 0, marginBottom: 8 }}>Price ingestion</h3>
+          <h3 style={{ marginTop: 0, marginBottom: 4 }}>Price ingestion</h3>
+          <div style={{ marginBottom: 6 }}>
+            <span style={healthPill(status.health.prices)}>
+              {status.health.prices.toUpperCase()}
+            </span>
+          </div>
           <div style={{ fontSize: 14 }}>
             <div>
               Newest price date: <strong>{status.prices.newest_price_date ?? 'n/a'}</strong>
@@ -220,7 +252,12 @@ export const DataCollection: React.FC = () => {
         </div>
 
         <div style={cardStyle}>
-          <h3 style={{ marginTop: 0, marginBottom: 8 }}>Daily Reddit features</h3>
+          <h3 style={{ marginTop: 0, marginBottom: 4 }}>Daily Reddit features</h3>
+          <div style={{ marginBottom: 6 }}>
+            <span style={healthPill(status.health.daily_features)}>
+              {status.health.daily_features.toUpperCase()}
+            </span>
+          </div>
           <div style={{ fontSize: 14 }}>
             <div>
               Newest trading day:{' '}
@@ -292,16 +329,51 @@ export const DataCollection: React.FC = () => {
                 <td style={{ fontWeight: 500 }}>{j.job_id}</td>
                 <td>{j.schedule ?? '—'}</td>
                 <td>
-                  <span style={pill(j.last_status)}>{j.last_status}</span>
+                  <span style={jobPill(j.last_status)}>{j.last_status}</span>
                 </td>
-                <td title={j.last_start_utc ?? undefined}>{formatRelative(j.last_start_utc)}</td>
-                <td title={j.last_success_utc ?? undefined}>{formatRelative(j.last_success_utc)}</td>
+                <td title={j.last_run_utc ?? undefined}>{formatRelative(j.last_run_utc)}</td>
+                <td>{/* no separate success tracking yet */}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </section>
+      {staleSymbols && staleSymbols.length > 0 && (
+        <section aria-label="Stalest symbols" style={{ marginTop: spacing.lg }}>
+          <h3 style={{ marginBottom: 8 }}>Stalest symbols</h3>
+          <p style={{ fontSize: 12, color: '#6b7280', marginTop: 0, marginBottom: 8 }}>
+            Top {Math.min(staleSymbols.length, 25)} symbols with missing or stale data across
+            Reddit, prices, and daily features.
+          </p>
+          <table
+            cellPadding={6}
+            style={{ borderCollapse: 'collapse', width: '100%', fontSize: 14 }}
+          >
+            <thead>
+              <tr style={{ borderBottom: '2px solid #e5e7eb' }}>
+                <th style={{ textAlign: 'left' }}>Symbol</th>
+                <th style={{ textAlign: 'left' }}>Last Reddit</th>
+                <th style={{ textAlign: 'left' }}>Last price</th>
+                <th style={{ textAlign: 'left' }}>Last daily feature</th>
+                <th style={{ textAlign: 'left' }}>Reasons</th>
+              </tr>
+            </thead>
+            <tbody>
+              {staleSymbols.map((s) => (
+                <tr key={s.symbol} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                  <td style={{ fontWeight: 500 }}>{s.symbol}</td>
+                  <td title={s.last_reddit_collected_at_utc ?? undefined}>
+                    {formatRelative(s.last_reddit_collected_at_utc)}
+                  </td>
+                  <td>{s.last_price_date ?? 'n/a'}</td>
+                  <td>{s.last_daily_feature_day ?? 'n/a'}</td>
+                  <td>{s.stale_reasons.join(', ')}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      )}
     </div>
   )
 }
-

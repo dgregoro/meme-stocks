@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import datetime, timedelta, timezone
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
@@ -14,6 +15,7 @@ from backend.app.models.reddit_daily_feature import RedditDailyFeature
 from backend.app.models.reddit_post import RedditPost
 from backend.app.models.reddit_symbol_mention import RedditSymbolMention
 from backend.app.models.stock import Stock
+from backend.app.services import status_service as status_service_module
 
 
 def _build_test_app_with_db() -> tuple[TestClient, Session]:
@@ -40,12 +42,23 @@ def _build_test_app_with_db() -> tuple[TestClient, Session]:
     return TestClient(app), session
 
 
-def test_get_collection_status_smoke() -> None:
-    """Smoke test: /api/status/collection returns expected top-level fields and nested structures."""
+def test_get_collection_status_counters_and_health(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Status endpoint returns expected structure and basic counter/health correctness."""
     client, db = _build_test_app_with_db()
 
+    # Fix \"now\" inside status_service so time windows are deterministic.
+    fixed_now = datetime(2026, 3, 2, 12, 0, 0, tzinfo=timezone.utc)
+
+    class FixedDateTime(datetime):  # type: ignore[misc]
+        @classmethod
+        def now(cls, tz: timezone | None = None) -> datetime:  # type: ignore[override]
+            if tz is None:
+                return fixed_now
+            return fixed_now.astimezone(tz)
+
+    monkeypatch.setattr(status_service_module, "datetime", FixedDateTime)
+
     # Seed minimal data so counters are non-zero and types exercised.
-    now = datetime(2026, 3, 2, 12, 0, 0, tzinfo=timezone.utc)
     stock = Stock(symbol="GME", name="GameStop", sector=None, market_cap=None)
     db.add(stock)
 
@@ -57,15 +70,30 @@ def test_get_collection_status_smoke() -> None:
         upvotes=10,
         comments=2,
         url="https://reddit.com/...",
-        posted_at=now,
-        collected_at=now,
+        posted_at=fixed_now - timedelta(minutes=30),
+        collected_at=fixed_now - timedelta(minutes=30),
     )
     db.add(post)
     db.add(RedditSymbolMention(post_id="post1", symbol="GME"))
 
+    # Older Reddit post outside 1h window but inside 24h.
+    older_post = RedditPost(
+        id="post_old",
+        subreddit="wallstreetbets",
+        title="GME earlier",
+        author="u2",
+        upvotes=3,
+        comments=1,
+        url="https://reddit.com/...",
+        posted_at=fixed_now - timedelta(hours=2),
+        collected_at=fixed_now - timedelta(hours=2),
+    )
+    db.add(older_post)
+    db.add(RedditSymbolMention(post_id="post_old", symbol="GME"))
+
     price = PriceData(
         stock_symbol="GME",
-        date=date(2026, 3, 1),
+        date=fixed_now.date(),
         open=10.0,
         high=12.0,
         low=9.5,
@@ -76,7 +104,7 @@ def test_get_collection_status_smoke() -> None:
 
     feature = RedditDailyFeature(
         symbol="GME",
-        trading_day=date(2026, 3, 1),
+        trading_day=fixed_now.date(),
         mention_count=1,
         unique_authors=1,
         total_upvotes=10,
@@ -96,13 +124,26 @@ def test_get_collection_status_smoke() -> None:
 
     reddit = body.get("reddit")
     assert isinstance(reddit, dict)
-    assert "posts_last_24h" in reddit
+    assert reddit["posts_last_1h"] == 1
+    assert reddit["posts_last_24h"] == 2
+    assert reddit["mentions_last_1h"] == 1
+    assert reddit["mentions_last_24h"] == 2
 
     prices = body.get("prices")
     assert isinstance(prices, dict)
-    assert "newest_price_date" in prices
+    assert prices["newest_price_date"].startswith(fixed_now.date().isoformat())
+    assert prices["price_rows_last_7d"] == 1
+    assert prices["price_rows_last_30d"] == 1
 
     daily = body.get("daily_features")
     assert isinstance(daily, dict)
-    assert "newest_trading_day" in daily
+    assert daily["newest_trading_day"].startswith(fixed_now.date().isoformat())
+    assert daily["rows_last_7d"] == 1
+    assert daily["rows_last_30d"] == 1
 
+    health = body.get("health")
+    assert isinstance(health, dict)
+    assert health["reddit"] in {"ok", "stale", "empty"}
+    assert health["prices"] in {"ok", "stale", "empty"}
+    assert health["daily_features"] in {"ok", "stale", "empty"}
+    assert health["jobs"] in {"ok", "warning"}
