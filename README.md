@@ -2,6 +2,21 @@
 
 A web application for analyzing meme stocks using social sentiment (Reddit) and price patterns. The app supports manual trading decisions with end-of-day analysis and real-time notifications for unusual activity. Includes paper trading/modeling capabilities.
 
+## Research Track: Reddit Mentions → Future Price Movement (Causation/Predictiveness)
+
+In addition to the existing decision-support features, this repo is tracking a research direction:
+
+> Evaluate whether changes in Reddit stock mentions *precede* and help *predict* (and potentially causally influence)
+> future stock price movements.
+
+Key constraints for this work:
+
+- **Time alignment matters** (market hours vs after-hours posting).
+- **Avoid look-ahead bias / leakage** when building training datasets.
+- Start with simple, testable baselines (e.g., event studies / Granger-style tests) before more complex ML.
+
+See: **[docs/CAUSAL_RESEARCH.md](docs/CAUSAL_RESEARCH.md)**.
+
 ## Status
 
 **All planned milestones (M0-M7) are complete!** The application is fully functional with:

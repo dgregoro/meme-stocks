@@ -21,6 +21,17 @@ Before making functional changes to the application, update the spec to clarify 
 2. **Update the spec** — In this PRD: add or edit the relevant requirement in Section 5 (Features and Requirements), and if needed the API in Appendix A or user stories in Section 6. Update ROADMAP.md if the work is scheduled in a phase.
 3. **Implement** — Code and tests should satisfy the updated PRD; follow ARCHITECTURE.md for structure.
 
+### 1.2 Research Direction (Future Scope): Reddit Mentions → Price Movement
+
+In addition to the MVP, this repo tracks a research direction:
+
+- Evaluate whether Reddit mention activity *precedes* and helps *predict* future stock price movement.
+- Avoid naive correlation by enforcing **time alignment** and preventing **look-ahead bias**.
+- Prefer interpretable, testable methods first (event-study style analyses, Granger-style predictiveness tests),
+  then iterate toward ML models once dataset construction is reliable and reproducible.
+
+This research direction is documented in: `docs/CAUSAL_RESEARCH.md`
+
 ---
 
 ## 2. Problem Statement

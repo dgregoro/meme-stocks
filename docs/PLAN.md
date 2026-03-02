@@ -10,6 +10,41 @@ This document details the trading strategies, scoring algorithms, and business l
 
 ---
 
+## Two Tracks: Decision Support vs. Causal Research
+
+This repo currently implements **decision-support heuristics** (alerts, rankings, paper trading) and
+also tracks a **research direction** focused on whether Reddit mention activity precedes and predicts
+future price movement.
+
+### A) Decision-Support Track (Current)
+
+This is the implemented “product” behavior:
+
+- Collect Reddit + price data
+- Compute features (sentiment, SMA-based patterns, RSI)
+- Generate alerts + end-of-day ranked analysis
+- Support paper trading and portfolio tracking
+
+This track can be heuristic-driven and does not require formal training pipelines.
+
+### B) Causal / Predictive Research Track (Planned)
+
+Goal: build leakage-safe datasets and run time-series experiments that answer:
+
+- Do Reddit mentions lead price (predictive relationship)?
+- Is the relationship robust after controls (market/sector/volatility/volume)?
+- Is the directionality reversed (price → mentions)?
+
+This work requires:
+
+- **Daily aggregated Reddit features per symbol** (mentions, unique authors, engagement, sentiment)
+- **Forward-return labels** (e.g., 1d/5d/10d returns, excess returns vs benchmark)
+- **Deterministic dataset builder** with timestamp “as-of” semantics
+
+See: `docs/CAUSAL_RESEARCH.md`
+
+---
+
 ## Implementation Status
 
 All milestones (M0-M7) are complete. See `PRD.md` Section 13 for detailed milestone descriptions.
