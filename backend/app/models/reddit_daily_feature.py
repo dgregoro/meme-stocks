@@ -19,9 +19,7 @@ class RedditDailyFeature(Base):
     """
 
     __tablename__ = "reddit_daily_features"
-    __table_args__ = (
-        Index("idx_reddit_daily_features_trading_day", "trading_day"),
-    )
+    __table_args__ = (Index("idx_reddit_daily_features_trading_day", "trading_day"),)
 
     symbol: Mapped[str] = mapped_column(
         String(16), ForeignKey("stocks.symbol", ondelete="CASCADE"), primary_key=True, index=True
@@ -45,4 +43,3 @@ class RedditDailyFeature(Base):
     )
 
     stock = relationship("Stock", back_populates="reddit_daily_features")
-

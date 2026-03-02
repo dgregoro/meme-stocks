@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import logging
 import threading
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
+
+from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
@@ -99,10 +101,13 @@ class SchedulerService:
                 job_repo.record_run("price_collection", now)
                 db.commit()
 
-            # Check daily analysis (run if we haven't run one today)
+            # Check daily analysis (run if we haven't run one today, in market timezone)
             last_analysis = ensure_timezone_aware(job_repo.get_last_run("daily_analysis"))
-            today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
-            if last_analysis is None or last_analysis < today_start:
+            tz = ZoneInfo(self._settings.market_timezone)
+            local_today = datetime.now(tz).date()
+            local_today_start = datetime.combine(local_today, time.min, tzinfo=tz)
+            today_start_utc = local_today_start.astimezone(timezone.utc)
+            if last_analysis is None or last_analysis < today_start_utc:
                 logger.info("Catching up on daily analysis...")
                 self._run_daily_analysis(db)
                 job_repo.record_run("daily_analysis", now)
@@ -116,10 +121,9 @@ class SchedulerService:
                 job_repo.record_run("notification_check", now)
                 db.commit()
 
-            # Reddit daily features (run once per day; catch up if not run today)
+            # Reddit daily features (run once per day; catch up if not run today, in market timezone)
             last_reddit_daily = ensure_timezone_aware(job_repo.get_last_run("reddit_daily_features"))
-            today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
-            if last_reddit_daily is None or last_reddit_daily < today_start:
+            if last_reddit_daily is None or last_reddit_daily < today_start_utc:
                 logger.info("Catching up on Reddit daily features...")
                 self._run_reddit_daily_features(db)
                 job_repo.record_run("reddit_daily_features", now)
@@ -457,6 +461,7 @@ class SchedulerService:
 
     def _run_reddit_daily_features(self, db: Session) -> dict[str, int | str]:
         """Compute and persist Reddit daily features for the configured lookback window."""
-        end_day = date.today()
+        tz = ZoneInfo(self._settings.market_timezone)
+        end_day = datetime.now(tz).date()
         start_day = end_day - timedelta(days=self._settings.reddit_daily_features_lookback_days)
         return compute_and_store_reddit_daily_features(db, start_day, end_day)

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -55,8 +55,8 @@ def test_effective_trading_day_weekend_roll_friday_after_close() -> None:
 @pytest.mark.unit
 def test_effective_trading_day_accepts_utc_naive() -> None:
     """effective_trading_day accepts UTC-naive datetime (treats as UTC)."""
-    # 21:00 UTC = 16:00 ET (EST) -> next day
-    posted_at = datetime(2026, 3, 2, 21, 0, 0, tzinfo=timezone.utc)
+    # Naive 21:00 interpreted as UTC = 16:00 ET (EST) -> next day
+    posted_at = datetime(2026, 3, 2, 21, 0, 0)  # no tzinfo
     got = effective_trading_day(posted_at, market_timezone="America/New_York", market_close_hour_local=16)
     assert got == date(2026, 3, 3)
 
@@ -107,9 +107,7 @@ def test_compute_and_store_persistence_and_upsert() -> None:
         db.commit()
 
         # Compute for range including 2026-03-02
-        stats = compute_and_store_reddit_daily_features(
-            db, date(2026, 3, 1), date(2026, 3, 5)
-        )
+        stats = compute_and_store_reddit_daily_features(db, date(2026, 3, 1), date(2026, 3, 5))
         db.commit()
         assert stats["rows_upserted"] == 1
         row = feature_repo.get("GME", date(2026, 3, 2))
@@ -119,9 +117,7 @@ def test_compute_and_store_persistence_and_upsert() -> None:
         assert row.upvote_weighted_mentions > 0
 
         # Run again (idempotent): same row updated, no duplicate
-        stats2 = compute_and_store_reddit_daily_features(
-            db, date(2026, 3, 1), date(2026, 3, 5)
-        )
+        stats2 = compute_and_store_reddit_daily_features(db, date(2026, 3, 1), date(2026, 3, 5))
         db.commit()
         assert stats2["rows_upserted"] == 1
         rows = feature_repo.list_for_day(date(2026, 3, 2))

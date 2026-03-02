@@ -91,9 +91,7 @@ def compute_and_store_reddit_daily_features(
 
     # Aggregate per (symbol, effective_trading_day)
     # Value: (mention_count, set(authors), total_upvotes, total_comments, sum(log10(upvotes+comments+1)))
-    agg: dict[tuple[str, date], tuple[int, set[str], int, int, float]] = defaultdict(
-        lambda: (0, set(), 0, 0, 0.0)
-    )
+    agg: dict[tuple[str, date], tuple[int, set[str], int, int, float]] = defaultdict(lambda: (0, set(), 0, 0, 0.0))
     for symbol, posted_at, author, upvotes, comments in rows:
         if posted_at is None:
             continue
@@ -106,7 +104,8 @@ def compute_and_store_reddit_daily_features(
             continue
         cnt, authors, tot_u, tot_c, weighted = agg[(symbol, eff)]
         cnt += 1
-        authors.add(author or "")
+        if author:
+            authors.add(author)
         tot_u += upvotes or 0
         tot_c += comments or 0
         weighted += log10((upvotes or 0) + (comments or 0) + 1)
@@ -114,7 +113,13 @@ def compute_and_store_reddit_daily_features(
 
     repo = RedditDailyFeatureRepository(db)
     rows_upserted = 0
-    for (symbol, trading_day), (mention_count, authors, total_upvotes, total_comments, upvote_weighted_mentions) in agg.items():
+    for (symbol, trading_day), (
+        mention_count,
+        authors,
+        total_upvotes,
+        total_comments,
+        upvote_weighted_mentions,
+    ) in agg.items():
         feature = RedditDailyFeature(
             symbol=symbol,
             trading_day=trading_day,

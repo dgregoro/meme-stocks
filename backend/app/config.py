@@ -41,7 +41,7 @@ class Settings(BaseSettings):
     reddit_max_age_days: int = 2  # Max age of Reddit posts to fetch
     price_history_days: int = 30  # Days of price history for analysis
 
-    # RSI (Relative Strength Index) — PLAN.md / Phase 2.3
+    # RSI (Relative Strength Index) - PLAN.md / Phase 2.3
     rsi_period: int = 14
     rsi_overbought: float = 70.0
     rsi_oversold: float = 30.0

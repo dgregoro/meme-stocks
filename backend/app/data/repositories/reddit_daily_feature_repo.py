@@ -28,9 +28,7 @@ class RedditDailyFeatureRepository:
         try:
             return self._session.execute(stmt).scalar_one_or_none()
         except SQLAlchemyError as exc:
-            raise DataAccessError(
-                f"Failed to get reddit daily feature for {symbol} @ {trading_day}"
-            ) from exc
+            raise DataAccessError(f"Failed to get reddit daily feature for {symbol} @ {trading_day}") from exc
 
     def upsert(self, feature: RedditDailyFeature) -> None:
         """Insert or update: if (symbol, trading_day) exists, update numeric fields and updated_at."""
@@ -52,9 +50,7 @@ class RedditDailyFeatureRepository:
                 f"Failed to upsert reddit daily feature for {feature.symbol} @ {feature.trading_day}"
             ) from exc
 
-    def list_for_symbol(
-        self, symbol: str, start_day: date, end_day: date
-    ) -> Sequence[RedditDailyFeature]:
+    def list_for_symbol(self, symbol: str, start_day: date, end_day: date) -> Sequence[RedditDailyFeature]:
         """Return all rows for symbol in [start_day, end_day] inclusive, ordered by trading_day."""
         stmt = (
             select(RedditDailyFeature)
@@ -80,6 +76,4 @@ class RedditDailyFeatureRepository:
         try:
             return list(self._session.execute(stmt).scalars().all())
         except SQLAlchemyError as exc:
-            raise DataAccessError(
-                f"Failed to list reddit daily features for day {trading_day}"
-            ) from exc
+            raise DataAccessError(f"Failed to list reddit daily features for day {trading_day}") from exc
