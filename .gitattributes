@@ -1,7 +1,12 @@
-# Ensure Python and text files use LF so raw view and clones are consistent
+# Ensure consistent LF line endings across OS and CI (raw view, clones, Fedora container)
+* text=auto eol=lf
 *.py text eol=lf
-*.md text eol=lf
-*.yaml text eol=lf
-*.yml text eol=lf
+*.ts text eol=lf
+*.tsx text eol=lf
+*.js text eol=lf
+*.jsx text eol=lf
 *.json text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.md text eol=lf
 *.sh text eol=lf

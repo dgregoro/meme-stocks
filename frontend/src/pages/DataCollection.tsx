@@ -19,6 +19,12 @@ export const DataCollection: React.FC = () => {
   const [autoRefresh, setAutoRefresh] = useState(true)
   const [jobsFilter, setJobsFilter] = useState<StatusFilter>('bad')
   const [staleSymbols, setStaleSymbols] = useState<StaleSymbolStatus[] | null>(null)
+  const [currentTime, setCurrentTime] = useState(() => Date.now())
+
+  useEffect(() => {
+    const id = setInterval(() => setCurrentTime(Date.now()), 1000)
+    return () => clearInterval(id)
+  }, [])
 
   const fetchStatus = () => {
     setError(null)
@@ -33,7 +39,7 @@ export const DataCollection: React.FC = () => {
   }
 
   useEffect(() => {
-    fetchStatus()
+    queueMicrotask(() => fetchStatus())
   }, [])
 
   useEffect(() => {
@@ -70,7 +76,7 @@ export const DataCollection: React.FC = () => {
   const formatRelative = (iso: string | null | undefined) => {
     if (!iso) return 'never'
     const then = new Date(iso).getTime()
-    const now = Date.now()
+    const now = currentTime
     const diffMs = Math.max(0, now - then)
     const diffMin = Math.round(diffMs / 60000)
     if (diffMin === 0) return 'just now'
