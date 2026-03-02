@@ -23,6 +23,7 @@ from .models import (  # noqa: F401
     notification,
     paper_trade,
     price_data,
+    reddit_daily_feature,
     reddit_post,
     reddit_symbol_mention,
     stock,
