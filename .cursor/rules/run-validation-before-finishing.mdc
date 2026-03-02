@@ -1,0 +1,21 @@
+---
+description: Run validation before finishing—never declare task complete without passing checks
+alwaysApply: true
+---
+
+# Run Validation Before Finishing
+
+Before declaring a task complete or describing work as done:
+
+## Required Step
+
+1. **Run validation** using one of:
+   - `./scripts/verify.sh` (preferred—runs pre-commit + pytest)
+   - `pre-commit run --all-files` and `pytest backend/tests/ -v`
+
+2. **Fix any failures** before reporting completion. Do not suggest the user verify; verify yourself.
+
+## Reporting
+
+- If validation fails: fix the issues, then re-run. Do not claim "done" until checks pass.
+- If validation passes: you may report completion with evidence (e.g., "All tests pass; pre-commit passed").

@@ -42,3 +42,18 @@ class PriceDataRepository:
             return self._session.execute(stmt).scalar_one_or_none()
         except SQLAlchemyError as exc:  # pragma: no cover
             raise DataAccessError("Failed to fetch price data for date") from exc
+
+    def list_in_date_range(self, start_date: date, end_date: date) -> Sequence[PriceData]:
+        """List all price data rows where date is in [start_date, end_date], ordered by symbol, date."""
+        stmt = (
+            select(PriceData)
+            .where(
+                PriceData.date >= start_date,
+                PriceData.date <= end_date,
+            )
+            .order_by(PriceData.stock_symbol, PriceData.date)
+        )
+        try:
+            return list(self._session.execute(stmt).scalars().all())
+        except SQLAlchemyError as exc:  # pragma: no cover
+            raise DataAccessError("Failed to list price data in date range") from exc
