@@ -145,7 +145,7 @@ jobs:
             fi
             echo 'Waiting for app to respond...'
             sleep 12
-            if ! curl -sf http://localhost:8000/health >/dev/null; then
+            if ! curl -sf http://127.0.0.1:8000/health >/dev/null; then
               echo '::error::Health check failed after deploy. Container may have crashed.'
               echo 'Container status:'
               podman inspect meme-stocks-backend --format '  Status={{.State.Status}} ExitCode={{.State.ExitCode}}' 2>/dev/null || true
