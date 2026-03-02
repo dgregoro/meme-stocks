@@ -131,4 +131,3 @@ Minimum viable research capability:
 - At least one baseline + augmented model comparison with time-based evaluation
 
 Once this foundation exists, we can iterate on richer NLP features and more advanced models.
-
