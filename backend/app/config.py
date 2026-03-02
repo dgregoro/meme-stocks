@@ -100,6 +100,12 @@ class Settings(BaseSettings):
     intraday_lock_heartbeat_seconds: int = 60
     intraday_lock_name: str = "intraday_ingestion"
 
+    # Reddit daily features (causal research): trading-day assignment and aggregation job
+    market_timezone: str = "America/New_York"
+    market_close_hour_local: int = 16  # Posts at or after this hour count toward next trading day
+    reddit_daily_features_lookback_days: int = 30
+    reddit_daily_features_job_hour: int = 17  # Run after market close
+
     @field_validator("rsi_period")
     @classmethod
     def rsi_period_at_least_two(cls, v: int) -> int:

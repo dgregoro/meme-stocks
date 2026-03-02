@@ -20,6 +20,7 @@ from backend.app.models.reddit_post import RedditPost
 from backend.app.models.stock import Stock
 from backend.app.services.intraday_ingestion_service import run_intraday_ingestion
 from backend.app.services.notification_service import generate_notifications_for_stock
+from backend.app.services.reddit_daily_feature_service import compute_and_store_reddit_daily_features
 from backend.app.services.reddit_service import RedditService
 from backend.app.services.yahoo_service import YahooFinanceService
 from backend.app.utils.errors import ExternalAPIError
@@ -115,6 +116,15 @@ class SchedulerService:
                 job_repo.record_run("notification_check", now)
                 db.commit()
 
+            # Reddit daily features (run once per day; catch up if not run today)
+            last_reddit_daily = ensure_timezone_aware(job_repo.get_last_run("reddit_daily_features"))
+            today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+            if last_reddit_daily is None or last_reddit_daily < today_start:
+                logger.info("Catching up on Reddit daily features...")
+                self._run_reddit_daily_features(db)
+                job_repo.record_run("reddit_daily_features", now)
+                db.commit()
+
         except Exception as exc:
             logger.error(f"Error during catch-up: {exc}", exc_info=True)
             db.rollback()
@@ -167,6 +177,20 @@ class SchedulerService:
                 misfire_grace_time=900,
                 next_run_time=datetime.now(timezone.utc),
             )
+
+        # Reddit daily features (once per day after market close)
+        self._scheduler.add_job(
+            self._reddit_daily_features_job,
+            trigger=CronTrigger(
+                hour=self._settings.reddit_daily_features_job_hour,
+                minute=0,
+            ),
+            id="reddit_daily_features",
+            replace_existing=True,
+            max_instances=1,
+            coalesce=True,
+            misfire_grace_time=3600,
+        )
 
     def _collect_reddit_data_job(self) -> None:
         """Scheduled job wrapper for Reddit collection."""
@@ -416,3 +440,23 @@ class SchedulerService:
             db.rollback()
         finally:
             db.close()
+
+    def _reddit_daily_features_job(self) -> None:
+        """Scheduled job: aggregate Reddit posts into daily features per (symbol, trading_day)."""
+        db = SessionLocal()
+        try:
+            self._run_reddit_daily_features(db)
+            job_repo = JobExecutionRepository(db)
+            job_repo.record_run("reddit_daily_features")
+            db.commit()
+        except Exception as exc:
+            logger.error("Error in Reddit daily features job: %s", exc, exc_info=True)
+            db.rollback()
+        finally:
+            db.close()
+
+    def _run_reddit_daily_features(self, db: Session) -> dict[str, int | str]:
+        """Compute and persist Reddit daily features for the configured lookback window."""
+        end_day = date.today()
+        start_day = end_day - timedelta(days=self._settings.reddit_daily_features_lookback_days)
+        return compute_and_store_reddit_daily_features(db, start_day, end_day)

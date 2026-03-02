@@ -30,3 +30,4 @@ class Stock(Base):
 
     # Relationships
     reddit_mentions = relationship("RedditSymbolMention", back_populates="stock")
+    reddit_daily_features = relationship("RedditDailyFeature", back_populates="stock")
