@@ -7,14 +7,16 @@ import { Stocks } from './pages/Stocks'
 import { StockDetail } from './pages/StockDetail'
 import { Notifications } from './pages/Notifications'
 import { PaperTrading } from './pages/PaperTrading'
+import { DataCollection } from './pages/DataCollection'
 
-export type Tab = 'dashboard' | 'stocks' | 'notifications' | 'paper'
+export type Tab = 'dashboard' | 'stocks' | 'notifications' | 'paper' | 'status'
 
 const NAV_SECTIONS: { id: Tab; path: string; label: string }[] = [
   { id: 'dashboard', path: '/dashboard', label: 'Dashboard' },
   { id: 'stocks', path: '/stocks', label: 'Stocks' },
   { id: 'notifications', path: '/notifications', label: 'Notifications' },
   { id: 'paper', path: '/paper', label: 'Paper Trading' },
+  { id: 'status', path: '/status', label: 'Data Collection' },
 ]
 
 const THEME_STORAGE_KEY = 'meme-stocks-theme'
@@ -77,7 +79,12 @@ export const App: React.FC = () => {
             <h1 style={{ margin: `0 0 ${spacing.md}px 0`, fontSize: '1.5rem' }}>Meme Stocks</h1>
             <nav aria-label="Main navigation" style={{ display: 'flex', gap: spacing.sm, flexWrap: 'wrap' }}>
               {NAV_SECTIONS.map(({ id, path, label }) => {
-                const isActive = id === 'stocks' ? pathname.startsWith('/stocks') : pathname === path
+                const isActive =
+                  id === 'stocks'
+                    ? pathname.startsWith('/stocks')
+                    : id === 'status'
+                    ? pathname === '/status'
+                    : pathname === path
                 return (
                   <Link
                     key={id}
@@ -116,6 +123,7 @@ export const App: React.FC = () => {
             <Route path="/stocks/:symbol" element={<StockDetail />} />
             <Route path="/notifications" element={<Notifications />} />
             <Route path="/paper" element={<PaperTrading />} />
+            <Route path="/status" element={<DataCollection />} />
           </Routes>
         )}
       </main>

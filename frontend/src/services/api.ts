@@ -102,6 +102,48 @@ export type JobRun = {
   run_at: string
 }
 
+export type JobStatus = {
+  job_id: string
+  schedule: string | null
+  last_start_utc: string | null
+  last_end_utc: string | null
+  last_success_utc: string | null
+  last_status: 'success' | 'failure' | 'running' | 'never'
+  last_error: string | null
+  duration_seconds: number | null
+}
+
+export type RedditCollectionStatus = {
+  posts_last_1h: number
+  posts_last_24h: number
+  mentions_last_1h: number
+  mentions_last_24h: number
+  newest_post_posted_at_utc: string | null
+  newest_post_collected_at_utc: string | null
+  oldest_post_collected_at_utc: string | null
+}
+
+export type PriceCollectionStatus = {
+  newest_price_date: string | null
+  price_rows_last_7d: number
+  price_rows_last_30d: number
+}
+
+export type DailyFeatureStatus = {
+  newest_trading_day: string | null
+  rows_last_7d: number
+  rows_last_30d: number
+}
+
+export type CollectionStatus = {
+  server_time_utc: string
+  market_time_local: string
+  jobs: JobStatus[]
+  reddit: RedditCollectionStatus
+  prices: PriceCollectionStatus
+  daily_features: DailyFeatureStatus
+}
+
 const client = axios.create({
   baseURL: BASE_URL,
   timeout: 10000,
@@ -142,4 +184,6 @@ export const api = {
         params: { limit },
       }),
     ),
+  getCollectionStatus: () =>
+    handle(client.get<CollectionStatus>('/api/status/collection')),
 }
