@@ -26,6 +26,12 @@ updates:
     commit-message:
       prefix: "deps(npm)"
     rebase-strategy: "auto"
+    # ESLint 10 breaks peer deps with eslint-plugin-react (no ^10 support yet)
+    ignore:
+      - dependency-name: "eslint"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@eslint/js"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "github-actions"
     directory: "/"
