@@ -102,7 +102,8 @@ class Settings(BaseSettings):
 
     # Reddit daily features (causal research): trading-day assignment and aggregation job
     market_timezone: str = "America/New_York"
-    market_close_hour_local: int = 16  # Posts at or after this hour count toward next trading day
+    market_close_hour_local: int = 16  # Local hour when market closes
+    market_close_minute_local: int = 0  # Local minute when market closes
     reddit_daily_features_lookback_days: int = 30
     reddit_daily_features_job_hour: int = 17  # Run after market close
 

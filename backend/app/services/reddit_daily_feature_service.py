@@ -7,7 +7,8 @@ from __future__ import annotations
 
 import logging
 from collections import defaultdict
-from datetime import date, datetime, timedelta, timezone
+from dataclasses import dataclass
+from datetime import date, datetime, time, timedelta, timezone
 from math import log10
 from zoneinfo import ZoneInfo
 
@@ -28,6 +29,7 @@ def effective_trading_day(
     *,
     market_timezone: str = "America/New_York",
     market_close_hour_local: int = 16,
+    market_close_minute_local: int = 0,
 ) -> date:
     """Assign a post to a trading day using posted_at, after-hours and weekend rules.
 
@@ -39,12 +41,15 @@ def effective_trading_day(
         The trading day (date) this post belongs to.
     """
     tz = ZoneInfo(market_timezone)
-    # Ensure we have a timezone-aware datetime
+    # Ensure we have a timezone-aware datetime (treat naive as UTC)
     if posted_at.tzinfo is None:
         posted_at = posted_at.replace(tzinfo=timezone.utc)
     local_dt = posted_at.astimezone(tz)
     effective = local_dt.date()
-    if local_dt.hour >= market_close_hour_local:
+
+    cutoff_local = time(hour=market_close_hour_local, minute=market_close_minute_local)
+    local_time = local_dt.timetz().replace(tzinfo=None)
+    if local_time >= cutoff_local:
         effective += timedelta(days=1)
     # Weekend: Sat (5) -> Monday (+2), Sun (6) -> Monday (+1)
     if effective.weekday() == 5:
@@ -52,6 +57,17 @@ def effective_trading_day(
     elif effective.weekday() == 6:
         effective += timedelta(days=1)
     return effective
+
+
+@dataclass
+class _DailyAggregate:
+    """In-memory aggregate for a single (symbol, trading_day)."""
+
+    post_ids: set[str]
+    authors: set[str]
+    total_upvotes: int
+    total_comments: int
+    upvote_weighted_mentions: float
 
 
 def compute_and_store_reddit_daily_features(
@@ -66,16 +82,19 @@ def compute_and_store_reddit_daily_features(
     """
     settings = get_settings()
     tz = ZoneInfo(settings.market_timezone)
-    # Query window: posts that can contribute to start_day..end_day
-    # From (start_day - 1) 00:00 local to end_day 23:59 local (inclusive)
-    window_start_local = datetime.combine(start_day - timedelta(days=1), datetime.min.time())
-    window_end_local = datetime.combine(end_day, datetime.max.time()).replace(microsecond=999999)
+    # Query window: posts that can contribute to start_day..end_day after applying
+    # after-hours + weekend rules. Use a small buffer *before* and *after* the range
+    # so that posts whose effective_trading_day falls inside [start_day, end_day]
+    # are not missed.
+    window_start_local = datetime.combine(start_day - timedelta(days=3), time.min)
+    window_end_local = datetime.combine(end_day + timedelta(days=1), time.max).replace(microsecond=999999)
     window_start_utc = window_start_local.replace(tzinfo=tz).astimezone(timezone.utc)
     window_end_utc = window_end_local.replace(tzinfo=tz).astimezone(timezone.utc)
 
     stmt = (
         select(
             RedditSymbolMention.symbol,
+            RedditSymbolMention.post_id,
             RedditPost.posted_at,
             RedditPost.author,
             RedditPost.upvotes,
@@ -90,44 +109,38 @@ def compute_and_store_reddit_daily_features(
     rows = list(db.execute(stmt).all())
 
     # Aggregate per (symbol, effective_trading_day)
-    # Value: (mention_count, set(authors), total_upvotes, total_comments, sum(log10(upvotes+comments+1)))
-    agg: dict[tuple[str, date], tuple[int, set[str], int, int, float]] = defaultdict(lambda: (0, set(), 0, 0, 0.0))
-    for symbol, posted_at, author, upvotes, comments in rows:
+    agg: dict[tuple[str, date], _DailyAggregate] = defaultdict(lambda: _DailyAggregate(set(), set(), 0, 0, 0.0))
+    for symbol, post_id, posted_at, author, upvotes, comments in rows:
         if posted_at is None:
             continue
         eff = effective_trading_day(
             posted_at,
             market_timezone=settings.market_timezone,
             market_close_hour_local=settings.market_close_hour_local,
+            market_close_minute_local=getattr(settings, "market_close_minute_local", 0),
         )
         if eff < start_day or eff > end_day:
             continue
-        cnt, authors, tot_u, tot_c, weighted = agg[(symbol, eff)]
-        cnt += 1
+        entry = agg[(symbol, eff)]
+        if post_id not in entry.post_ids:
+            entry.post_ids.add(post_id)
+            entry.total_upvotes += upvotes or 0
+            entry.total_comments += comments or 0
+            entry.upvote_weighted_mentions += log10((upvotes or 0) + (comments or 0) + 1)
         if author:
-            authors.add(author)
-        tot_u += upvotes or 0
-        tot_c += comments or 0
-        weighted += log10((upvotes or 0) + (comments or 0) + 1)
-        agg[(symbol, eff)] = (cnt, authors, tot_u, tot_c, weighted)
+            entry.authors.add(author)
 
     repo = RedditDailyFeatureRepository(db)
     rows_upserted = 0
-    for (symbol, trading_day), (
-        mention_count,
-        authors,
-        total_upvotes,
-        total_comments,
-        upvote_weighted_mentions,
-    ) in agg.items():
+    for (symbol, trading_day), entry in agg.items():
         feature = RedditDailyFeature(
             symbol=symbol,
             trading_day=trading_day,
-            mention_count=mention_count,
-            unique_authors=len(authors),
-            total_upvotes=total_upvotes,
-            total_comments=total_comments,
-            upvote_weighted_mentions=round(upvote_weighted_mentions, 6),
+            mention_count=len(entry.post_ids),
+            unique_authors=len(entry.authors),
+            total_upvotes=entry.total_upvotes,
+            total_comments=entry.total_comments,
+            upvote_weighted_mentions=round(entry.upvote_weighted_mentions, 6),
         )
         repo.upsert(feature)
         rows_upserted += 1

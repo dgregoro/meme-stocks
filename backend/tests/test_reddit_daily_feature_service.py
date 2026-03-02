@@ -126,3 +126,55 @@ def test_compute_and_store_persistence_and_upsert() -> None:
         assert rows[0].mention_count == 1
     finally:
         db.close()
+
+
+@pytest.mark.integration
+def test_friday_after_close_counts_toward_monday_effective_day() -> None:
+    """Post Friday after market close should appear in Monday trading_day aggregate."""
+    from backend.app.data.repositories.reddit_daily_feature_repo import RedditDailyFeatureRepository
+    from backend.app.data.repositories.reddit_post_repo import RedditPostRepository
+    from backend.app.data.repositories.reddit_symbol_mention_repo import RedditSymbolMentionRepository
+    from backend.app.data.repositories.stock_repo import StockRepository
+    from backend.app.models.reddit_post import RedditPost
+    from backend.app.models.reddit_symbol_mention import RedditSymbolMention
+    from backend.app.models.stock import Stock
+
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(bind=engine)
+    Session = sessionmaker(bind=engine)
+    db = Session()
+    try:
+        stock_repo = StockRepository(db)
+        post_repo = RedditPostRepository(db)
+        mention_repo = RedditSymbolMentionRepository(db)
+        feature_repo = RedditDailyFeatureRepository(db)
+
+        stock_repo.add(Stock(symbol="GME", name="GameStop", sector=None, market_cap=None))
+        db.flush()
+
+        # Friday 2026-02-27 21:30 UTC == 16:30 ET -> effective trading day Monday 2026-03-02
+        posted_at = datetime(2026, 2, 27, 21, 30, 0)
+        post = RedditPost(
+            id="post_fri",
+            subreddit="wallstreetbets",
+            title="GME after close",
+            author="u2",
+            upvotes=5,
+            comments=1,
+            url="https://reddit.com/...",
+            posted_at=posted_at,
+        )
+        post_repo.add(post)
+        mention_repo.add(RedditSymbolMention(post_id="post_fri", symbol="GME"))
+        db.commit()
+
+        # Aggregate only for Monday; Friday post should still be included via effective_trading_day logic.
+        stats = compute_and_store_reddit_daily_features(db, date(2026, 3, 2), date(2026, 3, 2))
+        db.commit()
+        assert stats["rows_upserted"] == 1
+        row = feature_repo.get("GME", date(2026, 3, 2))
+        assert row is not None
+        assert row.mention_count == 1
+        assert row.unique_authors == 1
+    finally:
+        db.close()

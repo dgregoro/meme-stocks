@@ -10,6 +10,7 @@ from sqlalchemy.pool import StaticPool
 from backend.app.main import create_app
 from backend.app.data.database import Base, get_session
 from backend.app.models.price_data import PriceData
+from backend.app.models.reddit_daily_feature import RedditDailyFeature
 from backend.app.models.reddit_post import RedditPost
 from backend.app.models.reddit_symbol_mention import RedditSymbolMention
 from backend.app.models.stock import Stock
@@ -158,3 +159,39 @@ def test_get_mentions_empty_list_for_stock_with_no_posts() -> None:
     resp = client.get("/api/stocks/XYZ/mentions")
     assert resp.status_code == 200
     assert resp.json() == []
+
+
+def test_get_reddit_daily_features_for_stock() -> None:
+    client, db = build_test_app_with_db()
+
+    stock = Stock(symbol="GME", name="GameStop", sector="Retail", market_cap=None)
+    db.add(stock)
+
+    # Two days of daily features
+    f1 = RedditDailyFeature(
+        symbol="GME",
+        trading_day=date(2026, 3, 2),
+        mention_count=3,
+        unique_authors=2,
+        total_upvotes=15,
+        total_comments=4,
+        upvote_weighted_mentions=1.23,
+    )
+    f2 = RedditDailyFeature(
+        symbol="GME",
+        trading_day=date(2026, 3, 3),
+        mention_count=1,
+        unique_authors=1,
+        total_upvotes=5,
+        total_comments=1,
+        upvote_weighted_mentions=0.7,
+    )
+    db.add_all([f1, f2])
+    db.commit()
+
+    resp = client.get("/api/stocks/GME/reddit-daily-features?start=2026-03-02&end=2026-03-03")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert isinstance(data, list)
+    assert [row["trading_day"] for row in data] == ["2026-03-02", "2026-03-03"]
+    assert data[0]["mention_count"] == 3
