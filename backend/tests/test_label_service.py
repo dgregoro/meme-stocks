@@ -38,7 +38,6 @@ def test_fwd_return_5d_computed_correctly() -> None:
     from backend.app.data.repositories.price_data_repo import PriceDataRepository
     from backend.app.data.repositories.price_label_repo import PriceLabelRepository
     from backend.app.data.repositories.stock_repo import StockRepository
-    from backend.app.models.price_data import PriceData
     from backend.app.models.stock import Stock
 
     engine = create_engine("sqlite:///:memory:")

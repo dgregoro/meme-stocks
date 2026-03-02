@@ -19,9 +19,7 @@ class PriceLabel(Base):
     """
 
     __tablename__ = "price_labels"
-    __table_args__ = (
-        Index("idx_price_labels_trading_day", "trading_day"),
-    )
+    __table_args__ = (Index("idx_price_labels_trading_day", "trading_day"),)
 
     symbol: Mapped[str] = mapped_column(
         String(16),
@@ -47,4 +45,3 @@ class PriceLabel(Base):
     )
 
     stock = relationship("Stock")
-

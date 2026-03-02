@@ -84,4 +84,3 @@ class PriceLabelRepository:
             return list(self._session.execute(stmt).scalars().all())
         except SQLAlchemyError as exc:  # pragma: no cover - defensive
             raise DataAccessError(f"Failed to list price labels for {symbol}") from exc
-
