@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     api_host: str = "127.0.0.1"
     api_port: int = 8000
     log_level: str = "INFO"
+    app_version: str = "dev"  # Set at build (APP_VERSION) for deploy health validation
     log_file: str = "logs/app.log"  # Third-party noise (yfinance, etc.) written here, not terminal
 
     database_url: str = "sqlite:///./data/app.db"

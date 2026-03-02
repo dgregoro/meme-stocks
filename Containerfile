@@ -37,6 +37,10 @@ COPY backend/ ./backend/
 # Frontend static files (from build stage)
 COPY --from=frontend-builder /build/frontend/dist ./frontend_dist
 
+# Build-time version for deploy health validation
+ARG GIT_SHA=unknown
+ENV APP_VERSION=${GIT_SHA}
+
 # Persistence: /app/data for SQLite (override with volume)
 ENV DATABASE_URL=sqlite:///./data/app.db
 

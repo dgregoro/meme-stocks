@@ -91,6 +91,8 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            GIT_SHA=${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -128,29 +130,39 @@ jobs:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
           IMAGE: ghcr.io/${{ github.repository_owner }}/meme-stocks:latest
+          EXPECTED_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
         run: |
           VPS_USER="${VPS_USER:-ec2-user}"
           echo "Connecting to VPS as ${VPS_USER}@<host> (run with SSH verbose)"
           ssh -v -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes "${VPS_USER}@${VPS_HOST}" "set -e
+            retry() { for i in 1 2 3 4 5; do \"\$@\" && return 0; sleep 1; done; return 1; }
             echo 'Pulling image...'
-            podman pull ${IMAGE}
-            echo 'Stopping existing container (if any)...'
-            podman stop meme-stocks-backend 2>/dev/null || true
-            podman rm meme-stocks-backend 2>/dev/null || true
-            echo 'Starting new container...'
+            retry podman pull ${IMAGE}
+            echo 'Starting new container (--replace stops/removes existing)...'
             if [ -f /opt/meme-stocks/.env ]; then
-              podman run -d --name meme-stocks-backend -p 8000:8000 -v meme-stocks-data:/app/data --restart unless-stopped --env-file /opt/meme-stocks/.env ${IMAGE}
+              retry podman run --replace -d --name meme-stocks-backend -p 8000:8000 -v meme-stocks-data:/app/data --restart unless-stopped --env-file /opt/meme-stocks/.env ${IMAGE}
             else
-              podman run -d --name meme-stocks-backend -p 8000:8000 -v meme-stocks-data:/app/data --restart unless-stopped ${IMAGE}
+              retry podman run --replace -d --name meme-stocks-backend -p 8000:8000 -v meme-stocks-data:/app/data --restart unless-stopped ${IMAGE}
             fi
             echo 'Waiting for app to respond...'
-            sleep 12
+            for i in \$(seq 1 30); do
+              if curl -sf http://127.0.0.1:8000/health >/dev/null; then
+                echo \"Healthy on attempt \$i\"
+                break
+              fi
+              sleep 2
+            done
             if ! curl -sf http://127.0.0.1:8000/health >/dev/null; then
               echo '::error::Health check failed after deploy. Container may have crashed.'
-              echo 'Container status:'
+              podman ps --all 2>/dev/null || true
               podman inspect meme-stocks-backend --format '  Status={{.State.Status}} ExitCode={{.State.ExitCode}}' 2>/dev/null || true
-              echo 'Last 30 log lines:'
-              podman logs meme-stocks-backend --tail 30 2>/dev/null || true
+              podman logs meme-stocks-backend --tail 200 2>/dev/null || true
               exit 1
             fi
-            echo 'Deploy done. App is healthy.'"
+            echo \"Verifying deployed version matches \${EXPECTED_SHA}\"
+            if ! curl -sf http://127.0.0.1:8000/health | grep -q \"\${EXPECTED_SHA}\"; then
+              echo '::error::Health check passed but version mismatch. Old container may still be serving.'
+              curl -sf http://127.0.0.1:8000/health || true
+              exit 1
+            fi
+            echo 'Deploy done. App is healthy and serving correct version.'"

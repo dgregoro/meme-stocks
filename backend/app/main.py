@@ -99,7 +99,12 @@ def create_app(
         invalid configuration, the whole application will fail fast.
         """
 
-        return {"status": "ok", "env": "local", "log_level": settings.log_level}
+        return {
+            "status": "ok",
+            "version": settings.app_version,
+            "env": "local",
+            "log_level": settings.log_level,
+        }
 
     # CORS
     origins = [o.strip() for o in settings.cors_allowed_origins.split(",") if o.strip()]

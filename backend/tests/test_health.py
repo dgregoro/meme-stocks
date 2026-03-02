@@ -14,5 +14,6 @@ def test_health_endpoint_returns_ok_status() -> None:
 
     payload = response.json()
     assert payload["status"] == "ok"
+    assert "version" in payload
     assert "env" in payload
     assert "log_level" in payload
