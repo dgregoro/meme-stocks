@@ -74,19 +74,22 @@ class Settings(BaseSettings):
     )
 
     # Alpaca market data (intraday minute bars)
-    # Free plan: full-market SIP is delayed; use delayed_sip (15-min delay).
-    # Do not query the last ~15 minutes when using delayed SIP on free—requests can fail.
-    # Real-time on free is IEX-only, not consolidated; we use delayed_sip for broad market.
-    alpaca_data_feed: str = "delayed_sip"
+    # REST API feed: "iex" (free) or "sip" (Algo Trader Plus $99/mo).
+    # "delayed_sip" is not valid for REST bars—use "iex" on free plan.
+    # For historical SIP without subscription, end must be at least 15 min old.
+    alpaca_data_feed: str = "iex"
     alpaca_free_plan_mode: bool = True
     alpaca_sip_delay_minutes: int = 15
     alpaca_end_time_safety_minutes: int = 20  # end = now - this (default 20 > 15 for clock skew)
     alpaca_api_key_id: str | None = None
     alpaca_api_secret_key: str | None = None
     alpaca_data_base_url: str = "https://data.alpaca.markets"
+    # 200 req/min = 1 req per 0.3s; 0.35s keeps us under. 0 = no throttle.
+    alpaca_min_request_interval_seconds: float = 0.35
     # Intraday ingestion
     intraday_ingestion_enabled: bool = False
     intraday_symbols_batch_size: int = 200
+    intraday_max_symbols_per_run: int = 500  # Cap per run; 0 = unlimited. Prevents hammering API when config is wrong.
     intraday_lookback_days: int = 30
     intraday_universe_mode: str = "tracked"  # tracked | top_liquidity | all_active (future)
     intraday_feature_store_root: str = "data/intraday"

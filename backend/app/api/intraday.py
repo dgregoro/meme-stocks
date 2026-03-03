@@ -14,7 +14,7 @@ from backend.app.data.database import get_session
 from backend.app.data.repositories.intraday_ingest_repo import IntradayIngestRepository
 from backend.app.services.intraday_ingestion_service import run_intraday_ingestion
 from backend.app.utils.api_errors import error_detail
-from backend.app.utils.errors import IngestionAlreadyRunningError
+from backend.app.utils.errors import DataAccessError, IngestionAlreadyRunningError
 
 router = APIRouter(prefix="/api/intraday", tags=["intraday"])
 
@@ -76,7 +76,10 @@ def get_intraday_status(db: Session = Depends(get_session)) -> IntradayStatusRes
         lock_repo = JobLockRepository(db)
         current_lock = lock_repo.get_lock(lock_name)
         now = datetime.now(timezone.utc)
-        if current_lock and current_lock.expires_at and current_lock.expires_at > now:
+        expires_at = current_lock.expires_at if current_lock else None
+        if expires_at is not None and expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        if current_lock and expires_at is not None and expires_at > now:
             lock_info["held"] = True
             lock_info["owner"] = current_lock.owner
             lock_info["expires_at"] = current_lock.expires_at.isoformat()
@@ -127,6 +130,18 @@ def post_intraday_run_once(db: Session = Depends(get_session)) -> RunOnceRespons
             details={"owner": e.owner, "expires_at": e.expires_at} if (e.owner or e.expires_at) else None,
         )
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail) from e
+    except DataAccessError as e:
+        msg = str(e).lower()
+        if "database is locked" in msg or "failed to acquire job lock" in msg:
+            detail = error_detail(
+                "ServiceUnavailable",
+                "Database temporarily locked (scheduler may be running); retry in a few seconds",
+                details={"retry_after_seconds": 30},
+            )
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=detail) from e
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=error_detail("DataAccessError", str(e))
+        ) from e
     db.commit()
     return RunOnceResponse(
         symbols_processed=summary["symbols_processed"],

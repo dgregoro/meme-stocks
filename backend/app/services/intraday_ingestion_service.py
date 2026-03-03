@@ -22,6 +22,22 @@ from backend.app.utils.errors import ExternalAPIError, IngestionAlreadyRunningEr
 
 logger = logging.getLogger(__name__)
 
+# Substrings in error messages that indicate systemic API/config failure (abort run, don't retry more symbols)
+_SYSTEMIC_ERROR_INDICATORS = (
+    "invalid feed",
+    "subscription does not permit",
+    "401",
+    "403",
+    "Unauthorized",
+    "Forbidden",
+)
+
+
+def _is_systemic_api_error(exc: ExternalAPIError) -> bool:
+    """True if error suggests config/auth/system issue—abort run instead of trying more symbols."""
+    msg = (str(exc) or "").lower()
+    return any(ind.lower() in msg for ind in _SYSTEMIC_ERROR_INDICATORS)
+
 
 def _parse_bar_ts(bar: dict) -> datetime | None:
     """Return UTC datetime from bar 't' field."""
@@ -72,6 +88,9 @@ def run_intraday_ingestion(
         api_key_id=settings.alpaca_api_key_id,
         api_secret_key=settings.alpaca_api_secret_key,
         base_url=settings.alpaca_data_base_url,
+        min_request_interval_seconds=(
+            mi if isinstance(mi := getattr(settings, "alpaca_min_request_interval_seconds", 0.0), (int, float)) else 0.0
+        ),
     )
     now = datetime.now(timezone.utc)
     safe_end = client.compute_safe_end_time(now)
@@ -97,6 +116,14 @@ def run_intraday_ingestion(
             "feed": settings.alpaca_data_feed,
             "free_plan_mode": settings.alpaca_free_plan_mode,
         }
+
+    max_per_run = getattr(settings, "intraday_max_symbols_per_run", 0)
+    if isinstance(max_per_run, int) and max_per_run > 0 and len(symbols) > max_per_run:
+        symbols = symbols[:max_per_run]
+        logger.info(
+            "Intraday ingestion capped to %s symbols (intraday_max_symbols_per_run)",
+            max_per_run,
+        )
 
     repo = IntradayIngestRepository(db)
     lock_repo = None
@@ -145,9 +172,13 @@ def run_intraday_ingestion(
     total_bars = 0
     errors_count = 0
     start_utc_used: datetime | None = None
+    abort_run = False
 
     try:
         for i in range(0, len(symbols), batch_size):
+            if abort_run:
+                logger.warning("Aborting intraday run due to systemic API error; skipping remaining batches")
+                break
             batch = symbols[i : i + batch_size]  # noqa: E203 (black style)
             # Compute start/end per symbol for this batch (same end for all: safe_end)
             symbol_starts: dict[str, datetime] = {}
@@ -195,6 +226,12 @@ def run_intraday_ingestion(
                     for sym in batch_list:
                         repo.mark_error(sym, str(e))
                         errors_count += 1
+                    if _is_systemic_api_error(e):
+                        abort_run = True
+                        logger.error(
+                            "Systemic API error detected (config/auth/feed); aborting run to avoid hammering %s symbols",
+                            len(symbols) - (i + len(batch)),
+                        )
                     break
 
                 if not bars_page:

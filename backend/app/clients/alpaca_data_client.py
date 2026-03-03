@@ -3,6 +3,10 @@
 On the Alpaca free plan, full-market SIP is 15-minute delayed. Querying the last
 ~15 minutes can fail. This module provides a single authoritative helper so all
 callers use a safe end time (now - safety_minutes) when free_plan_mode is True.
+
+Rate limits: Alpaca allows 200 requests/minute. We support:
+- Proactive throttle: min_request_interval_seconds between requests (0 = disabled).
+- On 429: honor Retry-After or X-RateLimit-Reset; fall back to exponential backoff.
 """
 
 from __future__ import annotations
@@ -10,7 +14,7 @@ from __future__ import annotations
 import logging
 import random
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import requests
@@ -23,6 +27,37 @@ logger = logging.getLogger(__name__)
 ALPACA_MAX_RETRIES = 6
 ALPACA_BASE_DELAY = 1.0
 ALPACA_MAX_DELAY = 120.0
+
+
+def _parse_429_delay(resp: requests.Response) -> float | None:
+    """Parse Retry-After or X-RateLimit-Reset from 429 response. Returns seconds to wait, or None."""
+    retry_after = resp.headers.get("Retry-After")
+    if retry_after is not None:
+        try:
+            secs = int(retry_after)
+            if secs > 0:
+                return min(float(secs), ALPACA_MAX_DELAY)
+        except ValueError:
+            pass
+        try:
+            from email.utils import parsedate_to_datetime
+
+            dt = parsedate_to_datetime(retry_after)
+            delta = (dt - datetime.now(timezone.utc)).total_seconds()
+            if delta > 0:
+                return min(delta, ALPACA_MAX_DELAY)
+        except (ValueError, TypeError, ImportError):
+            pass
+    reset = resp.headers.get("X-RateLimit-Reset")
+    if reset is not None:
+        try:
+            reset_ts = float(reset)
+            delta = reset_ts - time.time()
+            if delta > 0:
+                return min(delta, ALPACA_MAX_DELAY)
+        except (ValueError, TypeError):
+            pass
+    return None
 
 
 def compute_safe_end_time(
@@ -53,10 +88,11 @@ class AlpacaDataClient:
         *,
         free_plan_mode: bool = True,
         end_time_safety_minutes: int = 20,
-        feed: str = "delayed_sip",
+        feed: str = "iex",
         api_key_id: str | None = None,
         api_secret_key: str | None = None,
         base_url: str = "https://data.alpaca.markets",
+        min_request_interval_seconds: float = 0.0,
     ) -> None:
         self._free_plan_mode = free_plan_mode
         self._end_time_safety_minutes = end_time_safety_minutes
@@ -64,6 +100,8 @@ class AlpacaDataClient:
         self._api_key_id = api_key_id
         self._api_secret_key = api_secret_key
         self._base_url = base_url.rstrip("/")
+        self._min_interval = max(0.0, min_request_interval_seconds)
+        self._last_request_time: float = 0.0
 
     def compute_safe_end_time(self, now_utc: datetime) -> datetime:
         """Return the safe end time for a request from this client's config."""
@@ -148,9 +186,17 @@ class AlpacaDataClient:
             headers["APCA-API-SECRET-KEY"] = self._api_secret_key
 
         last_exc: Exception | None = None
+        resp: requests.Response | None = None
         for attempt in range(ALPACA_MAX_RETRIES):
+            if self._min_interval > 0:
+                elapsed = time.time() - self._last_request_time
+                if elapsed < self._min_interval:
+                    time.sleep(self._min_interval - elapsed)
+
             try:
                 resp = requests.get(url, params=params, headers=headers or None, timeout=60)
+                self._last_request_time = time.time()
+
                 if resp.status_code == 200:
                     data = resp.json()
                     bars = data.get("bars", {})
@@ -163,13 +209,18 @@ class AlpacaDataClient:
                 else:
                     raise ExternalAPIError(f"Alpaca bars request failed: {resp.status_code} body={resp.text[:500]}")
             except requests.RequestException as e:
+                self._last_request_time = time.time()
                 last_exc = ExternalAPIError(f"Alpaca request failed: {e}")
 
             if attempt < ALPACA_MAX_RETRIES - 1:
-                delay = min(
-                    ALPACA_BASE_DELAY * (2**attempt) + random.uniform(0, 1),  # nosec B311
-                    ALPACA_MAX_DELAY,
-                )
+                delay = None
+                if resp is not None and resp.status_code == 429:
+                    delay = _parse_429_delay(resp)
+                if delay is None:
+                    delay = min(
+                        ALPACA_BASE_DELAY * (2**attempt) + random.uniform(0, 1),  # nosec B311
+                        ALPACA_MAX_DELAY,
+                    )
                 logger.warning(
                     "Alpaca bars request failed (attempt %s/%s), retrying in %.1fs: %s",
                     attempt + 1,

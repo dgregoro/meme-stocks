@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from .config import get_settings
-from .data.database import init_db
+from .data.database import SessionLocal, init_db
 from .utils.logging_config import configure_logging
 
 # Import all models so SQLAlchemy knows about them for schema creation
@@ -53,6 +53,22 @@ def _make_lifespan(
         # Startup
         configure_logging()  # Redirect yfinance/pandas noise to log file, not terminal
         init_db()
+        # Clear stale job locks: after restart, no process holds them; DB row may still exist
+        settings = get_settings()
+        lock_name = getattr(settings, "intraday_lock_name", "intraday_ingestion")
+        db = SessionLocal()
+        try:
+            from backend.app.data.repositories.job_lock_repo import JobLockRepository
+
+            repo = JobLockRepository(db)
+            n = repo.clear_lock_by_name(lock_name)
+            db.commit()
+            if n:
+                import logging
+
+                logging.getLogger(__name__).info("Cleared stale job lock %s on startup (process restarted)", lock_name)
+        finally:
+            db.close()
         if omit_scheduler:
             scheduler = None
         elif scheduler_for_testing is not None:

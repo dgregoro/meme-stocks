@@ -20,7 +20,7 @@ def test_fetch_bars_page_returns_bars_and_next_token() -> None:
     client = AlpacaDataClient(
         free_plan_mode=True,
         end_time_safety_minutes=20,
-        feed="delayed_sip",
+        feed="iex",
         api_key_id="key",
         api_secret_key="secret",
     )
@@ -51,7 +51,7 @@ def test_fetch_bars_page_returns_bars_and_next_token() -> None:
             start=start,
             end=end,
             timeframe="1Min",
-            feed="delayed_sip",
+            feed="iex",
             page_token=None,
         )
         assert "AAPL" in bars
@@ -60,7 +60,7 @@ def test_fetch_bars_page_returns_bars_and_next_token() -> None:
         assert token is None
         call_args = mock_get.call_args
         assert call_args[1]["params"]["symbols"] == "AAPL"
-        assert call_args[1]["params"]["feed"] == "delayed_sip"
+        assert call_args[1]["params"]["feed"] == "iex"
         assert call_args[1]["params"]["limit"] == 10000
 
 
@@ -70,7 +70,7 @@ def test_fetch_bars_page_paging_continues_until_no_token() -> None:
     client = AlpacaDataClient(
         free_plan_mode=True,
         end_time_safety_minutes=20,
-        feed="delayed_sip",
+        feed="iex",
         api_key_id="k",
         api_secret_key="s",
     )
@@ -114,7 +114,7 @@ def test_fetch_bars_page_429_triggers_retry_then_raises() -> None:
     client = AlpacaDataClient(
         free_plan_mode=True,
         end_time_safety_minutes=20,
-        feed="delayed_sip",
+        feed="iex",
         api_key_id="k",
         api_secret_key="s",
     )
@@ -140,12 +140,49 @@ def test_fetch_bars_page_429_triggers_retry_then_raises() -> None:
 
 
 @pytest.mark.unit
+def test_fetch_bars_page_429_honors_retry_after_header() -> None:
+    """On 429 with Retry-After header, client uses that delay before retry."""
+    client = AlpacaDataClient(
+        free_plan_mode=True,
+        end_time_safety_minutes=20,
+        feed="iex",
+        api_key_id="k",
+        api_secret_key="s",
+    )
+    start = datetime(2026, 3, 1, 9, 30, 0, tzinfo=timezone.utc)
+    end = datetime(2026, 3, 1, 11, 30, 0, tzinfo=timezone.utc)
+
+    with patch.object(requests, "get") as mock_get:
+        resp_429 = type("R429", (), {"status_code": 429, "headers": {"Retry-After": "5"}, "text": "rate limited"})()
+        resp_200 = type(
+            "R200",
+            (),
+            {"status_code": 200, "json": lambda self=None: {"bars": {"AAPL": []}, "next_page_token": None}},
+        )()
+        mock_get.side_effect = [resp_429, resp_200]
+
+        with patch("backend.app.clients.alpaca_data_client.time.sleep") as mock_sleep:
+            bars, token = client.fetch_bars_page(
+                symbols=["AAPL"],
+                start=start,
+                end=end,
+                page_token=None,
+            )
+            assert token is None
+            assert mock_get.call_count == 2
+            # First sleep should be ~5s (Retry-After), not exponential backoff
+            calls = mock_sleep.call_args_list
+            assert len(calls) >= 1
+            assert calls[0][0][0] >= 4.9  # Retry-After 5
+
+
+@pytest.mark.unit
 def test_safe_end_time_used_when_free_plan_mode() -> None:
     """When free_plan_mode is True, request end param is clamped to safe end."""
     client = AlpacaDataClient(
         free_plan_mode=True,
         end_time_safety_minutes=20,
-        feed="delayed_sip",
+        feed="iex",
         api_key_id="k",
         api_secret_key="s",
     )
