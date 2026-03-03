@@ -209,4 +209,4 @@ def test_record_run_truncates_long_summary(db_session: Session) -> None:
     )
     db_session.commit()
     assert len(history.summary or "") == 240
-    assert history.summary.endswith("…")
+    assert history.summary is not None and history.summary.endswith("…")
