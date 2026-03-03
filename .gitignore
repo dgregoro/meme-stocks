@@ -27,6 +27,9 @@ venv/
 .env/
 .env.*/
 
+# Env files (secrets - do not commit)
+.env
+
 # Data & logs
 /data/
 logs/
