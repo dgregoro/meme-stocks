@@ -1,7 +1,8 @@
 """Compute and store forward-return labels from PriceData.
 
-Labels use strictly future prices: fwd_return = close[D+h] / close[D] - 1.
-No look-ahead: label exists only when both close[D] and close[D+h] exist in PriceData.
+Labels use strictly future prices: fwd_return = close[target] / close[D] - 1.
+Horizon h is in trading days (sessions), not calendar days.
+No look-ahead: label exists only when both close[D] and close[target] exist in PriceData.
 """
 
 from __future__ import annotations
@@ -26,14 +27,15 @@ def compute_and_store_forward_returns(
 ) -> dict[str, int | str]:
     """Compute forward returns for [start_day, end_day] and persist to price_labels.
 
-    Algorithm:
-    - Query PriceData for [start_day .. end_day + max(horizons)]
-    - For each symbol, build date -> close mapping
-    - For each trading_day in [start_day, end_day], for each horizon h:
-      - If close[D] and close[D+h] exist: fwd_return = close[D+h]/close[D] - 1
-      - Upsert into price_labels (caller commits)
+    Horizon h is in trading days (sessions), not calendar days.
 
-    Missing dates are skipped (no interpolation).
+    Algorithm per symbol:
+    - Collect sorted trading dates from PriceData
+    - For each D in [start_day, end_day] that exists, for each horizon h:
+      - target = (h)-th next trading session
+      - If target exists: fwd_return = close[target]/close[D] - 1, upsert
+
+    Missing dates / insufficient future data are skipped (no interpolation).
     """
     if horizons is None:
         horizons = [1, 5, 10]
@@ -46,7 +48,8 @@ def compute_and_store_forward_returns(
         }
 
     max_h = max(horizons)
-    buf_end = end_day + timedelta(days=max_h)
+    # Buffer to fetch enough future data (account for weekends/holidays)
+    buf_end = end_day + timedelta(days=max_h * 3)
 
     price_repo = PriceDataRepository(db)
     label_repo = PriceLabelRepository(db)
@@ -60,16 +63,24 @@ def compute_and_store_forward_returns(
 
     rows_upserted = 0
     for symbol, date_to_close in by_symbol.items():
-        for d in date_to_close:
+        dates = sorted(date_to_close.keys())
+        idx = {d: i for i, d in enumerate(dates)}
+        for d in dates:
             if d < start_day or d > end_day:
                 continue
             close_d = date_to_close.get(d)
             if close_d is None or close_d == 0:
                 continue
             for h in horizons:
-                target = d + timedelta(days=h)
+                i = idx.get(d)
+                if i is None:
+                    continue
+                j = i + h
+                if j >= len(dates):
+                    continue
+                target = dates[j]
                 close_target = date_to_close.get(target)
-                if close_target is None:
+                if close_target is None or close_target == 0:
                     continue
                 fwd_return = (close_target / close_d) - 1.0
                 label_repo.upsert(symbol, d, h, fwd_return)

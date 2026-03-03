@@ -27,7 +27,7 @@ This is the implemented “product” behavior:
 
 This track can be heuristic-driven and does not require formal training pipelines.
 
-### B) Causal / Predictive Research Track (Planned)
+### B) Causal / Predictive Research Track (Implemented)
 
 Goal: build leakage-safe datasets and run time-series experiments that answer:
 
@@ -35,11 +35,12 @@ Goal: build leakage-safe datasets and run time-series experiments that answer:
 - Is the relationship robust after controls (market/sector/volatility/volume)?
 - Is the directionality reversed (price → mentions)?
 
-This work requires:
+Implemented:
 
-- **Daily aggregated Reddit features per symbol** (mentions, unique authors, engagement, sentiment)
-- **Forward-return labels** (e.g., 1d/5d/10d returns, excess returns vs benchmark)
-- **Deterministic dataset builder** with timestamp “as-of” semantics
+- **Daily aggregated Reddit features per symbol** — `RedditDailyFeature`, `reddit_daily_feature_service`
+- **Forward-return labels** — `PriceLabel`, horizons 1/5/10, `label_service`
+- **Deterministic dataset builder** — `dataset_builder_service`, metadata sidecar, CLI `build-dataset`
+- **Experiment runners** — directionality, event-study, predictiveness (CLI `experiment`)
 
 See: `docs/CAUSAL_RESEARCH.md`
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import json
 import os
 import tempfile
 from datetime import date
@@ -73,10 +74,14 @@ def test_build_training_dataset_join_features_and_labels() -> None:
         )
         db.flush()
 
-        # PriceData for GME on 2026-02-02 and 2026-02-07 (5 calendar days later)
+        # PriceData: trading days Mon 2..Fri 6, Mon 9 (weekend omitted; horizon=5 uses 5th session)
         price_repo = PriceDataRepository(db)
         price_repo.add(_make_price("GME", date(2026, 2, 2), 100.0, 5000))
-        price_repo.add(_make_price("GME", date(2026, 2, 7), 105.0, 6000))
+        price_repo.add(_make_price("GME", date(2026, 2, 3), 101.0, 5100))
+        price_repo.add(_make_price("GME", date(2026, 2, 4), 102.0, 5200))
+        price_repo.add(_make_price("GME", date(2026, 2, 5), 103.0, 5300))
+        price_repo.add(_make_price("GME", date(2026, 2, 6), 104.0, 5400))
+        price_repo.add(_make_price("GME", date(2026, 2, 9), 105.0, 6000))
         db.commit()
 
         # Generate labels
@@ -114,7 +119,18 @@ def test_build_training_dataset_join_features_and_labels() -> None:
             assert r["volume"] == "5000"
             # fwd_return = 105/100 - 1 = 0.05
             assert abs(float(r["y_fwd_return_5"]) - 0.05) < 1e-9
+            assert "metadata_path" in stats
+            meta_path = stats["metadata_path"]
+            assert os.path.exists(meta_path)
+            with open(meta_path, encoding="utf-8") as mf:
+                meta = json.load(mf)
+            assert meta["start_day"] == "2026-02-02"
+            assert meta["end_day"] == "2026-02-02"
+            assert meta["horizon_days"] == 5
         finally:
             os.unlink(out_path)
+            meta_path = out_path + ".meta.json"
+            if os.path.exists(meta_path):
+                os.unlink(meta_path)
     finally:
         db.close()
