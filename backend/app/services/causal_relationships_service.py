@@ -144,9 +144,7 @@ def _placebo_metrics(
     sentiment_shuf = pd.Series(sentiment_shuf, index=sentiment.index)
 
     pred_results = _predictive_metrics(mentions_shuf, sentiment_shuf, returns, max_lag, n_splits)
-    return [
-        PlaceboResult(m.metric, m.value) for m in pred_results
-    ]
+    return [PlaceboResult(m.metric, m.value) for m in pred_results]
 
 
 def run_causal_analysis(

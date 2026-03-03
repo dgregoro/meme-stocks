@@ -7,7 +7,6 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
@@ -77,9 +76,9 @@ def test_build_dataset_insufficient_too_few_buckets(tmp_path: Path) -> None:
         mock.return_value.causal_min_buckets_1h = 20
 
         result = build_dataset(
-        "AAPL",
-        datetime(2026, 1, 15, 9, 0, tzinfo=timezone.utc),
-        datetime(2026, 1, 15, 18, 0, tzinfo=timezone.utc),
+            "AAPL",
+            datetime(2026, 1, 15, 9, 0, tzinfo=timezone.utc),
+            datetime(2026, 1, 15, 18, 0, tzinfo=timezone.utc),
             "1h",
             posts=[],
             parquet_root=str(tmp_path),

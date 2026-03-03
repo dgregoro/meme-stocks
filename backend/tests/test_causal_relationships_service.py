@@ -3,14 +3,12 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from types import SimpleNamespace
-from unittest.mock import patch
 
 import numpy as np
 import pandas as pd
 import pytest
 
-from backend.app.services.causal_dataset_builder import CausalDataset, InsufficientDataResult, build_dataset
+from backend.app.services.causal_dataset_builder import CausalDataset, InsufficientDataResult
 from backend.app.services.causal_relationships_service import run_causal_analysis
 
 
@@ -28,12 +26,14 @@ def _make_dataset(n: int = 100, mention_leading: bool = True) -> CausalDataset:
         mentions = pd.Series(np.random.randint(0, 5, n), index=index)
     sentiment = pd.Series(np.random.uniform(-0.5, 0.5, n), index=index)
     price_close = 100 * np.exp(returns.cumsum())
-    df = pd.DataFrame({
-        "mentions": mentions,
-        "sentiment_mean": sentiment,
-        "price_close": price_close,
-        "returns": returns,
-    })
+    df = pd.DataFrame(
+        {
+            "mentions": mentions,
+            "sentiment_mean": sentiment,
+            "price_close": price_close,
+            "returns": returns,
+        }
+    )
     return CausalDataset(
         df=df,
         symbol="TEST",

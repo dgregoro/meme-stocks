@@ -8,7 +8,7 @@ collected_at falls inside that bucket.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from math import exp, log10
 from typing import Literal
 

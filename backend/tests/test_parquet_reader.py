@@ -5,7 +5,6 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
 
-import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
@@ -51,7 +50,9 @@ def _write_test_parquet(path: Path, rows: list[tuple]) -> None:
 @pytest.mark.unit
 def test_read_bars_empty_when_no_dir(tmp_path: Path) -> None:
     """Reading when root/bars does not exist returns empty df."""
-    result = read_bars(str(tmp_path), "AAPL", datetime(2026, 1, 1, tzinfo=timezone.utc), datetime(2026, 1, 2, tzinfo=timezone.utc))
+    result = read_bars(
+        str(tmp_path), "AAPL", datetime(2026, 1, 1, tzinfo=timezone.utc), datetime(2026, 1, 2, tzinfo=timezone.utc)
+    )
     assert result.empty
     assert list(result.columns) == ["ts", "c", "v"]
 
@@ -60,7 +61,9 @@ def test_read_bars_empty_when_no_dir(tmp_path: Path) -> None:
 def test_read_bars_empty_when_no_symbol(tmp_path: Path) -> None:
     """Reading when symbol dir does not exist returns empty df."""
     (tmp_path / "bars").mkdir()
-    result = read_bars(str(tmp_path), "AAPL", datetime(2026, 1, 1, tzinfo=timezone.utc), datetime(2026, 1, 2, tzinfo=timezone.utc))
+    result = read_bars(
+        str(tmp_path), "AAPL", datetime(2026, 1, 1, tzinfo=timezone.utc), datetime(2026, 1, 2, tzinfo=timezone.utc)
+    )
     assert result.empty
 
 
