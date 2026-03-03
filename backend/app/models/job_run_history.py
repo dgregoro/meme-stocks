@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, Integer, String
+from sqlalchemy import Boolean, DateTime, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.app.data.database import Base
@@ -18,3 +18,5 @@ class JobRunHistory(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     job_name: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     run_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    success: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    error_message: Mapped[str | None] = mapped_column(String(500), nullable=True)

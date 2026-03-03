@@ -62,6 +62,22 @@ class SchedulerService:
         self._scheduler.shutdown()
         logger.info("Scheduler stopped")
 
+    def _record_job_failure(self, job_name: str, exc: BaseException) -> None:
+        """Record a failed run in a separate session so rollback does not affect it."""
+        db = SessionLocal()
+        try:
+            job_repo = JobExecutionRepository(db)
+            job_repo.record_run(
+                job_name,
+                success=False,
+                error_message=str(exc)[:500],
+            )
+            db.commit()
+        except Exception as record_exc:
+            logger.warning("Failed to record job failure for %s: %s", job_name, record_exc)
+        finally:
+            db.close()
+
     def _run_catch_up_guarded(self) -> None:
         """Run catch-up in a background thread; log and swallow exceptions."""
         try:
@@ -202,11 +218,12 @@ class SchedulerService:
         try:
             self._collect_reddit_data(db)  # Stats logged but not used in scheduled job
             job_repo = JobExecutionRepository(db)
-            job_repo.record_run("reddit_collection")
+            job_repo.record_run("reddit_collection", success=True)
             db.commit()
         except Exception as exc:
             logger.error(f"Error in Reddit collection job: {exc}", exc_info=True)
             db.rollback()
+            self._record_job_failure("reddit_collection", exc)
         finally:
             db.close()
 
@@ -324,11 +341,12 @@ class SchedulerService:
         try:
             self._collect_price_data(db)
             job_repo = JobExecutionRepository(db)
-            job_repo.record_run("price_collection")
+            job_repo.record_run("price_collection", success=True)
             db.commit()
         except Exception as exc:
             logger.error(f"Error in price collection job: {exc}", exc_info=True)
             db.rollback()
+            self._record_job_failure("price_collection", exc)
         finally:
             db.close()
 
@@ -378,11 +396,12 @@ class SchedulerService:
         try:
             self._run_daily_analysis(db)
             job_repo = JobExecutionRepository(db)
-            job_repo.record_run("daily_analysis")
+            job_repo.record_run("daily_analysis", success=True)
             db.commit()
         except Exception as exc:
             logger.error(f"Error in daily analysis job: {exc}", exc_info=True)
             db.rollback()
+            self._record_job_failure("daily_analysis", exc)
         finally:
             db.close()
 
@@ -399,11 +418,12 @@ class SchedulerService:
         try:
             self._check_notifications(db)
             job_repo = JobExecutionRepository(db)
-            job_repo.record_run("notification_check")
+            job_repo.record_run("notification_check", success=True)
             db.commit()
         except Exception as exc:
             logger.error(f"Error in notification check job: {exc}", exc_info=True)
             db.rollback()
+            self._record_job_failure("notification_check", exc)
         finally:
             db.close()
 
@@ -430,7 +450,7 @@ class SchedulerService:
         try:
             summary = run_intraday_ingestion(db, universe=None)
             job_repo = JobExecutionRepository(db)
-            job_repo.record_run("intraday_ingestion")
+            job_repo.record_run("intraday_ingestion", success=True)
             db.commit()
             logger.info(
                 "Intraday ingestion job: bars_written=%s errors=%s symbols=%s safe_end=%s",
@@ -442,6 +462,7 @@ class SchedulerService:
         except Exception as exc:
             logger.error("Error in intraday ingestion job: %s", exc, exc_info=True)
             db.rollback()
+            self._record_job_failure("intraday_ingestion", exc)
         finally:
             db.close()
 
@@ -451,11 +472,12 @@ class SchedulerService:
         try:
             self._run_reddit_daily_features(db)
             job_repo = JobExecutionRepository(db)
-            job_repo.record_run("reddit_daily_features")
+            job_repo.record_run("reddit_daily_features", success=True)
             db.commit()
         except Exception as exc:
             logger.error("Error in Reddit daily features job: %s", exc, exc_info=True)
             db.rollback()
+            self._record_job_failure("reddit_daily_features", exc)
         finally:
             db.close()
 

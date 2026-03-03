@@ -84,6 +84,33 @@ def _migrate_paper_trades_add_option_columns() -> None:
         )
 
 
+def _migrate_job_run_history_add_success_columns() -> None:
+    """Add success and error_message to job_run_history if they do not exist."""
+    import sqlite3
+
+    if ":memory:" in _db_url or "sqlite" not in _db_url.lower():
+        return
+    path = _db_url.replace("sqlite:///", "", 1).split("?")[0].strip()
+    if not path or path == ":memory:":
+        return
+    path = os.path.abspath(path)
+    try:
+        conn = sqlite3.connect(path)
+        cur = conn.execute("PRAGMA table_info(job_run_history)")
+        columns = {row[1] for row in cur.fetchall()}
+        conn.close()
+        with engine.begin() as c:
+            if "success" not in columns:
+                c.execute(text("ALTER TABLE job_run_history ADD COLUMN success BOOLEAN NOT NULL DEFAULT 1"))
+            if "error_message" not in columns:
+                c.execute(text("ALTER TABLE job_run_history ADD COLUMN error_message VARCHAR(500)"))
+    except Exception as exc:
+        logger.warning(
+            "Migration job_run_history success columns failed: %s",
+            exc,
+        )
+
+
 def _migrate_drop_reddit_posts_stock_symbol() -> None:
     """Drop legacy stock_symbol column from reddit_posts if it exists.
 
@@ -116,5 +143,6 @@ def _migrate_drop_reddit_posts_stock_symbol() -> None:
 def init_db() -> None:
     """Initialize database schema if missing (development convenience)."""
     Base.metadata.create_all(bind=engine)
+    _migrate_job_run_history_add_success_columns()
     _migrate_drop_reddit_posts_stock_symbol()
     _migrate_paper_trades_add_option_columns()
