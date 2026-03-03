@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import csv
+import json
 import logging
-from datetime import date
+import os
+import subprocess
+from datetime import date, datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from sqlalchemy import and_, select
 from sqlalchemy.orm import Session
@@ -21,6 +24,23 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _get_git_sha() -> str | None:
+    """Return short git SHA if available, else None."""
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            cwd=Path(__file__).resolve().parents[3],
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip()
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        pass
+    return os.environ.get("GIT_SHA")
+
+
 def build_training_dataset(
     db: Session,
     start_day: date,
@@ -29,7 +49,8 @@ def build_training_dataset(
     horizon_days: int = 5,
     symbols: list[str] | None = None,
     output_path: str,
-    format: str = "csv",
+    format: Literal["csv", "parquet"] = "csv",
+    dataset_version: str | None = None,
 ) -> dict[str, int | str]:
     """Join reddit_daily_features and price_labels; write deterministic snapshot.
 
@@ -40,7 +61,13 @@ def build_training_dataset(
     total_comments, upvote_weighted_mentions, close, volume, y_fwd_return_{horizon_days}
 
     Sorted by trading_day asc, symbol asc.
+    Writes metadata sidecar JSON with start_day, end_day, horizon_days, symbols filter,
+    git sha, generation timestamp.
     """
+    if dataset_version is None:
+        git_sha = _get_git_sha()
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        dataset_version = f"{git_sha or 'nogit'}_{today}"
     # Build join: RedditDailyFeature INNER JOIN PriceLabel ON (symbol, trading_day) AND horizon_days
     # Optional LEFT JOIN PriceData for same-day close, volume
     stmt = (
@@ -99,6 +126,20 @@ def build_training_dataset(
     out = Path(output_path)
     out.parent.mkdir(parents=True, exist_ok=True)
 
+    # Write metadata sidecar JSON
+    metadata = {
+        "start_day": str(start_day),
+        "end_day": str(end_day),
+        "horizon_days": horizon_days,
+        "symbols_filter": symbols,
+        "git_sha": _get_git_sha(),
+        "generation_timestamp_utc": datetime.now(timezone.utc).isoformat(),
+        "dataset_version": dataset_version,
+    }
+    metadata_path = out.with_suffix(out.suffix + ".meta.json")
+    with open(metadata_path, "w", encoding="utf-8") as f:
+        json.dump(metadata, f, indent=2)
+
     if format.lower() == "parquet":
         _write_parquet(headers, rows, label_col, str(out))
     else:
@@ -118,6 +159,8 @@ def build_training_dataset(
         "horizon_days": horizon_days,
         "rows_written": len(rows),
         "output_path": output_path,
+        "dataset_version": dataset_version,
+        "metadata_path": str(metadata_path),
     }
 
 

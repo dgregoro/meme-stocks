@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import json
 import os
 import tempfile
 from datetime import date
@@ -114,7 +115,18 @@ def test_build_training_dataset_join_features_and_labels() -> None:
             assert r["volume"] == "5000"
             # fwd_return = 105/100 - 1 = 0.05
             assert abs(float(r["y_fwd_return_5"]) - 0.05) < 1e-9
+            assert "metadata_path" in stats
+            meta_path = stats["metadata_path"]
+            assert os.path.exists(meta_path)
+            with open(meta_path, encoding="utf-8") as mf:
+                meta = json.load(mf)
+            assert meta["start_day"] == "2026-02-02"
+            assert meta["end_day"] == "2026-02-02"
+            assert meta["horizon_days"] == 5
         finally:
             os.unlink(out_path)
+            meta_path = out_path + ".meta.json"
+            if os.path.exists(meta_path):
+                os.unlink(meta_path)
     finally:
         db.close()
