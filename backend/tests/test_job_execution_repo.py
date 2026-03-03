@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Generator
 
 import pytest
@@ -79,6 +79,7 @@ def test_list_recent_runs_all_jobs(db_session: Session) -> None:
     repo = JobExecutionRepository(db_session)
     runs = repo.list_recent_runs(job_name=None, limit=10)
     assert len(runs) == 3
+
     # SQLite may return naive datetimes; compare timestamps
     def _ts(dt: datetime) -> float:
         d = dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt
@@ -118,3 +119,20 @@ def test_record_run_with_success_and_error(db_session: Session) -> None:
     assert len(runs) == 1
     assert runs[0].success is False
     assert runs[0].error_message == "oops"
+
+
+def test_one_run_produces_one_history_row(db_session: Session) -> None:
+    """One successful job execution produces exactly one JobRunHistory row (no duplicates)."""
+    repo = JobExecutionRepository(db_session)
+    t0 = datetime(2026, 3, 1, 10, 0, 0, tzinfo=timezone.utc)
+    repo.record_run(
+        "reddit_collection",
+        run_at=t0,
+        success=True,
+        started_at=t0 - timedelta(seconds=5),
+        duration_seconds=5.0,
+    )
+    db_session.commit()
+
+    runs = repo.list_recent_runs(job_name="reddit_collection", limit=10)
+    assert len(runs) == 1
