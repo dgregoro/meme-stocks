@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 import threading
 from datetime import date, datetime, time, timedelta, timezone
 
@@ -21,6 +22,12 @@ from backend.app.models.price_data import PriceData
 from backend.app.models.reddit_post import RedditPost
 from backend.app.models.stock import Stock
 from backend.app.services.intraday_ingestion_service import run_intraday_ingestion
+from backend.app.services.job_metrics import (
+    REDDIT_POSTS_FETCHED,
+    REDDIT_POSTS_INSERTED,
+    REDDIT_STOCKS_CREATED,
+    REDDIT_SYMBOLS_MENTIONED,
+)
 from backend.app.services.notification_service import generate_notifications_for_stock
 from backend.app.services.reddit_daily_feature_service import compute_and_store_reddit_daily_features
 from backend.app.services.reddit_service import RedditService
@@ -70,19 +77,26 @@ class SchedulerService:
         started_at: datetime | None = None,
         finished_at: datetime | None = None,
         duration_seconds: float | None = None,
+        summary: str | None = None,
+        metrics: dict[str, object] | None = None,
     ) -> None:
         """Record a failed run in a separate session so rollback does not affect it."""
         db = SessionLocal()
         try:
             job_repo = JobExecutionRepository(db)
             run_at = finished_at or datetime.now(timezone.utc)
+            err_msg = str(exc)[:500]
+            summary_val = summary or f"failed: {err_msg[:100]}"
+            metrics_val = metrics or {"error_truncated": err_msg[:200]}
             job_repo.record_run(
                 job_name,
                 run_at=run_at,
                 success=False,
-                error_message=str(exc)[:500],
+                error_message=err_msg,
                 started_at=started_at,
                 duration_seconds=duration_seconds,
+                summary=summary_val,
+                metrics=metrics_val,
             )
             db.commit()
         except Exception as record_exc:
@@ -123,14 +137,29 @@ class SchedulerService:
             if last_reddit is None or (now - last_reddit).total_seconds() > 3600:
                 logger.info("Catching up on Reddit collection...")
                 started = datetime.now(timezone.utc)
-                self._collect_reddit_data(db)  # Stats logged but not used in catch-up
+                stats = self._collect_reddit_data(db)
                 finished = datetime.now(timezone.utc)
+                posts_inserted = stats.get(REDDIT_POSTS_INSERTED, 0)
+                posts_fetched = stats.get(REDDIT_POSTS_FETCHED, 0)
+                symbols_mentioned = stats.get(REDDIT_SYMBOLS_MENTIONED, 0)
+                summary = (
+                    f"reddit: inserted {posts_inserted} posts ({posts_fetched} fetched), "
+                    f"symbols={symbols_mentioned}"
+                )
+                metrics = {
+                    REDDIT_POSTS_FETCHED: posts_fetched,
+                    REDDIT_POSTS_INSERTED: posts_inserted,
+                    REDDIT_SYMBOLS_MENTIONED: symbols_mentioned,
+                    REDDIT_STOCKS_CREATED: stats.get(REDDIT_STOCKS_CREATED, 0),
+                }
                 job_repo.record_run(
                     "reddit_collection",
                     run_at=finished,
                     success=True,
                     started_at=started,
                     duration_seconds=(finished - started).total_seconds(),
+                    summary=summary,
+                    metrics=metrics,
                 )
                 db.commit()
 
@@ -139,14 +168,19 @@ class SchedulerService:
             if last_price is None or (now - last_price).total_seconds() > 900:
                 logger.info("Catching up on price collection...")
                 started = datetime.now(timezone.utc)
-                self._collect_price_data(db)
+                price_stats: dict[str, Any] = dict(self._collect_price_data(db))
                 finished = datetime.now(timezone.utc)
+                rows_inserted = price_stats.get("rows_inserted", 0)
+                symbols = price_stats.get("symbols", 0)
+                summary = f"prices: {rows_inserted} rows inserted for {symbols} symbols"
                 job_repo.record_run(
                     "price_collection",
                     run_at=finished,
                     success=True,
                     started_at=started,
                     duration_seconds=(finished - started).total_seconds(),
+                    summary=summary,
+                    metrics=price_stats,
                 )
                 db.commit()
 
@@ -155,14 +189,18 @@ class SchedulerService:
             if last_analysis is None or last_analysis < today_start_utc:
                 logger.info("Catching up on daily analysis...")
                 started = datetime.now(timezone.utc)
-                self._run_daily_analysis(db)
+                analysis_stats: dict[str, Any] = dict(self._run_daily_analysis(db))
                 finished = datetime.now(timezone.utc)
+                symbols = analysis_stats.get("symbols_processed", 0)
+                summary = f"analysis: RSI updated for {symbols} symbols"
                 job_repo.record_run(
                     "daily_analysis",
                     run_at=finished,
                     success=True,
                     started_at=started,
                     duration_seconds=(finished - started).total_seconds(),
+                    summary=summary,
+                    metrics=analysis_stats,
                 )
                 db.commit()
 
@@ -171,14 +209,19 @@ class SchedulerService:
             if last_notif is None or (now - last_notif).total_seconds() > 1800:
                 logger.info("Catching up on notification checks...")
                 started = datetime.now(timezone.utc)
-                self._check_notifications(db)
+                stats = self._check_notifications(db)
                 finished = datetime.now(timezone.utc)
+                notifs = stats.get("notifications_generated", 0)
+                symbols = stats.get("symbols_checked", 0)
+                summary = f"notifications: {notifs} generated for {symbols} symbols"
                 job_repo.record_run(
                     "notification_check",
                     run_at=finished,
                     success=True,
                     started_at=started,
                     duration_seconds=(finished - started).total_seconds(),
+                    summary=summary,
+                    metrics=stats,
                 )
                 db.commit()
 
@@ -187,14 +230,27 @@ class SchedulerService:
             if last_reddit_daily is None or last_reddit_daily < today_start_utc:
                 logger.info("Catching up on Reddit daily features...")
                 started = datetime.now(timezone.utc)
-                self._run_reddit_daily_features(db)
+                daily_stats: dict[str, Any] = dict(self._run_reddit_daily_features(db))
                 finished = datetime.now(timezone.utc)
+                rows_upserted = stats.get("rows_upserted", 0)
+                symbols = stats.get("symbols_seen", 0)
+                days = 0
+                if "start_day" in stats and "end_day" in stats:
+                    try:
+                        s = date.fromisoformat(str(stats["start_day"]))
+                        e = date.fromisoformat(str(stats["end_day"]))
+                        days = max(0, (e - s).days + 1)
+                    except (ValueError, TypeError):
+                        pass
+                summary = f"daily reddit features: {rows_upserted} rows ({symbols} symbols × {days} days)"
                 job_repo.record_run(
                     "reddit_daily_features",
                     run_at=finished,
                     success=True,
                     started_at=started,
                     duration_seconds=(finished - started).total_seconds(),
+                    summary=summary,
+                    metrics=daily_stats,
                 )
                 db.commit()
 
@@ -270,9 +326,19 @@ class SchedulerService:
         db = SessionLocal()
         started_at = datetime.now(timezone.utc)
         try:
-            self._collect_reddit_data(db)  # Stats logged but not used in scheduled job
+            stats = self._collect_reddit_data(db)
             finished_at = datetime.now(timezone.utc)
             duration = (finished_at - started_at).total_seconds()
+            posts_inserted = stats.get(REDDIT_POSTS_INSERTED, 0)
+            posts_fetched = stats.get(REDDIT_POSTS_FETCHED, 0)
+            symbols_mentioned = stats.get(REDDIT_SYMBOLS_MENTIONED, 0)
+            summary = f"reddit: inserted {posts_inserted} posts ({posts_fetched} fetched), symbols={symbols_mentioned}"
+            metrics = {
+                REDDIT_POSTS_FETCHED: posts_fetched,
+                REDDIT_POSTS_INSERTED: posts_inserted,
+                REDDIT_SYMBOLS_MENTIONED: symbols_mentioned,
+                REDDIT_STOCKS_CREATED: stats.get(REDDIT_STOCKS_CREATED, 0),
+            }
             job_repo = JobExecutionRepository(db)
             job_repo.record_run(
                 "reddit_collection",
@@ -280,6 +346,8 @@ class SchedulerService:
                 success=True,
                 started_at=started_at,
                 duration_seconds=duration,
+                summary=summary,
+                metrics=metrics,
             )
             db.commit()
         except Exception as exc:
@@ -288,7 +356,11 @@ class SchedulerService:
             finished_at = datetime.now(timezone.utc)
             duration = (finished_at - started_at).total_seconds()
             self._record_job_failure(
-                "reddit_collection", exc, started_at=started_at, finished_at=finished_at, duration_seconds=duration
+                "reddit_collection",
+                exc,
+                started_at=started_at,
+                finished_at=finished_at,
+                duration_seconds=duration,
             )
         finally:
             db.close()
@@ -297,19 +369,20 @@ class SchedulerService:
         """Collect Reddit posts and save them to the database.
 
         Returns:
-            Dictionary with statistics: posts_fetched, posts_with_tickers, posts_saved
+            Dictionary with canonical stats: posts_fetched, posts_inserted,
+            symbols_mentioned, stocks_created (see job_metrics.py).
         """
         stats = {
-            "posts_fetched": 0,
-            "posts_with_tickers": 0,
-            "posts_saved": 0,
-            "stocks_created": 0,
+            REDDIT_POSTS_FETCHED: 0,
+            REDDIT_POSTS_INSERTED: 0,
+            REDDIT_SYMBOLS_MENTIONED: 0,
+            REDDIT_STOCKS_CREATED: 0,
         }
 
         try:
             subreddits = [s.strip() for s in self._settings.reddit_subreddits.split(",")]
             posts = self._reddit_service.fetch_recent_posts(subreddits, limit_per_subreddit=100)
-            stats["posts_fetched"] = len(posts)
+            stats[REDDIT_POSTS_FETCHED] = len(posts)
         except ExternalAPIError as exc:
             logger.error(f"Failed to fetch Reddit posts: {exc}")
             return stats
@@ -392,9 +465,9 @@ class SchedulerService:
                     )
                     mention_repo.add(mention)
 
-        stats["posts_with_tickers"] = posts_with_tickers
-        stats["posts_saved"] = saved_count
-        stats["stocks_created"] = stocks_created
+        stats[REDDIT_SYMBOLS_MENTIONED] = posts_with_tickers
+        stats[REDDIT_POSTS_INSERTED] = saved_count
+        stats[REDDIT_STOCKS_CREATED] = stocks_created
         logger.info(
             f"Saved {saved_count} Reddit posts (fetched {len(posts)}, "
             f"{posts_with_tickers} with tickers, created {stocks_created} new stocks)"
@@ -406,9 +479,12 @@ class SchedulerService:
         db = SessionLocal()
         started_at = datetime.now(timezone.utc)
         try:
-            self._collect_price_data(db)
+            stats = self._collect_price_data(db)
             finished_at = datetime.now(timezone.utc)
             duration = (finished_at - started_at).total_seconds()
+            rows_inserted = stats.get("rows_inserted", 0)
+            symbols = stats.get("symbols", 0)
+            summary = f"prices: {rows_inserted} rows inserted for {symbols} symbols"
             job_repo = JobExecutionRepository(db)
             job_repo.record_run(
                 "price_collection",
@@ -416,6 +492,8 @@ class SchedulerService:
                 success=True,
                 started_at=started_at,
                 duration_seconds=duration,
+                summary=summary,
+                metrics=stats,
             )
             db.commit()
         except Exception as exc:
@@ -424,20 +502,24 @@ class SchedulerService:
             finished_at = datetime.now(timezone.utc)
             duration = (finished_at - started_at).total_seconds()
             self._record_job_failure(
-                "price_collection", exc, started_at=started_at, finished_at=finished_at, duration_seconds=duration
+                "price_collection",
+                exc,
+                started_at=started_at,
+                finished_at=finished_at,
+                duration_seconds=duration,
             )
         finally:
             db.close()
 
-    def _collect_price_data(self, db: Session) -> None:
-        """Collect price data for all tracked stocks."""
+    def _collect_price_data(self, db: Session) -> dict[str, int | str]:
+        """Collect price data for all tracked stocks. Returns metrics dict."""
         stock_repo = StockRepository(db)
         price_repo = PriceDataRepository(db)
         stocks = stock_repo.list()
 
         if not stocks:
             logger.debug("No stocks to collect price data for")
-            return
+            return {"symbols": 0, "rows_inserted": 0, "provider": "yfinance"}
 
         saved_count = 0
         today = date.today()
@@ -468,15 +550,22 @@ class SchedulerService:
                     saved_count += 1
 
         logger.info(f"Saved {saved_count} price data points")
+        return {
+            "symbols": len(stocks),
+            "rows_inserted": saved_count,
+            "provider": "yfinance",
+        }
 
     def _run_daily_analysis_job(self) -> None:
         """Scheduled job wrapper for daily analysis."""
         db = SessionLocal()
         started_at = datetime.now(timezone.utc)
         try:
-            self._run_daily_analysis(db)
+            stats = self._run_daily_analysis(db)
             finished_at = datetime.now(timezone.utc)
             duration = (finished_at - started_at).total_seconds()
+            symbols = stats.get("symbols_processed", 0)
+            summary = f"analysis: RSI updated for {symbols} symbols"
             job_repo = JobExecutionRepository(db)
             job_repo.record_run(
                 "daily_analysis",
@@ -484,6 +573,8 @@ class SchedulerService:
                 success=True,
                 started_at=started_at,
                 duration_seconds=duration,
+                summary=summary,
+                metrics=stats,
             )
             db.commit()
         except Exception as exc:
@@ -492,26 +583,31 @@ class SchedulerService:
             finished_at = datetime.now(timezone.utc)
             duration = (finished_at - started_at).total_seconds()
             self._record_job_failure(
-                "daily_analysis", exc, started_at=started_at, finished_at=finished_at, duration_seconds=duration
+                "daily_analysis",
+                exc,
+                started_at=started_at,
+                finished_at=finished_at,
+                duration_seconds=duration,
             )
         finally:
             db.close()
 
-    def _run_daily_analysis(self, db: Session) -> None:
-        """Run daily analysis (this is a no-op that just triggers the analysis)."""
-        # The analysis itself doesn't need to persist anything; it's computed
-        # on-demand when the API is called. But we record that we "ran" it
-        # for scheduling purposes.
+    def _run_daily_analysis(self, db: Session) -> dict[str, object]:
+        """Run daily analysis. Results computed on-demand via API; returns minimal metrics."""
         logger.info("Daily analysis job completed (results computed on-demand via API)")
+        return {"symbols_processed": 0, "indicators": {}}
 
     def _check_notifications_job(self) -> None:
         """Scheduled job wrapper for notification checks."""
         db = SessionLocal()
         started_at = datetime.now(timezone.utc)
         try:
-            self._check_notifications(db)
+            stats = self._check_notifications(db)
             finished_at = datetime.now(timezone.utc)
             duration = (finished_at - started_at).total_seconds()
+            notifs = stats.get("notifications_generated", 0)
+            symbols = stats.get("symbols_checked", 0)
+            summary = f"notifications: {notifs} generated for {symbols} symbols"
             job_repo = JobExecutionRepository(db)
             job_repo.record_run(
                 "notification_check",
@@ -519,6 +615,8 @@ class SchedulerService:
                 success=True,
                 started_at=started_at,
                 duration_seconds=duration,
+                summary=summary,
+                metrics=stats,
             )
             db.commit()
         except Exception as exc:
@@ -527,13 +625,17 @@ class SchedulerService:
             finished_at = datetime.now(timezone.utc)
             duration = (finished_at - started_at).total_seconds()
             self._record_job_failure(
-                "notification_check", exc, started_at=started_at, finished_at=finished_at, duration_seconds=duration
+                "notification_check",
+                exc,
+                started_at=started_at,
+                finished_at=finished_at,
+                duration_seconds=duration,
             )
         finally:
             db.close()
 
-    def _check_notifications(self, db: Session) -> None:
-        """Check all stocks and generate notifications for unusual activity."""
+    def _check_notifications(self, db: Session) -> dict[str, int]:
+        """Check all stocks and generate notifications for unusual activity. Returns metrics."""
         stock_repo = StockRepository(db)
         stocks = stock_repo.list()
 
@@ -548,15 +650,22 @@ class SchedulerService:
 
         if total_notifications > 0:
             logger.info(f"Generated {total_notifications} notifications")
+        return {
+            "symbols_checked": len(stocks),
+            "notifications_generated": total_notifications,
+        }
 
     def _intraday_ingestion_job(self) -> None:
         """Scheduled job for intraday minute-bar ingestion (batched, incremental)."""
         db = SessionLocal()
         started_at = datetime.now(timezone.utc)
         try:
-            summary = run_intraday_ingestion(db, universe=None)
+            stats = run_intraday_ingestion(db, universe=None)
             finished_at = datetime.now(timezone.utc)
             duration = (finished_at - started_at).total_seconds()
+            bars_written = stats.get("bars_written", 0)
+            symbols = stats.get("symbols_processed", 0)
+            summary_str = f"intraday: {bars_written} bars written for {symbols} symbols"
             job_repo = JobExecutionRepository(db)
             job_repo.record_run(
                 "intraday_ingestion",
@@ -564,14 +673,16 @@ class SchedulerService:
                 success=True,
                 started_at=started_at,
                 duration_seconds=duration,
+                summary=summary_str,
+                metrics=stats,
             )
             db.commit()
             logger.info(
                 "Intraday ingestion job: bars_written=%s errors=%s symbols=%s safe_end=%s",
-                summary.get("bars_written", 0),
-                summary.get("errors_count", 0),
-                summary.get("symbols_processed", 0),
-                summary.get("safe_end_used", ""),
+                bars_written,
+                stats.get("errors_count", 0),
+                symbols,
+                stats.get("safe_end_used", ""),
             )
         except Exception as exc:
             logger.error("Error in intraday ingestion job: %s", exc, exc_info=True)
@@ -589,9 +700,20 @@ class SchedulerService:
         db = SessionLocal()
         started_at = datetime.now(timezone.utc)
         try:
-            self._run_reddit_daily_features(db)
+            stats = self._run_reddit_daily_features(db)
             finished_at = datetime.now(timezone.utc)
             duration = (finished_at - started_at).total_seconds()
+            rows_upserted = stats.get("rows_upserted", 0)
+            symbols = stats.get("symbols_seen", 0)
+            days = 0
+            if "start_day" in stats and "end_day" in stats:
+                try:
+                    s = date.fromisoformat(str(stats["start_day"]))
+                    e = date.fromisoformat(str(stats["end_day"]))
+                    days = max(0, (e - s).days + 1)
+                except (ValueError, TypeError):
+                    pass
+            summary = f"daily reddit features: {rows_upserted} rows ({symbols} symbols × {days} days)"
             job_repo = JobExecutionRepository(db)
             job_repo.record_run(
                 "reddit_daily_features",
@@ -599,6 +721,8 @@ class SchedulerService:
                 success=True,
                 started_at=started_at,
                 duration_seconds=duration,
+                summary=summary,
+                metrics=stats,
             )
             db.commit()
         except Exception as exc:
@@ -607,7 +731,11 @@ class SchedulerService:
             finished_at = datetime.now(timezone.utc)
             duration = (finished_at - started_at).total_seconds()
             self._record_job_failure(
-                "reddit_daily_features", exc, started_at=started_at, finished_at=finished_at, duration_seconds=duration
+                "reddit_daily_features",
+                exc,
+                started_at=started_at,
+                finished_at=finished_at,
+                duration_seconds=duration,
             )
         finally:
             db.close()

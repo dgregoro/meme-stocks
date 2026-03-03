@@ -167,3 +167,46 @@ def test_record_run_persists_timing_fields(db_session: Session) -> None:
     # SQLite may return naive; normalize for comparison
     rt = runs[0].started_at.replace(tzinfo=timezone.utc) if runs[0].started_at.tzinfo is None else runs[0].started_at
     assert abs((rt - started).total_seconds()) < 1
+
+
+def test_record_run_persists_summary_and_metrics(db_session: Session) -> None:
+    """record_run persists summary and metrics_json on the JobRunHistory row."""
+    repo = JobExecutionRepository(db_session)
+    t0 = datetime(2026, 3, 1, 10, 0, 0, tzinfo=timezone.utc)
+    summary = "reddit: inserted 12 posts (50 fetched), symbols=8"
+    metrics = {"posts_fetched": 50, "posts_inserted": 12, "symbols_mentioned": 8}
+    history = repo.record_run(
+        "reddit_collection",
+        run_at=t0,
+        success=True,
+        summary=summary,
+        metrics=metrics,
+    )
+    db_session.commit()
+
+    assert history.summary == summary
+    assert history.metrics_json is not None
+    import json
+
+    parsed = json.loads(history.metrics_json)
+    assert parsed == {"posts_fetched": 50, "posts_inserted": 12, "symbols_mentioned": 8}
+
+    runs = repo.list_recent_runs(job_name="reddit_collection", limit=1)
+    assert len(runs) == 1
+    assert runs[0].summary == summary
+
+
+def test_record_run_truncates_long_summary(db_session: Session) -> None:
+    """record_run truncates summary to 240 chars."""
+    repo = JobExecutionRepository(db_session)
+    t0 = datetime(2026, 3, 1, 10, 0, 0, tzinfo=timezone.utc)
+    long_summary = "x" * 300
+    history = repo.record_run(
+        "test_job",
+        run_at=t0,
+        success=True,
+        summary=long_summary,
+    )
+    db_session.commit()
+    assert len(history.summary or "") == 240
+    assert history.summary is not None and history.summary.endswith("…")

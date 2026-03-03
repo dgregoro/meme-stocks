@@ -8,6 +8,12 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
 from backend.app.data.database import get_session
+from backend.app.services.job_metrics import (
+    REDDIT_POSTS_FETCHED,
+    REDDIT_POSTS_INSERTED,
+    REDDIT_STOCKS_CREATED,
+    REDDIT_SYMBOLS_MENTIONED,
+)
 from backend.app.data.repositories.job_execution_repo import JobExecutionRepository
 from backend.app.utils.api_errors import error_detail
 from backend.app.services.scheduler_service import SchedulerService
@@ -59,7 +65,21 @@ def trigger_reddit_collection(
     try:
         stats = scheduler._collect_reddit_data(db)
         job_repo = JobExecutionRepository(db)
-        job_repo.record_run("reddit_collection")
+        posts_inserted = stats.get(REDDIT_POSTS_INSERTED, 0)
+        posts_fetched = stats.get(REDDIT_POSTS_FETCHED, 0)
+        symbols_mentioned = stats.get(REDDIT_SYMBOLS_MENTIONED, 0)
+        summary = f"reddit: inserted {posts_inserted} posts ({posts_fetched} fetched), symbols={symbols_mentioned}"
+        metrics = {
+            REDDIT_POSTS_FETCHED: posts_fetched,
+            REDDIT_POSTS_INSERTED: posts_inserted,
+            REDDIT_SYMBOLS_MENTIONED: symbols_mentioned,
+            REDDIT_STOCKS_CREATED: stats.get(REDDIT_STOCKS_CREATED, 0),
+        }
+        job_repo.record_run(
+            "reddit_collection",
+            summary=summary,
+            metrics=metrics,
+        )
         db.commit()
 
         return JobResponse(
@@ -87,9 +107,16 @@ def trigger_price_collection(
     This endpoint runs the price collection job immediately for all tracked stocks.
     """
     try:
-        scheduler._collect_price_data(db)
+        stats = scheduler._collect_price_data(db)
         job_repo = JobExecutionRepository(db)
-        job_repo.record_run("price_collection")
+        rows_inserted = stats.get("rows_inserted", 0)
+        symbols = stats.get("symbols", 0)
+        summary = f"prices: {rows_inserted} rows inserted for {symbols} symbols"
+        job_repo.record_run(
+            "price_collection",
+            summary=summary,
+            metrics=stats,
+        )
         db.commit()
 
         return JobResponse(
@@ -117,9 +144,16 @@ def trigger_notification_check(
     alerts for any unusual activity detected.
     """
     try:
-        scheduler._check_notifications(db)
+        stats = scheduler._check_notifications(db)
         job_repo = JobExecutionRepository(db)
-        job_repo.record_run("notification_check")
+        notifs = stats.get("notifications_generated", 0)
+        symbols = stats.get("symbols_checked", 0)
+        summary = f"notifications: {notifs} generated for {symbols} symbols"
+        job_repo.record_run(
+            "notification_check",
+            summary=summary,
+            metrics=stats,
+        )
         db.commit()
 
         return JobResponse(

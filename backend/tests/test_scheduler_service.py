@@ -126,9 +126,15 @@ def test_collect_reddit_data_with_tickers(mock_yahoo, mock_reddit_class, db_sess
     stats = scheduler._collect_reddit_data(db_session)
     db_session.commit()
 
-    assert stats["posts_fetched"] == 2
-    assert stats["posts_with_tickers"] == 2
-    assert stats["posts_saved"] >= 2
+    from backend.app.services.job_metrics import (
+        REDDIT_POSTS_FETCHED,
+        REDDIT_POSTS_INSERTED,
+        REDDIT_SYMBOLS_MENTIONED,
+    )
+
+    assert stats[REDDIT_POSTS_FETCHED] == 2
+    assert stats[REDDIT_SYMBOLS_MENTIONED] == 2
+    assert stats[REDDIT_POSTS_INSERTED] >= 2
     assert stats["stocks_created"] == 1  # AAPL auto-created (GME already exists)
 
     from backend.app.data.repositories.reddit_post_repo import RedditPostRepository
@@ -202,12 +208,23 @@ def test_catch_up_runs_missed_jobs(db_session, sample_stock):
     """Test that catch-up runs missed jobs."""
     scheduler = SchedulerService()
 
-    # Mock the collection methods to avoid actual API calls
+    # Mock the collection methods; use canonical keys from job_metrics
+    reddit_stats = {
+        "posts_fetched": 0,
+        "posts_inserted": 0,
+        "symbols_mentioned": 0,
+        "stocks_created": 0,
+    }
+    price_stats = {"symbols": 0, "rows_inserted": 0, "provider": "yfinance"}
+    analysis_stats = {"symbols_processed": 0, "indicators": {}}
+    notif_stats = {"symbols_checked": 0, "notifications_generated": 0}
+
     with (
-        patch.object(scheduler, "_collect_reddit_data") as mock_reddit,
-        patch.object(scheduler, "_collect_price_data") as mock_price,
-        patch.object(scheduler, "_run_daily_analysis") as mock_analysis,
-        patch.object(scheduler, "_check_notifications") as mock_notif,
+        patch.object(scheduler, "_collect_reddit_data", return_value=reddit_stats) as mock_reddit,
+        patch.object(scheduler, "_collect_price_data", return_value=price_stats) as mock_price,
+        patch.object(scheduler, "_run_daily_analysis", return_value=analysis_stats) as mock_analysis,
+        patch.object(scheduler, "_check_notifications", return_value=notif_stats) as mock_notif,
+        patch.object(scheduler, "_run_reddit_daily_features", return_value={"rows_upserted": 0, "symbols_seen": 0}),
     ):
 
         # First run - no previous executions
@@ -242,6 +259,36 @@ def test_catch_up_runs_missed_jobs(db_session, sample_stock):
         mock_price.assert_not_called()
         mock_analysis.assert_not_called()
         mock_notif.assert_not_called()
+
+
+@patch("backend.app.services.scheduler_service.SessionLocal")
+def test_collect_reddit_data_job_calls_record_run_with_metrics(mock_session_local, db_session):
+    """Reddit collection job wrapper calls record_run with metrics including posts_inserted."""
+    mock_session_local.return_value = db_session
+
+    scheduler = SchedulerService()
+    mock_stats = {
+        "posts_fetched": 100,
+        "posts_inserted": 42,
+        "symbols_mentioned": 88,
+        "stocks_created": 2,
+    }
+
+    with patch.object(scheduler, "_collect_reddit_data", return_value=mock_stats):
+        scheduler._collect_reddit_data_job()
+
+    # Verify record_run was called with summary and metrics
+    repo = JobExecutionRepository(db_session)
+    runs = repo.list_recent_runs(job_name="reddit_collection", limit=1)
+    assert len(runs) == 1
+    assert runs[0].summary == "reddit: inserted 42 posts (100 fetched), symbols=88"
+    assert runs[0].metrics_json is not None
+    import json
+
+    parsed = json.loads(runs[0].metrics_json)
+    assert parsed["posts_inserted"] == 42
+    assert parsed["posts_fetched"] == 100
+    assert parsed["symbols_mentioned"] == 88
 
 
 def test_scheduler_start_and_shutdown():

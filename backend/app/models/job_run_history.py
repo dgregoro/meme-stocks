@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Float, Integer, String
+from sqlalchemy import Boolean, DateTime, Float, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.app.data.database import Base
@@ -22,3 +22,5 @@ class JobRunHistory(Base):
     duration_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
     success: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     error_message: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    metrics_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    summary: Mapped[str | None] = mapped_column(Text, nullable=True)

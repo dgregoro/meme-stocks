@@ -331,6 +331,59 @@ def test_status_collection_includes_last_success_utc() -> None:
     assert "last_success_utc" in reddit_job
 
 
+def test_job_runs_endpoint_returns_metrics_json_parsed() -> None:
+    """GET /api/status/jobs/runs returns summary and metrics (parsed from metrics_json)."""
+    client, db = _build_test_app_with_db()
+
+    t0 = datetime(2026, 3, 1, 10, 0, 0, tzinfo=timezone.utc)
+    db.add(
+        JobRunHistory(
+            job_name="reddit_collection",
+            run_at=t0,
+            started_at=t0,
+            duration_seconds=5.0,
+            success=True,
+            error_message=None,
+            summary="reddit: inserted 12 posts (50 fetched), symbols=8",
+            metrics_json='{"posts_fetched":50,"posts_inserted":12,"symbols_mentioned":8}',
+        )
+    )
+    db.commit()
+
+    resp = client.get("/api/status/jobs/runs?limit=10")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 1
+    run = data[0]
+    assert run["summary"] == "reddit: inserted 12 posts (50 fetched), symbols=8"
+    assert run["metrics"] == {"posts_fetched": 50, "posts_inserted": 12, "symbols_mentioned": 8}
+
+
+def test_job_runs_endpoint_handles_missing_metrics_gracefully() -> None:
+    """Runs with no metrics_json still display; metrics is None, summary preserved."""
+    client, db = _build_test_app_with_db()
+
+    t0 = datetime(2026, 3, 1, 10, 0, 0, tzinfo=timezone.utc)
+    db.add(
+        JobRunHistory(
+            job_name="price_collection",
+            run_at=t0,
+            success=True,
+            error_message=None,
+            summary="prices: 42 rows inserted",
+            metrics_json=None,
+        )
+    )
+    db.commit()
+
+    resp = client.get("/api/status/jobs/runs?limit=10")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 1
+    assert data[0]["summary"] == "prices: 42 rows inserted"
+    assert data[0]["metrics"] is None
+
+
 def test_status_jobs_runs_returns_500_on_data_access_error(monkeypatch: pytest.MonkeyPatch) -> None:
     """GET /api/status/jobs/runs returns 500 with error detail when repo raises DataAccessError."""
     from backend.app.utils.errors import DataAccessError

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 
 import {
   api,
@@ -22,6 +22,7 @@ export const DataCollection: React.FC = () => {
   const [staleSymbols, setStaleSymbols] = useState<StaleSymbolStatus[] | null>(null)
   const [jobRunsHistory, setJobRunsHistory] = useState<JobRunHistoryItem[] | null>(null)
   const [currentTime, setCurrentTime] = useState(() => Date.now())
+  const [expandedRunIds, setExpandedRunIds] = useState<Set<number | null>>(new Set())
 
   useEffect(() => {
     const id = setInterval(() => setCurrentTime(Date.now()), 1000)
@@ -79,6 +80,15 @@ export const DataCollection: React.FC = () => {
     const d = new Date(iso)
     return d.toLocaleString()
   }
+
+  const toggleExpanded = useCallback((id: number | null) => {
+    setExpandedRunIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }, [])
 
   const formatRelative = (iso: string | null | undefined) => {
     if (!iso) return 'never'
@@ -334,6 +344,7 @@ export const DataCollection: React.FC = () => {
               <th style={{ textAlign: 'left' }}>Last status</th>
               <th style={{ textAlign: 'left' }}>Last run</th>
               <th style={{ textAlign: 'left' }}>Last success</th>
+              <th style={{ textAlign: 'left' }}>Last result</th>
             </tr>
           </thead>
           <tbody>
@@ -347,6 +358,17 @@ export const DataCollection: React.FC = () => {
                 <td title={j.last_run_utc ?? undefined}>{formatRelative(j.last_run_utc)}</td>
                 <td title={j.last_success_utc ?? undefined}>
                   {j.last_success_utc ? formatRelative(j.last_success_utc) : '—'}
+                </td>
+                <td
+                  title={j.last_success_summary ?? j.last_run_summary ?? undefined}
+                  style={{
+                    maxWidth: 280,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {j.last_success_summary ?? j.last_run_summary ?? '—'}
                 </td>
               </tr>
             ))}
@@ -370,49 +392,108 @@ export const DataCollection: React.FC = () => {
                 <th style={{ textAlign: 'left' }}>Job</th>
                 <th style={{ textAlign: 'left' }}>Success</th>
                 <th style={{ textAlign: 'left' }}>Duration</th>
+                <th style={{ textAlign: 'left' }}>Summary</th>
                 <th style={{ textAlign: 'left' }}>Error</th>
+                <th style={{ width: 28 }} />
               </tr>
             </thead>
             <tbody>
-              {jobRunsHistory.map((r, idx) => (
-                <tr key={r.id ?? idx} style={{ borderBottom: '1px solid #f3f4f6' }}>
-                  <td title={r.finished_at_utc ?? undefined}>
-                    {r.finished_at_utc
-                      ? formatRelative(r.finished_at_utc)
-                      : '—'}
-                  </td>
-                  <td style={{ fontWeight: 500 }}>{r.job_name}</td>
-                  <td>
-                    {r.success === true ? (
-                      <span aria-label="success">✅</span>
-                    ) : r.success === false ? (
-                      <span aria-label="failed">❌</span>
-                    ) : (
-                      '—'
+              {jobRunsHistory.map((r, idx) => {
+                const runKey = r.id ?? idx
+                const hasDetails = r.metrics && Object.keys(r.metrics).length > 0
+                const isExpanded = expandedRunIds.has(runKey as number)
+                return (
+                  <React.Fragment key={runKey}>
+                    <tr style={{ borderBottom: '1px solid #f3f4f6' }}>
+                      <td title={r.finished_at_utc ?? undefined}>
+                        {r.finished_at_utc
+                          ? formatRelative(r.finished_at_utc)
+                          : '—'}
+                      </td>
+                      <td style={{ fontWeight: 500 }}>{r.job_name}</td>
+                      <td>
+                        {r.success === true ? (
+                          <span aria-label="success">✅</span>
+                        ) : r.success === false ? (
+                          <span aria-label="failed">❌</span>
+                        ) : (
+                          '—'
+                        )}
+                      </td>
+                      <td>
+                        {r.duration_seconds != null
+                          ? `${r.duration_seconds.toFixed(1)}s`
+                          : '—'}
+                      </td>
+                      <td
+                        title={r.summary ?? undefined}
+                        style={{
+                          maxWidth: 240,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {r.summary ?? '—'}
+                      </td>
+                      <td
+                        title={r.error_message ?? undefined}
+                        style={{
+                          maxWidth: 200,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {r.error_message
+                          ? r.error_message.length > 120
+                            ? `${r.error_message.slice(0, 120)}…`
+                            : r.error_message
+                          : '—'}
+                      </td>
+                      <td>
+                        {hasDetails ? (
+                          <button
+                            type="button"
+                            onClick={() => toggleExpanded(runKey as number)}
+                            aria-expanded={isExpanded}
+                            style={{
+                              padding: 0,
+                              border: 'none',
+                              background: 'none',
+                              cursor: 'pointer',
+                              fontSize: 12,
+                            }}
+                          >
+                            {isExpanded ? '▼' : '▶'}
+                          </button>
+                        ) : (
+                          ''
+                        )}
+                      </td>
+                    </tr>
+                    {hasDetails && isExpanded && (
+                      <tr style={{ borderBottom: '1px solid #f3f4f6' }}>
+                        <td colSpan={7} style={{ padding: '4px 8px', verticalAlign: 'top' }}>
+                          <pre
+                            style={{
+                              margin: 0,
+                              padding: 8,
+                              fontSize: 12,
+                              backgroundColor: '#f9fafb',
+                              borderRadius: 4,
+                              overflow: 'auto',
+                              maxHeight: 200,
+                            }}
+                          >
+                            {JSON.stringify(r.metrics, null, 2)}
+                          </pre>
+                        </td>
+                      </tr>
                     )}
-                  </td>
-                  <td>
-                    {r.duration_seconds != null
-                      ? `${r.duration_seconds.toFixed(1)}s`
-                      : '—'}
-                  </td>
-                  <td
-                    title={r.error_message ?? undefined}
-                    style={{
-                      maxWidth: 200,
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {r.error_message
-                      ? r.error_message.length > 120
-                        ? `${r.error_message.slice(0, 120)}…`
-                        : r.error_message
-                      : '—'}
-                  </td>
-                </tr>
-              ))}
+                  </React.Fragment>
+                )
+              })}
             </tbody>
           </table>
         ) : (
