@@ -7,7 +7,7 @@ import tempfile
 
 import pytest
 
-from backend.app.data.database import engine, init_db
+from backend.app.data.database import engine
 
 _db_url = str(engine.url)
 
