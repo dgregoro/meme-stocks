@@ -74,10 +74,14 @@ def test_build_training_dataset_join_features_and_labels() -> None:
         )
         db.flush()
 
-        # PriceData for GME on 2026-02-02 and 2026-02-07 (5 calendar days later)
+        # PriceData: trading days Mon 2..Fri 6, Mon 9 (weekend omitted; horizon=5 uses 5th session)
         price_repo = PriceDataRepository(db)
         price_repo.add(_make_price("GME", date(2026, 2, 2), 100.0, 5000))
-        price_repo.add(_make_price("GME", date(2026, 2, 7), 105.0, 6000))
+        price_repo.add(_make_price("GME", date(2026, 2, 3), 101.0, 5100))
+        price_repo.add(_make_price("GME", date(2026, 2, 4), 102.0, 5200))
+        price_repo.add(_make_price("GME", date(2026, 2, 5), 103.0, 5300))
+        price_repo.add(_make_price("GME", date(2026, 2, 6), 104.0, 5400))
+        price_repo.add(_make_price("GME", date(2026, 2, 9), 105.0, 6000))
         db.commit()
 
         # Generate labels

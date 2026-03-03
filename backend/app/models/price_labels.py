@@ -10,11 +10,12 @@ from backend.app.data.database import Base
 
 
 class PriceLabel(Base):
-    """Forward-return label for a stock over a given horizon in calendar days.
+    """Forward-return label for a stock over a given horizon in trading days.
 
-    Each row represents the forward return from close[D] to close[D + horizon_days]:
-        fwd_return = close[D + horizon_days] / close[D] - 1
+    Each row represents the forward return from close[D] to close[D + h trading days]:
+        fwd_return = close[target] / close[D] - 1
 
+    Where target is the h-th next trading session (from PriceData dates).
     Labels are only defined when both closes exist in PriceData.
     """
 
