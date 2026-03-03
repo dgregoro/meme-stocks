@@ -104,6 +104,10 @@ def _migrate_job_run_history_add_success_columns() -> None:
                 c.execute(text("ALTER TABLE job_run_history ADD COLUMN success BOOLEAN NOT NULL DEFAULT 1"))
             if "error_message" not in columns:
                 c.execute(text("ALTER TABLE job_run_history ADD COLUMN error_message VARCHAR(500)"))
+            if "started_at" not in columns:
+                c.execute(text("ALTER TABLE job_run_history ADD COLUMN started_at DATETIME"))
+            if "duration_seconds" not in columns:
+                c.execute(text("ALTER TABLE job_run_history ADD COLUMN duration_seconds FLOAT"))
     except Exception as exc:
         logger.warning(
             "Migration job_run_history success columns failed: %s",

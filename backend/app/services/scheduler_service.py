@@ -62,15 +62,27 @@ class SchedulerService:
         self._scheduler.shutdown()
         logger.info("Scheduler stopped")
 
-    def _record_job_failure(self, job_name: str, exc: BaseException) -> None:
+    def _record_job_failure(
+        self,
+        job_name: str,
+        exc: BaseException,
+        *,
+        started_at: datetime | None = None,
+        finished_at: datetime | None = None,
+        duration_seconds: float | None = None,
+    ) -> None:
         """Record a failed run in a separate session so rollback does not affect it."""
         db = SessionLocal()
         try:
             job_repo = JobExecutionRepository(db)
+            run_at = finished_at or datetime.now(timezone.utc)
             job_repo.record_run(
                 job_name,
+                run_at=run_at,
                 success=False,
                 error_message=str(exc)[:500],
+                started_at=started_at,
+                duration_seconds=duration_seconds,
             )
             db.commit()
         except Exception as record_exc:
@@ -215,15 +227,28 @@ class SchedulerService:
     def _collect_reddit_data_job(self) -> None:
         """Scheduled job wrapper for Reddit collection."""
         db = SessionLocal()
+        started_at = datetime.now(timezone.utc)
         try:
             self._collect_reddit_data(db)  # Stats logged but not used in scheduled job
+            finished_at = datetime.now(timezone.utc)
+            duration = (finished_at - started_at).total_seconds()
             job_repo = JobExecutionRepository(db)
-            job_repo.record_run("reddit_collection", success=True)
+            job_repo.record_run(
+                "reddit_collection",
+                run_at=finished_at,
+                success=True,
+                started_at=started_at,
+                duration_seconds=duration,
+            )
             db.commit()
         except Exception as exc:
             logger.error(f"Error in Reddit collection job: {exc}", exc_info=True)
             db.rollback()
-            self._record_job_failure("reddit_collection", exc)
+            finished_at = datetime.now(timezone.utc)
+            duration = (finished_at - started_at).total_seconds()
+            self._record_job_failure(
+                "reddit_collection", exc, started_at=started_at, finished_at=finished_at, duration_seconds=duration
+            )
         finally:
             db.close()
 
@@ -338,15 +363,28 @@ class SchedulerService:
     def _collect_price_data_job(self) -> None:
         """Scheduled job wrapper for price collection."""
         db = SessionLocal()
+        started_at = datetime.now(timezone.utc)
         try:
             self._collect_price_data(db)
+            finished_at = datetime.now(timezone.utc)
+            duration = (finished_at - started_at).total_seconds()
             job_repo = JobExecutionRepository(db)
-            job_repo.record_run("price_collection", success=True)
+            job_repo.record_run(
+                "price_collection",
+                run_at=finished_at,
+                success=True,
+                started_at=started_at,
+                duration_seconds=duration,
+            )
             db.commit()
         except Exception as exc:
             logger.error(f"Error in price collection job: {exc}", exc_info=True)
             db.rollback()
-            self._record_job_failure("price_collection", exc)
+            finished_at = datetime.now(timezone.utc)
+            duration = (finished_at - started_at).total_seconds()
+            self._record_job_failure(
+                "price_collection", exc, started_at=started_at, finished_at=finished_at, duration_seconds=duration
+            )
         finally:
             db.close()
 
@@ -393,15 +431,28 @@ class SchedulerService:
     def _run_daily_analysis_job(self) -> None:
         """Scheduled job wrapper for daily analysis."""
         db = SessionLocal()
+        started_at = datetime.now(timezone.utc)
         try:
             self._run_daily_analysis(db)
+            finished_at = datetime.now(timezone.utc)
+            duration = (finished_at - started_at).total_seconds()
             job_repo = JobExecutionRepository(db)
-            job_repo.record_run("daily_analysis", success=True)
+            job_repo.record_run(
+                "daily_analysis",
+                run_at=finished_at,
+                success=True,
+                started_at=started_at,
+                duration_seconds=duration,
+            )
             db.commit()
         except Exception as exc:
             logger.error(f"Error in daily analysis job: {exc}", exc_info=True)
             db.rollback()
-            self._record_job_failure("daily_analysis", exc)
+            finished_at = datetime.now(timezone.utc)
+            duration = (finished_at - started_at).total_seconds()
+            self._record_job_failure(
+                "daily_analysis", exc, started_at=started_at, finished_at=finished_at, duration_seconds=duration
+            )
         finally:
             db.close()
 
@@ -415,15 +466,28 @@ class SchedulerService:
     def _check_notifications_job(self) -> None:
         """Scheduled job wrapper for notification checks."""
         db = SessionLocal()
+        started_at = datetime.now(timezone.utc)
         try:
             self._check_notifications(db)
+            finished_at = datetime.now(timezone.utc)
+            duration = (finished_at - started_at).total_seconds()
             job_repo = JobExecutionRepository(db)
-            job_repo.record_run("notification_check", success=True)
+            job_repo.record_run(
+                "notification_check",
+                run_at=finished_at,
+                success=True,
+                started_at=started_at,
+                duration_seconds=duration,
+            )
             db.commit()
         except Exception as exc:
             logger.error(f"Error in notification check job: {exc}", exc_info=True)
             db.rollback()
-            self._record_job_failure("notification_check", exc)
+            finished_at = datetime.now(timezone.utc)
+            duration = (finished_at - started_at).total_seconds()
+            self._record_job_failure(
+                "notification_check", exc, started_at=started_at, finished_at=finished_at, duration_seconds=duration
+            )
         finally:
             db.close()
 
@@ -447,10 +511,19 @@ class SchedulerService:
     def _intraday_ingestion_job(self) -> None:
         """Scheduled job for intraday minute-bar ingestion (batched, incremental)."""
         db = SessionLocal()
+        started_at = datetime.now(timezone.utc)
         try:
             summary = run_intraday_ingestion(db, universe=None)
+            finished_at = datetime.now(timezone.utc)
+            duration = (finished_at - started_at).total_seconds()
             job_repo = JobExecutionRepository(db)
-            job_repo.record_run("intraday_ingestion", success=True)
+            job_repo.record_run(
+                "intraday_ingestion",
+                run_at=finished_at,
+                success=True,
+                started_at=started_at,
+                duration_seconds=duration,
+            )
             db.commit()
             logger.info(
                 "Intraday ingestion job: bars_written=%s errors=%s symbols=%s safe_end=%s",
@@ -462,22 +535,39 @@ class SchedulerService:
         except Exception as exc:
             logger.error("Error in intraday ingestion job: %s", exc, exc_info=True)
             db.rollback()
-            self._record_job_failure("intraday_ingestion", exc)
+            finished_at = datetime.now(timezone.utc)
+            duration = (finished_at - started_at).total_seconds()
+            self._record_job_failure(
+                "intraday_ingestion", exc, started_at=started_at, finished_at=finished_at, duration_seconds=duration
+            )
         finally:
             db.close()
 
     def _reddit_daily_features_job(self) -> None:
         """Scheduled job: aggregate Reddit posts into daily features per (symbol, trading_day)."""
         db = SessionLocal()
+        started_at = datetime.now(timezone.utc)
         try:
             self._run_reddit_daily_features(db)
+            finished_at = datetime.now(timezone.utc)
+            duration = (finished_at - started_at).total_seconds()
             job_repo = JobExecutionRepository(db)
-            job_repo.record_run("reddit_daily_features", success=True)
+            job_repo.record_run(
+                "reddit_daily_features",
+                run_at=finished_at,
+                success=True,
+                started_at=started_at,
+                duration_seconds=duration,
+            )
             db.commit()
         except Exception as exc:
             logger.error("Error in Reddit daily features job: %s", exc, exc_info=True)
             db.rollback()
-            self._record_job_failure("reddit_daily_features", exc)
+            finished_at = datetime.now(timezone.utc)
+            duration = (finished_at - started_at).total_seconds()
+            self._record_job_failure(
+                "reddit_daily_features", exc, started_at=started_at, finished_at=finished_at, duration_seconds=duration
+            )
         finally:
             db.close()
 

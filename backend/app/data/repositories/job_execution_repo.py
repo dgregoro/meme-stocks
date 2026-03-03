@@ -57,8 +57,10 @@ class JobExecutionRepository:
         *,
         success: bool = True,
         error_message: str | None = None,
+        started_at: datetime | None = None,
+        duration_seconds: float | None = None,
     ) -> None:
-        """Record that a job ran at the given time (or now if not provided)."""
+        """Record that a job ran at the given time (or now if not provided). Exactly one row per call."""
         if run_at is None:
             run_at = datetime.now(timezone.utc)
 
@@ -77,6 +79,8 @@ class JobExecutionRepository:
             history = JobRunHistory(
                 job_name=job_name,
                 run_at=run_at,
+                started_at=started_at,
+                duration_seconds=duration_seconds,
                 success=success,
                 error_message=(error_message[:500] if error_message else None),
             )

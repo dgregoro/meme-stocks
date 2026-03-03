@@ -188,8 +188,16 @@ def get_job_runs_all(
         repo = JobExecutionRepository(db)
         runs = repo.list_recent_runs(job_name=None, limit=limit)
         return [_job_run_from_history(h) for h in runs]
-    except Exception:
-        return []
+    except DataAccessError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=error_detail("DataAccessError", str(exc)),
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=error_detail("UnexpectedError", str(exc)),
+        ) from exc
 
 
 @router.get("/jobs/{job_name}/runs", response_model=list[JobRun])
@@ -203,21 +211,31 @@ def get_job_runs_for_job(
         repo = JobExecutionRepository(db)
         runs = repo.list_recent_runs(job_name=job_name, limit=limit)
         return [_job_run_from_history(h) for h in runs]
-    except Exception:
-        return []
+    except DataAccessError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=error_detail("DataAccessError", str(exc)),
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=error_detail("UnexpectedError", str(exc)),
+        ) from exc
 
 
 def _job_run_from_history(h: JobRunHistory) -> JobRun:
     """Build JobRun from JobRunHistory, normalizing datetimes to UTC-aware."""
     finished = _as_utc_aware(h.run_at)
+    started = _as_utc_aware(h.started_at)
+    duration = h.duration_seconds
     return JobRun(
         id=h.id,
         job_name=h.job_name,
-        started_at_utc=None,
+        started_at_utc=started,
         finished_at_utc=finished,
         success=h.success,
         error_message=h.error_message,
-        duration_seconds=None,
+        duration_seconds=duration,
     )
 
 
