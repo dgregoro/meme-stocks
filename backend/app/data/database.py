@@ -115,6 +115,33 @@ def _migrate_job_run_history_add_success_columns() -> None:
         )
 
 
+def _migrate_job_run_history_add_metrics_and_summary() -> None:
+    """Add metrics_json and summary to job_run_history if they do not exist."""
+    import sqlite3
+
+    if ":memory:" in _db_url or "sqlite" not in _db_url.lower():
+        return
+    path = _db_url.replace("sqlite:///", "", 1).split("?")[0].strip()
+    if not path or path == ":memory:":
+        return
+    path = os.path.abspath(path)
+    try:
+        conn = sqlite3.connect(path)
+        cur = conn.execute("PRAGMA table_info(job_run_history)")
+        columns = {row[1] for row in cur.fetchall()}
+        conn.close()
+        with engine.begin() as c:
+            if "metrics_json" not in columns:
+                c.execute(text("ALTER TABLE job_run_history ADD COLUMN metrics_json TEXT"))
+            if "summary" not in columns:
+                c.execute(text("ALTER TABLE job_run_history ADD COLUMN summary TEXT"))
+    except Exception as exc:
+        logger.warning(
+            "Migration job_run_history metrics/summary columns failed: %s",
+            exc,
+        )
+
+
 def _migrate_drop_reddit_posts_stock_symbol() -> None:
     """Drop legacy stock_symbol column from reddit_posts if it exists.
 
@@ -148,5 +175,6 @@ def init_db() -> None:
     """Initialize database schema if missing (development convenience)."""
     Base.metadata.create_all(bind=engine)
     _migrate_job_run_history_add_success_columns()
+    _migrate_job_run_history_add_metrics_and_summary()
     _migrate_drop_reddit_posts_stock_symbol()
     _migrate_paper_trades_add_option_columns()

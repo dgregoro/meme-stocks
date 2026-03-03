@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
-from typing import Sequence
+from typing import Any, Mapping, Sequence
 
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
@@ -10,6 +11,18 @@ from sqlalchemy.orm import Session
 from backend.app.models.job_execution import JobExecution
 from backend.app.models.job_run_history import JobRunHistory
 from backend.app.utils.errors import DataAccessError
+
+
+SUMMARY_MAX_LENGTH = 240
+
+
+def _truncate_summary(text: str | None) -> str | None:
+    """Truncate summary to SUMMARY_MAX_LENGTH chars."""
+    if not text:
+        return None
+    if len(text) <= SUMMARY_MAX_LENGTH:
+        return text
+    return text[: SUMMARY_MAX_LENGTH - 1] + "…"
 
 
 def _as_utc_aware(dt: datetime | None) -> datetime | None:
@@ -50,6 +63,32 @@ class JobExecutionRepository:
         except SQLAlchemyError as exc:  # pragma: no cover
             raise DataAccessError(f"Failed to get last success for job {job_name}") from exc
 
+    def get_last_run_summary(self, job_name: str) -> str | None:
+        """Get the summary from the most recent run (success or failure), or None."""
+        stmt = (
+            select(JobRunHistory.summary)
+            .where(JobRunHistory.job_name == job_name)
+            .order_by(JobRunHistory.run_at.desc())
+            .limit(1)
+        )
+        try:
+            return self._session.execute(stmt).scalar_one_or_none()
+        except SQLAlchemyError as exc:  # pragma: no cover
+            raise DataAccessError(f"Failed to get last run summary for job {job_name}") from exc
+
+    def get_last_success_summary(self, job_name: str) -> str | None:
+        """Get the summary from the most recent successful run, or None."""
+        stmt = (
+            select(JobRunHistory.summary)
+            .where(JobRunHistory.job_name == job_name, JobRunHistory.success.is_(True))
+            .order_by(JobRunHistory.run_at.desc())
+            .limit(1)
+        )
+        try:
+            return self._session.execute(stmt).scalar_one_or_none()
+        except SQLAlchemyError as exc:  # pragma: no cover
+            raise DataAccessError(f"Failed to get last success summary for job {job_name}") from exc
+
     def record_run(
         self,
         job_name: str,
@@ -59,6 +98,8 @@ class JobExecutionRepository:
         error_message: str | None = None,
         started_at: datetime | None = None,
         duration_seconds: float | None = None,
+        summary: str | None = None,
+        metrics: Mapping[str, Any] | None = None,
     ) -> JobRunHistory:
         """Record that a job ran at the given time (or now if not provided). Exactly one row per call.
         Returns the created JobRunHistory row for tests and callers.
@@ -67,6 +108,12 @@ class JobExecutionRepository:
             run_at = datetime.now(timezone.utc)
         run_at = _as_utc_aware(run_at) or run_at
         started_at_norm = _as_utc_aware(started_at) if started_at is not None else None
+
+        metrics_str: str | None = None
+        if metrics is not None and len(metrics) > 0:
+            metrics_str = json.dumps(dict(metrics), separators=(",", ":"), sort_keys=True)
+
+        summary_truncated = _truncate_summary(summary)
 
         stmt = select(JobExecution).where(JobExecution.job_name == job_name)
         try:
@@ -87,6 +134,8 @@ class JobExecutionRepository:
                 duration_seconds=duration_seconds,
                 success=success,
                 error_message=(error_message[:500] if error_message else None),
+                summary=summary_truncated,
+                metrics_json=metrics_str,
             )
             self._session.add(history)
             self._session.flush()
