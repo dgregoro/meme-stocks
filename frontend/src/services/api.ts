@@ -111,6 +111,8 @@ export type JobRunHistoryItem = {
   success: boolean | null
   error_message: string | null
   duration_seconds: number | null
+  summary?: string | null
+  metrics?: Record<string, unknown> | null
 }
 
 export type JobStatus = {
@@ -121,6 +123,8 @@ export type JobStatus = {
   last_status: 'ran' | 'never'
   last_error: string | null
   duration_seconds: number | null
+  last_run_summary?: string | null
+  last_success_summary?: string | null
 }
 
 export type RedditCollectionStatus = {
