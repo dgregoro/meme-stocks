@@ -144,7 +144,7 @@ The following artifacts and experiments are implemented:
 
 1. **Daily Reddit Features** — `RedditDailyFeature` model, `reddit_daily_feature_service.compute_and_store_reddit_daily_features()`. Uses `posted_at` with market-timezone after-hours rules.
 
-2. **Forward Return Labels** — `PriceLabel` model, `label_service.compute_and_store_forward_returns()`. Horizons 1, 5, 10 days. Leakage-safe: only when both close[D] and close[D+h] exist.
+2. **Forward Return Labels** — `PriceLabel` model, `label_service.compute_and_store_forward_returns()`. Horizons 1, 5, 10 in **trading days** (sessions), not calendar days. Leakage-safe: only when both close[D] and close[target] exist.
 
 3. **Dataset Builder** — `dataset_builder_service.build_training_dataset()`. INNER JOIN features + labels, deterministic row/column order, metadata sidecar JSON. CLI: `python -m backend.app.cli build-dataset --start YYYY-MM-DD --end YYYY-MM-DD --horizon 5 --out path.csv`
 
