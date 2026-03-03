@@ -22,6 +22,12 @@ from backend.app.models.price_data import PriceData
 from backend.app.models.reddit_post import RedditPost
 from backend.app.models.stock import Stock
 from backend.app.services.intraday_ingestion_service import run_intraday_ingestion
+from backend.app.services.job_metrics import (
+    REDDIT_POSTS_FETCHED,
+    REDDIT_POSTS_INSERTED,
+    REDDIT_STOCKS_CREATED,
+    REDDIT_SYMBOLS_MENTIONED,
+)
 from backend.app.services.notification_service import generate_notifications_for_stock
 from backend.app.services.reddit_daily_feature_service import compute_and_store_reddit_daily_features
 from backend.app.services.reddit_service import RedditService
@@ -133,18 +139,18 @@ class SchedulerService:
                 started = datetime.now(timezone.utc)
                 stats = self._collect_reddit_data(db)
                 finished = datetime.now(timezone.utc)
-                posts_inserted = stats.get("posts_saved", 0)
-                posts_fetched = stats.get("posts_fetched", 0)
-                symbols_mentioned = stats.get("posts_with_tickers", 0)
+                posts_inserted = stats.get(REDDIT_POSTS_INSERTED, 0)
+                posts_fetched = stats.get(REDDIT_POSTS_FETCHED, 0)
+                symbols_mentioned = stats.get(REDDIT_SYMBOLS_MENTIONED, 0)
                 summary = (
                     f"reddit: inserted {posts_inserted} posts ({posts_fetched} fetched), "
                     f"symbols={symbols_mentioned}"
                 )
                 metrics = {
-                    "posts_fetched": posts_fetched,
-                    "posts_inserted": posts_inserted,
-                    "symbols_mentioned": symbols_mentioned,
-                    "stocks_created": stats.get("stocks_created", 0),
+                    REDDIT_POSTS_FETCHED: posts_fetched,
+                    REDDIT_POSTS_INSERTED: posts_inserted,
+                    REDDIT_SYMBOLS_MENTIONED: symbols_mentioned,
+                    REDDIT_STOCKS_CREATED: stats.get(REDDIT_STOCKS_CREATED, 0),
                 }
                 job_repo.record_run(
                     "reddit_collection",
@@ -323,15 +329,15 @@ class SchedulerService:
             stats = self._collect_reddit_data(db)
             finished_at = datetime.now(timezone.utc)
             duration = (finished_at - started_at).total_seconds()
-            posts_inserted = stats.get("posts_saved", 0)
-            posts_fetched = stats.get("posts_fetched", 0)
-            symbols_mentioned = stats.get("posts_with_tickers", 0)
+            posts_inserted = stats.get(REDDIT_POSTS_INSERTED, 0)
+            posts_fetched = stats.get(REDDIT_POSTS_FETCHED, 0)
+            symbols_mentioned = stats.get(REDDIT_SYMBOLS_MENTIONED, 0)
             summary = f"reddit: inserted {posts_inserted} posts ({posts_fetched} fetched), symbols={symbols_mentioned}"
             metrics = {
-                "posts_fetched": posts_fetched,
-                "posts_inserted": posts_inserted,
-                "symbols_mentioned": symbols_mentioned,
-                "stocks_created": stats.get("stocks_created", 0),
+                REDDIT_POSTS_FETCHED: posts_fetched,
+                REDDIT_POSTS_INSERTED: posts_inserted,
+                REDDIT_SYMBOLS_MENTIONED: symbols_mentioned,
+                REDDIT_STOCKS_CREATED: stats.get(REDDIT_STOCKS_CREATED, 0),
             }
             job_repo = JobExecutionRepository(db)
             job_repo.record_run(
@@ -363,19 +369,20 @@ class SchedulerService:
         """Collect Reddit posts and save them to the database.
 
         Returns:
-            Dictionary with statistics: posts_fetched, posts_with_tickers, posts_saved
+            Dictionary with canonical stats: posts_fetched, posts_inserted,
+            symbols_mentioned, stocks_created (see job_metrics.py).
         """
         stats = {
-            "posts_fetched": 0,
-            "posts_with_tickers": 0,
-            "posts_saved": 0,
-            "stocks_created": 0,
+            REDDIT_POSTS_FETCHED: 0,
+            REDDIT_POSTS_INSERTED: 0,
+            REDDIT_SYMBOLS_MENTIONED: 0,
+            REDDIT_STOCKS_CREATED: 0,
         }
 
         try:
             subreddits = [s.strip() for s in self._settings.reddit_subreddits.split(",")]
             posts = self._reddit_service.fetch_recent_posts(subreddits, limit_per_subreddit=100)
-            stats["posts_fetched"] = len(posts)
+            stats[REDDIT_POSTS_FETCHED] = len(posts)
         except ExternalAPIError as exc:
             logger.error(f"Failed to fetch Reddit posts: {exc}")
             return stats
@@ -458,9 +465,9 @@ class SchedulerService:
                     )
                     mention_repo.add(mention)
 
-        stats["posts_with_tickers"] = posts_with_tickers
-        stats["posts_saved"] = saved_count
-        stats["stocks_created"] = stocks_created
+        stats[REDDIT_SYMBOLS_MENTIONED] = posts_with_tickers
+        stats[REDDIT_POSTS_INSERTED] = saved_count
+        stats[REDDIT_STOCKS_CREATED] = stocks_created
         logger.info(
             f"Saved {saved_count} Reddit posts (fetched {len(posts)}, "
             f"{posts_with_tickers} with tickers, created {stocks_created} new stocks)"

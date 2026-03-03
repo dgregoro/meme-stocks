@@ -8,6 +8,12 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
 from backend.app.data.database import get_session
+from backend.app.services.job_metrics import (
+    REDDIT_POSTS_FETCHED,
+    REDDIT_POSTS_INSERTED,
+    REDDIT_STOCKS_CREATED,
+    REDDIT_SYMBOLS_MENTIONED,
+)
 from backend.app.data.repositories.job_execution_repo import JobExecutionRepository
 from backend.app.utils.api_errors import error_detail
 from backend.app.services.scheduler_service import SchedulerService
@@ -59,15 +65,15 @@ def trigger_reddit_collection(
     try:
         stats = scheduler._collect_reddit_data(db)
         job_repo = JobExecutionRepository(db)
-        posts_inserted = stats.get("posts_saved", 0)
-        posts_fetched = stats.get("posts_fetched", 0)
-        symbols_mentioned = stats.get("posts_with_tickers", 0)
+        posts_inserted = stats.get(REDDIT_POSTS_INSERTED, 0)
+        posts_fetched = stats.get(REDDIT_POSTS_FETCHED, 0)
+        symbols_mentioned = stats.get(REDDIT_SYMBOLS_MENTIONED, 0)
         summary = f"reddit: inserted {posts_inserted} posts ({posts_fetched} fetched), symbols={symbols_mentioned}"
         metrics = {
-            "posts_fetched": posts_fetched,
-            "posts_inserted": posts_inserted,
-            "symbols_mentioned": symbols_mentioned,
-            "stocks_created": stats.get("stocks_created", 0),
+            REDDIT_POSTS_FETCHED: posts_fetched,
+            REDDIT_POSTS_INSERTED: posts_inserted,
+            REDDIT_SYMBOLS_MENTIONED: symbols_mentioned,
+            REDDIT_STOCKS_CREATED: stats.get(REDDIT_STOCKS_CREATED, 0),
         }
         job_repo.record_run(
             "reddit_collection",

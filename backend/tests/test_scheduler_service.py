@@ -126,9 +126,15 @@ def test_collect_reddit_data_with_tickers(mock_yahoo, mock_reddit_class, db_sess
     stats = scheduler._collect_reddit_data(db_session)
     db_session.commit()
 
-    assert stats["posts_fetched"] == 2
-    assert stats["posts_with_tickers"] == 2
-    assert stats["posts_saved"] >= 2
+    from backend.app.services.job_metrics import (
+        REDDIT_POSTS_FETCHED,
+        REDDIT_POSTS_INSERTED,
+        REDDIT_SYMBOLS_MENTIONED,
+    )
+
+    assert stats[REDDIT_POSTS_FETCHED] == 2
+    assert stats[REDDIT_SYMBOLS_MENTIONED] == 2
+    assert stats[REDDIT_POSTS_INSERTED] >= 2
     assert stats["stocks_created"] == 1  # AAPL auto-created (GME already exists)
 
     from backend.app.data.repositories.reddit_post_repo import RedditPostRepository
@@ -202,8 +208,13 @@ def test_catch_up_runs_missed_jobs(db_session, sample_stock):
     """Test that catch-up runs missed jobs."""
     scheduler = SchedulerService()
 
-    # Mock the collection methods to avoid actual API calls; return JSON-serializable dicts
-    reddit_stats = {"posts_fetched": 0, "posts_saved": 0, "posts_with_tickers": 0, "stocks_created": 0}
+    # Mock the collection methods; use canonical keys from job_metrics
+    reddit_stats = {
+        "posts_fetched": 0,
+        "posts_inserted": 0,
+        "symbols_mentioned": 0,
+        "stocks_created": 0,
+    }
     price_stats = {"symbols": 0, "rows_inserted": 0, "provider": "yfinance"}
     analysis_stats = {"symbols_processed": 0, "indicators": {}}
     notif_stats = {"symbols_checked": 0, "notifications_generated": 0}
@@ -258,8 +269,8 @@ def test_collect_reddit_data_job_calls_record_run_with_metrics(mock_session_loca
     scheduler = SchedulerService()
     mock_stats = {
         "posts_fetched": 100,
-        "posts_saved": 42,
-        "posts_with_tickers": 88,
+        "posts_inserted": 42,
+        "symbols_mentioned": 88,
         "stocks_created": 2,
     }
 
