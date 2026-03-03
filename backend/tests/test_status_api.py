@@ -11,6 +11,7 @@ from sqlalchemy.pool import StaticPool
 
 from backend.app.data.database import Base, get_session
 from backend.app.main import create_app
+from backend.app.models.job_run_history import JobRunHistory
 from backend.app.models.price_data import PriceData
 from backend.app.models.reddit_daily_feature import RedditDailyFeature
 from backend.app.models.reddit_post import RedditPost
@@ -244,3 +245,47 @@ def test_stale_symbols_with_naive_datetimes(monkeypatch: pytest.MonkeyPatch) -> 
     assert "GME" in symbols
     gme = next(s for s in data if s["symbol"] == "GME")
     assert "reddit_stale" in gme["stale_reasons"]
+
+
+def test_status_jobs_runs_empty_returns_empty_list() -> None:
+    """GET /api/status/jobs/runs returns [] when no runs exist, no 500."""
+    client, _ = _build_test_app_with_db()
+    resp = client.get("/api/status/jobs/runs")
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+def test_status_jobs_runs_returns_history_with_datetimes() -> None:
+    """GET /api/status/jobs/runs returns runs with UTC-aware finished_at_utc."""
+    client, db = _build_test_app_with_db()
+
+    t0 = datetime(2026, 3, 1, 10, 0, 0, tzinfo=timezone.utc)
+    db.add(JobRunHistory(job_name="reddit_collection", run_at=t0, success=True, error_message=None))
+    db.commit()
+
+    resp = client.get("/api/status/jobs/runs?limit=10")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 1
+    assert data[0]["job_name"] == "reddit_collection"
+    assert data[0]["success"] is True
+    assert "finished_at_utc" in data[0]
+    # ISO8601 should include timezone (Z or +00:00)
+    fin = data[0]["finished_at_utc"]
+    assert fin is not None and ("Z" in str(fin) or "+00:00" in str(fin))
+
+
+def test_status_collection_includes_last_success_utc() -> None:
+    """Collection status jobs include last_success_utc when available."""
+    client, db = _build_test_app_with_db()
+
+    t0 = datetime(2026, 3, 1, 10, 0, 0, tzinfo=timezone.utc)
+    db.add(JobRunHistory(job_name="reddit_collection", run_at=t0, success=True, error_message=None))
+    db.commit()
+
+    resp = client.get("/api/status/collection")
+    assert resp.status_code == 200
+    jobs = resp.json().get("jobs", [])
+    reddit_job = next((j for j in jobs if j["job_id"] == "reddit_collection"), None)
+    assert reddit_job is not None
+    assert "last_success_utc" in reddit_job
