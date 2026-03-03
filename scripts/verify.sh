@@ -15,7 +15,7 @@ echo "========================================"
 echo ""
 
 # Step 1: Pre-commit checks (formatting, linting, types)
-echo "[1/4] Running pre-commit hooks..."
+echo "[1/5] Running pre-commit hooks..."
 if pre-commit run --all-files; then
     echo "✓ Pre-commit passed"
 else
@@ -24,8 +24,18 @@ else
 fi
 echo ""
 
-# Step 2: Run test suite with coverage
-echo "[2/4] Running pytest with coverage..."
+# Step 2: Bandit (security lint)
+echo "[2/5] Running bandit (security lint)..."
+if bandit -r backend -x backend/tests -q; then
+    echo "✓ Bandit passed"
+else
+    echo "✗ Bandit failed - fix issues above (pip install bandit if not installed)"
+    exit 1
+fi
+echo ""
+
+# Step 3: Run test suite with coverage
+echo "[3/5] Running pytest with coverage..."
 if python -m pytest backend/tests/ -v --tb=short --cov=backend/app --cov-report=term --cov-config=pyproject.toml; then
     echo "✓ All tests passed"
 else
@@ -34,8 +44,8 @@ else
 fi
 echo ""
 
-# Step 3: Quick sanity check - can the app start?
-echo "[3/4] Checking app can be imported..."
+# Step 4: Quick sanity check - can the app start?
+echo "[4/5] Checking app can be imported..."
 if python -c "from backend.app.main import app; print('✓ App imports successfully')"; then
     :
 else
@@ -44,8 +54,8 @@ else
 fi
 echo ""
 
-# Step 4: Container check - can the backend run in containers?
-echo "[4/4] Checking containers can run..."
+# Step 5: Container check - can the backend run in containers?
+echo "[5/5] Checking containers can run..."
 if command -v podman-compose &>/dev/null; then
     # Stop any existing containers first
     podman-compose down 2>/dev/null || true

@@ -6,7 +6,7 @@ import csv
 import json
 import logging
 import os
-import subprocess
+import subprocess  # nosec B404
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
@@ -26,9 +26,14 @@ logger = logging.getLogger(__name__)
 
 def _get_git_sha() -> str | None:
     """Return short git SHA if available, else None."""
+    import shutil  # noqa: PLC0415
+
+    git_path = shutil.which("git")
+    if not git_path:
+        return os.environ.get("GIT_SHA")
     try:
-        result = subprocess.run(
-            ["git", "rev-parse", "--short", "HEAD"],
+        result = subprocess.run(  # nosec B603, B607
+            [git_path, "rev-parse", "--short", "HEAD"],
             capture_output=True,
             text=True,
             timeout=5,
