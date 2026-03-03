@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import {
   api,
   type CollectionStatus,
+  type JobRunHistoryItem,
   type JobStatus,
   type StaleSymbolStatus,
 } from '../services/api'
@@ -19,6 +20,7 @@ export const DataCollection: React.FC = () => {
   const [autoRefresh, setAutoRefresh] = useState(true)
   const [jobsFilter, setJobsFilter] = useState<StatusFilter>('bad')
   const [staleSymbols, setStaleSymbols] = useState<StaleSymbolStatus[] | null>(null)
+  const [jobRunsHistory, setJobRunsHistory] = useState<JobRunHistoryItem[] | null>(null)
   const [currentTime, setCurrentTime] = useState(() => Date.now())
 
   useEffect(() => {
@@ -28,10 +30,15 @@ export const DataCollection: React.FC = () => {
 
   const fetchStatus = () => {
     setError(null)
-    Promise.all([api.getCollectionStatus(), api.getStaleSymbols(25)])
-      .then(([collection, stale]) => {
+    Promise.all([
+      api.getCollectionStatus(),
+      api.getStaleSymbols(25),
+      api.getJobRunsHistory(200),
+    ])
+      .then(([collection, stale, runs]) => {
         setStatus(collection)
         setStaleSymbols(stale)
+        setJobRunsHistory(runs)
         setLastUpdatedIso(new Date().toISOString())
       })
       .catch((e) => setError(String(e)))
@@ -338,11 +345,79 @@ export const DataCollection: React.FC = () => {
                   <span style={jobPill(j.last_status)}>{j.last_status}</span>
                 </td>
                 <td title={j.last_run_utc ?? undefined}>{formatRelative(j.last_run_utc)}</td>
-                <td>{/* no separate success tracking yet */}</td>
+                <td title={j.last_success_utc ?? undefined}>
+                  {j.last_success_utc ? formatRelative(j.last_success_utc) : '—'}
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
+      </section>
+
+      <section aria-label="Job run history" style={{ marginTop: spacing.lg }}>
+        <h3 style={{ marginBottom: 8 }}>Job run history</h3>
+        <p style={{ fontSize: 12, color: '#6b7280', marginTop: 0, marginBottom: 8 }}>
+          Recent job executions across all scheduled jobs.
+        </p>
+        {jobRunsHistory && jobRunsHistory.length > 0 ? (
+          <table
+            cellPadding={6}
+            style={{ borderCollapse: 'collapse', width: '100%', fontSize: 14 }}
+          >
+            <thead>
+              <tr style={{ borderBottom: '2px solid #e5e7eb' }}>
+                <th style={{ textAlign: 'left' }}>Time</th>
+                <th style={{ textAlign: 'left' }}>Job</th>
+                <th style={{ textAlign: 'left' }}>Success</th>
+                <th style={{ textAlign: 'left' }}>Duration</th>
+                <th style={{ textAlign: 'left' }}>Error</th>
+              </tr>
+            </thead>
+            <tbody>
+              {jobRunsHistory.map((r, idx) => (
+                <tr key={r.id ?? idx} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                  <td title={r.finished_at_utc ?? undefined}>
+                    {r.finished_at_utc
+                      ? formatRelative(r.finished_at_utc)
+                      : '—'}
+                  </td>
+                  <td style={{ fontWeight: 500 }}>{r.job_name}</td>
+                  <td>
+                    {r.success === true ? (
+                      <span aria-label="success">✅</span>
+                    ) : r.success === false ? (
+                      <span aria-label="failed">❌</span>
+                    ) : (
+                      '—'
+                    )}
+                  </td>
+                  <td>
+                    {r.duration_seconds != null
+                      ? `${r.duration_seconds.toFixed(1)}s`
+                      : '—'}
+                  </td>
+                  <td
+                    title={r.error_message ?? undefined}
+                    style={{
+                      maxWidth: 200,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {r.error_message
+                      ? r.error_message.length > 120
+                        ? `${r.error_message.slice(0, 120)}…`
+                        : r.error_message
+                      : '—'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <p style={{ fontSize: 14, color: '#6b7280' }}>No run history yet.</p>
+        )}
       </section>
       {staleSymbols && staleSymbols.length > 0 && (
         <section aria-label="Stalest symbols" style={{ marginTop: spacing.lg }}>

@@ -102,10 +102,21 @@ export type JobRun = {
   run_at: string
 }
 
+export type JobRunHistoryItem = {
+  id: number | null
+  job_name: string
+  started_at_utc: string | null
+  finished_at_utc: string | null
+  success: boolean | null
+  error_message: string | null
+  duration_seconds: number | null
+}
+
 export type JobStatus = {
   job_id: string
   schedule: string | null
   last_run_utc: string | null
+  last_success_utc: string | null
   last_status: 'ran' | 'never'
   last_error: string | null
   duration_seconds: number | null
@@ -202,6 +213,18 @@ export const api = {
   getJobRuns: (jobName: string, limit = 1) =>
     handle(
       client.get<JobRun[]>(`/api/jobs/${encodeURIComponent(jobName)}/runs`, {
+        params: { limit },
+      }),
+    ),
+  getJobRunsHistory: (limit = 200) =>
+    handle(
+      client.get<JobRunHistoryItem[]>('/api/status/jobs/runs', {
+        params: { limit },
+      }),
+    ),
+  getJobRunsHistoryForJob: (jobName: string, limit = 50) =>
+    handle(
+      client.get<JobRunHistoryItem[]>(`/api/status/jobs/${encodeURIComponent(jobName)}/runs`, {
         params: { limit },
       }),
     ),
