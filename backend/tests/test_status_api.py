@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -148,3 +148,99 @@ def test_get_collection_status_counters_and_health(monkeypatch: pytest.MonkeyPat
     assert health["prices"] in {"ok", "stale", "empty"}
     assert health["daily_features"] in {"ok", "stale", "empty"}
     assert health["jobs"] in {"ok", "warning"}
+
+
+def test_collection_status_with_naive_datetimes_from_db(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Status endpoints handle naive datetimes from DB (e.g. SQLite) without TypeError."""
+    client, db = _build_test_app_with_db()
+
+    fixed_now = datetime(2026, 3, 2, 12, 0, 0, tzinfo=timezone.utc)
+
+    class FixedDateTime(datetime):  # type: ignore[misc]
+        @classmethod
+        def now(cls, tz: timezone | None = None) -> datetime:  # type: ignore[override]
+            if tz is None:
+                return fixed_now
+            return fixed_now.astimezone(tz)
+
+    monkeypatch.setattr(status_service_module, "datetime", FixedDateTime)
+
+    # Insert JobExecution with naive datetime (SQLite returns naive for non-TZ strings).
+    db.execute(
+        text(
+            "INSERT INTO job_executions (job_name, last_run_at, created_at, updated_at) "
+            "VALUES ('reddit_collection', '2026-03-02 11:00:00', '2026-03-02 11:00:00', '2026-03-02 11:00:00')"
+        )
+    )
+
+    stock = Stock(symbol="GME", name="GameStop", sector=None, market_cap=None)
+    db.add(stock)
+
+    # RedditPost with naive collected_at (30 min before fixed_now when treated as UTC).
+    naiv_30m_ago = datetime(2026, 3, 2, 11, 30, 0)
+    post = RedditPost(
+        id="post1",
+        subreddit="wallstreetbets",
+        title="GME",
+        author="u1",
+        upvotes=10,
+        comments=2,
+        url="https://reddit.com/...",
+        posted_at=naiv_30m_ago,
+        collected_at=naiv_30m_ago,
+    )
+    db.add(post)
+    db.add(RedditSymbolMention(post_id="post1", symbol="GME"))
+    db.commit()
+
+    resp = client.get("/api/status/collection")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "health" in body
+    assert body["health"]["reddit"] == "ok"  # 30 min ago < 120 min threshold (naive treated as UTC)
+    assert body["health"]["jobs"] in {"ok", "warning"}
+
+
+def test_stale_symbols_with_naive_datetimes(monkeypatch: pytest.MonkeyPatch) -> None:
+    """get_stale_symbols handles naive collected_at from DB without TypeError."""
+    client, db = _build_test_app_with_db()
+
+    fixed_now = datetime(2026, 3, 2, 12, 0, 0, tzinfo=timezone.utc)
+
+    class FixedDateTime(datetime):  # type: ignore[misc]
+        @classmethod
+        def now(cls, tz: timezone | None = None) -> datetime:  # type: ignore[override]
+            if tz is None:
+                return fixed_now
+            return fixed_now.astimezone(tz)
+
+    monkeypatch.setattr(status_service_module, "datetime", FixedDateTime)
+
+    stock = Stock(symbol="GME", name="GameStop", sector=None, market_cap=None)
+    db.add(stock)
+
+    # Post with naive collected_at 3 hours ago (stale per 120 min threshold).
+    naiv_3h_ago = datetime(2026, 3, 2, 9, 0, 0)
+    post = RedditPost(
+        id="post1",
+        subreddit="wallstreetbets",
+        title="GME",
+        author="u1",
+        upvotes=10,
+        comments=2,
+        url="https://reddit.com/...",
+        posted_at=naiv_3h_ago,
+        collected_at=naiv_3h_ago,
+    )
+    db.add(post)
+    db.add(RedditSymbolMention(post_id="post1", symbol="GME"))
+    db.commit()
+
+    resp = client.get("/api/status/symbols/stale?limit=10")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert isinstance(data, list)
+    symbols = [s["symbol"] for s in data]
+    assert "GME" in symbols
+    gme = next(s for s in data if s["symbol"] == "GME")
+    assert "reddit_stale" in gme["stale_reasons"]

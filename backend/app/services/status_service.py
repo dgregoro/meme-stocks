@@ -6,9 +6,9 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from typing import Literal
 
-from zoneinfo import ZoneInfo
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
+from zoneinfo import ZoneInfo
 
 from backend.app.config import get_settings
 from backend.app.data.repositories.job_execution_repo import JobExecutionRepository
@@ -17,6 +17,23 @@ from backend.app.models.reddit_daily_feature import RedditDailyFeature
 from backend.app.models.reddit_post import RedditPost
 from backend.app.models.reddit_symbol_mention import RedditSymbolMention
 from backend.app.models.stock import Stock
+
+
+def _as_utc_aware(dt: datetime | None) -> datetime | None:
+    """Normalize datetime to timezone-aware UTC; treat naive as UTC."""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
+def _minutes_since(now_utc: datetime, dt: datetime | None) -> float | None:
+    """Minutes since dt; returns None if dt is None."""
+    dt2 = _as_utc_aware(dt)
+    if dt2 is None:
+        return None
+    return (now_utc - dt2).total_seconds() / 60.0
 
 
 JobStatusValue = Literal["ran", "never"]
@@ -275,14 +292,10 @@ def _compute_health(
     features_threshold_days = 2
 
     # Reddit health
-    newest_collected = reddit.newest_post_collected_at_utc
-    if newest_collected is None:
+    diff_minutes = _minutes_since(now_utc, reddit.newest_post_collected_at_utc)
+    if diff_minutes is None:
         reddit_health: Literal["ok", "stale", "empty"] = "empty"
     else:
-        # Normalize to aware UTC before subtraction
-        if newest_collected.tzinfo is None:
-            newest_collected = newest_collected.replace(tzinfo=timezone.utc)
-        diff_minutes = (now_utc - newest_collected).total_seconds() / 60.0
         reddit_health = "stale" if diff_minutes > reddit_threshold_minutes else "ok"
 
     # Prices health
@@ -305,7 +318,8 @@ def _compute_health(
         if job.last_status == "never":
             jobs_health = "warning"
             break
-        if job.last_run_utc is None:
+        minutes_since_run = _minutes_since(now_utc, job.last_run_utc)
+        if minutes_since_run is None:
             continue
         # Per-job stale threshold in minutes (approximate; 3x configured interval or 36h for daily jobs).
         stale_minutes: int
@@ -325,7 +339,7 @@ def _compute_health(
             # daily jobs
             stale_minutes = 36 * 60
 
-        if (now_utc - job.last_run_utc).total_seconds() / 60.0 > stale_minutes:
+        if minutes_since_run > stale_minutes:
             jobs_health = "warning"
             break
 
@@ -387,8 +401,10 @@ def get_stale_symbols(db: Session, limit: int) -> list[SymbolStalenessResult]:
         if last_reddit is None:
             reasons.append("no_reddit")
         else:
-            diff_minutes = (now_utc - last_reddit).total_seconds() / 60.0
-            if diff_minutes > reddit_threshold_minutes:
+            diff_minutes = _minutes_since(now_utc, last_reddit)
+            if diff_minutes is None:
+                reasons.append("no_reddit")  # treat as unknown/stale
+            elif diff_minutes > reddit_threshold_minutes:
                 reasons.append("reddit_stale")
 
         if last_price is None:
