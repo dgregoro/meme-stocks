@@ -159,7 +159,8 @@ def test_collect_reddit_data_with_tickers(mock_yahoo, mock_reddit_class, db_sess
 
 
 @patch("backend.app.services.scheduler_service.YahooFinanceService")
-def test_collect_price_data(mock_yahoo_class, db_session, sample_stock):
+@patch("backend.app.services.scheduler_service.RedditService")
+def test_collect_price_data(mock_yahoo_class, mock_reddit_class, db_session, sample_stock):
     """Test price data collection."""
     from backend.app.services.yahoo_service import PriceBar
 
@@ -206,7 +207,9 @@ def test_collect_price_data(mock_yahoo_class, db_session, sample_stock):
     assert len(prices) == 2
 
 
-def test_catch_up_runs_missed_jobs(db_session, sample_stock):
+@patch("backend.app.services.scheduler_service.YahooFinanceService")
+@patch("backend.app.services.scheduler_service.RedditService")
+def test_catch_up_runs_missed_jobs(mock_yahoo_class, mock_reddit_class, db_session, sample_stock):
     """Test that catch-up runs missed jobs."""
     scheduler = SchedulerService()
 
@@ -263,8 +266,12 @@ def test_catch_up_runs_missed_jobs(db_session, sample_stock):
         mock_notif.assert_not_called()
 
 
+@patch("backend.app.services.scheduler_service.YahooFinanceService")
+@patch("backend.app.services.scheduler_service.RedditService")
 @patch("backend.app.services.scheduler_service.SessionLocal")
-def test_collect_reddit_data_job_calls_record_run_with_metrics(mock_session_local, db_session):
+def test_collect_reddit_data_job_calls_record_run_with_metrics(
+    mock_session_local, mock_reddit_class, mock_yahoo_class, db_session
+):
     """Reddit collection job wrapper calls record_run with metrics including posts_inserted."""
     mock_session_local.return_value = db_session
 
@@ -293,7 +300,9 @@ def test_collect_reddit_data_job_calls_record_run_with_metrics(mock_session_loca
     assert parsed["symbols_mentioned"] == 88
 
 
-def test_scheduler_start_and_shutdown():
+@patch("backend.app.services.scheduler_service.YahooFinanceService")
+@patch("backend.app.services.scheduler_service.RedditService")
+def test_scheduler_start_and_shutdown(mock_yahoo_class, mock_reddit_class):
     """Test scheduler start and shutdown."""
     scheduler = SchedulerService()
 
