@@ -29,6 +29,7 @@ venv/
 
 # Env files (secrets - do not commit)
 .env
+deployment/.env
 
 # Data & logs
 /data/

@@ -28,13 +28,13 @@ services:
       - meme-stocks-data:/app/data
     command: ["uvicorn", "backend.app.main:app", "--host", "0.0.0.0", "--port", "8000"]
     env_file:
-      - backend/.env
+      - deployment/.env
     environment:
       - PYTHONPATH=/app
       # LOG_FILE=data/logs/app.log  # uncomment to persist yfinance logs in data volume
       - DATABASE_URL=sqlite:///./data/app.db
       - SERVING_FRONTEND=true
-    # Reddit credentials: backend/.env (env_file above)
+    # Reddit credentials: deployment/.env (env_file above)
     restart: unless-stopped
 
   # Frontend dev server - only needed when editing frontend locally

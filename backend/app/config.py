@@ -134,7 +134,9 @@ class Settings(BaseSettings):
         return self
 
     model_config = SettingsConfigDict(
-        env_file=(".env", "backend/.env"),
+        # Only load .env from cwd (repo root). Tests run without it.
+        # For containers: use deployment/.env via compose env_file; vars are injected, not loaded here.
+        env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
     )
