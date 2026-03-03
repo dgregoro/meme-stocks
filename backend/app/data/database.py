@@ -125,6 +125,8 @@ def _migrate_job_run_history_add_metrics_and_summary() -> None:
     if not path or path == ":memory:":
         return
     path = os.path.abspath(path)
+    if not os.path.exists(path):
+        return
     try:
         conn = sqlite3.connect(path)
         cur = conn.execute("PRAGMA table_info(job_run_history)")
