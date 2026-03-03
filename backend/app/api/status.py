@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import logging
 from datetime import datetime, timezone
 from typing import Literal
 
@@ -25,6 +27,8 @@ from backend.app.utils.api_errors import error_detail
 from backend.app.utils.errors import DataAccessError
 
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/api/status", tags=["status"])
 
 
@@ -36,6 +40,8 @@ class JobStatus(BaseModel):
     last_status: Literal["ran", "never"]
     last_error: str | None = None
     duration_seconds: float | None = None
+    last_run_summary: str | None = None
+    last_success_summary: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -118,6 +124,8 @@ class JobRun(BaseModel):
     success: bool | None = None
     error_message: str | None = None
     duration_seconds: float | None = None
+    summary: str | None = None
+    metrics: dict[str, object] | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -223,11 +231,23 @@ def get_job_runs_for_job(
         ) from exc
 
 
+def _parse_metrics_json(metrics_json: str | None) -> dict[str, object] | None:
+    """Parse metrics_json; return None on failure but keep summary."""
+    if not metrics_json:
+        return None
+    try:
+        return json.loads(metrics_json)
+    except (json.JSONDecodeError, TypeError) as exc:
+        logger.debug("Failed to parse job run metrics_json: %s", exc)
+        return None
+
+
 def _job_run_from_history(h: JobRunHistory) -> JobRun:
     """Build JobRun from JobRunHistory, normalizing datetimes to UTC-aware."""
     finished = _as_utc_aware(h.run_at)
     started = _as_utc_aware(h.started_at)
     duration = h.duration_seconds
+    metrics = _parse_metrics_json(getattr(h, "metrics_json", None))
     return JobRun(
         id=h.id,
         job_name=h.job_name,
@@ -236,6 +256,8 @@ def _job_run_from_history(h: JobRunHistory) -> JobRun:
         success=h.success,
         error_message=h.error_message,
         duration_seconds=duration,
+        summary=getattr(h, "summary", None),
+        metrics=metrics,
     )
 
 

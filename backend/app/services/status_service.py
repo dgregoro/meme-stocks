@@ -48,6 +48,8 @@ class JobStatusResult:
     last_status: JobStatusValue
     last_error: str | None
     duration_seconds: float | None
+    last_run_summary: str | None = None
+    last_success_summary: str | None = None
 
 
 @dataclass(frozen=True)
@@ -164,6 +166,9 @@ def _build_job_statuses(db: Session, settings: object, now_utc: datetime) -> lis
         else:
             status = "ran"
 
+        last_run_summary = job_repo.get_last_run_summary(job_id)
+        last_success_summary = job_repo.get_last_success_summary(job_id)
+
         results.append(
             JobStatusResult(
                 job_id=job_id,
@@ -173,6 +178,8 @@ def _build_job_statuses(db: Session, settings: object, now_utc: datetime) -> lis
                 last_status=status,
                 last_error=None,
                 duration_seconds=None,
+                last_run_summary=last_run_summary,
+                last_success_summary=last_success_summary,
             )
         )
 
