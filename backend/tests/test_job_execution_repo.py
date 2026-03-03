@@ -125,14 +125,45 @@ def test_one_run_produces_one_history_row(db_session: Session) -> None:
     """One successful job execution produces exactly one JobRunHistory row (no duplicates)."""
     repo = JobExecutionRepository(db_session)
     t0 = datetime(2026, 3, 1, 10, 0, 0, tzinfo=timezone.utc)
+    started = t0 - timedelta(seconds=5)
     repo.record_run(
         "reddit_collection",
         run_at=t0,
         success=True,
-        started_at=t0 - timedelta(seconds=5),
+        started_at=started,
         duration_seconds=5.0,
     )
     db_session.commit()
 
     runs = repo.list_recent_runs(job_name="reddit_collection", limit=10)
     assert len(runs) == 1
+    assert runs[0].started_at is not None
+    assert runs[0].duration_seconds == 5.0
+
+
+def test_record_run_persists_timing_fields(db_session: Session) -> None:
+    """record_run persists started_at and duration_seconds on the JobRunHistory row."""
+    repo = JobExecutionRepository(db_session)
+    t0 = datetime(2026, 3, 1, 10, 0, 0, tzinfo=timezone.utc)
+    started = t0 - timedelta(seconds=12)
+    history = repo.record_run(
+        "price_collection",
+        run_at=t0,
+        success=True,
+        started_at=started,
+        duration_seconds=12.5,
+    )
+    db_session.commit()
+
+    assert history.job_name == "price_collection"
+    assert history.run_at is not None
+    assert history.started_at is not None
+    assert history.duration_seconds == 12.5
+
+    runs = repo.list_recent_runs(job_name="price_collection", limit=1)
+    assert len(runs) == 1
+    assert runs[0].started_at is not None
+    assert runs[0].duration_seconds == 12.5
+    # SQLite may return naive; normalize for comparison
+    rt = runs[0].started_at.replace(tzinfo=timezone.utc) if runs[0].started_at.tzinfo is None else runs[0].started_at
+    assert abs((rt - started).total_seconds()) < 1

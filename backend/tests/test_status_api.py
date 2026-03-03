@@ -287,6 +287,34 @@ def test_status_jobs_runs_returns_history_with_datetimes_and_duration() -> None:
     assert fin is not None and ("Z" in str(fin) or "+00:00" in str(fin))
 
 
+def test_status_jobs_job_name_runs_returns_started_finished_duration() -> None:
+    """GET /api/status/jobs/{job_name}/runs returns started_at_utc, finished_at_utc, duration."""
+    client, db = _build_test_app_with_db()
+
+    t0 = datetime(2026, 3, 1, 10, 0, 0, tzinfo=timezone.utc)
+    started = datetime(2026, 3, 1, 9, 59, 55, tzinfo=timezone.utc)
+    db.add(
+        JobRunHistory(
+            job_name="price_collection",
+            run_at=t0,
+            started_at=started,
+            duration_seconds=5.0,
+            success=True,
+            error_message=None,
+        )
+    )
+    db.commit()
+
+    resp = client.get("/api/status/jobs/price_collection/runs?limit=10")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 1
+    assert data[0]["job_name"] == "price_collection"
+    assert data[0]["started_at_utc"] is not None
+    assert data[0]["finished_at_utc"] is not None
+    assert data[0]["duration_seconds"] == 5.0
+
+
 def test_status_collection_includes_last_success_utc() -> None:
     """Collection status jobs include last_success_utc when available."""
     client, db = _build_test_app_with_db()
