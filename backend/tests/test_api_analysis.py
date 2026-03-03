@@ -38,7 +38,7 @@ def build_test_app_with_db() -> tuple[TestClient, Session]:
     engine, TestSessionLocal = create_test_engine_and_sessionmaker()
     session = TestSessionLocal()
 
-    app = create_app()
+    app = create_app(omit_scheduler=True)
 
     def override_get_session():
         db = TestSessionLocal()

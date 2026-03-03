@@ -41,7 +41,9 @@ def sample_stock(db_session):
     return stock
 
 
-def test_scheduler_service_initialization():
+@patch("backend.app.services.scheduler_service.YahooFinanceService")
+@patch("backend.app.services.scheduler_service.RedditService")
+def test_scheduler_service_initialization(mock_reddit, mock_yahoo):
     """Test that scheduler service initializes correctly."""
     scheduler = SchedulerService()
     assert scheduler._scheduler is not None

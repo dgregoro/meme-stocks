@@ -22,7 +22,7 @@ def db_session():
 def test_create_stock() -> None:
     """Test creating a new stock."""
     Base.metadata.create_all(engine)
-    app = create_app()
+    app = create_app(omit_scheduler=True)
     client = TestClient(app)
 
     response = client.post(
@@ -52,7 +52,7 @@ def test_create_stock() -> None:
 def test_create_stock_duplicate() -> None:
     """Test creating a duplicate stock returns 409."""
     Base.metadata.create_all(engine)
-    app = create_app()
+    app = create_app(omit_scheduler=True)
     client = TestClient(app)
 
     # Create first stock
@@ -76,7 +76,7 @@ def test_create_stock_duplicate() -> None:
 def test_create_stock_symbol_uppercase() -> None:
     """Test that stock symbol is converted to uppercase."""
     Base.metadata.create_all(engine)
-    app = create_app()
+    app = create_app(omit_scheduler=True)
     client = TestClient(app)
 
     response = client.post(

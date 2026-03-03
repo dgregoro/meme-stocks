@@ -149,7 +149,7 @@ def test_get_job_runs_unknown_job_returns_404(db_session):
 
 def test_get_recent_reddit_posts_empty(db_session):
     """Test getting recent Reddit posts when none exist."""
-    app = create_app()
+    app = create_app(omit_scheduler=True)
     client = TestClient(app)
 
     response = client.get("/api/jobs/reddit-collection/recent")
