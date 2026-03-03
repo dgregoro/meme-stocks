@@ -59,10 +59,14 @@ class JobExecutionRepository:
         error_message: str | None = None,
         started_at: datetime | None = None,
         duration_seconds: float | None = None,
-    ) -> None:
-        """Record that a job ran at the given time (or now if not provided). Exactly one row per call."""
+    ) -> JobRunHistory:
+        """Record that a job ran at the given time (or now if not provided). Exactly one row per call.
+        Returns the created JobRunHistory row for tests and callers.
+        """
         if run_at is None:
             run_at = datetime.now(timezone.utc)
+        run_at = _as_utc_aware(run_at) or run_at
+        started_at_norm = _as_utc_aware(started_at) if started_at is not None else None
 
         stmt = select(JobExecution).where(JobExecution.job_name == job_name)
         try:
@@ -79,13 +83,14 @@ class JobExecutionRepository:
             history = JobRunHistory(
                 job_name=job_name,
                 run_at=run_at,
-                started_at=started_at,
+                started_at=started_at_norm,
                 duration_seconds=duration_seconds,
                 success=success,
                 error_message=(error_message[:500] if error_message else None),
             )
             self._session.add(history)
             self._session.flush()
+            return history
         except SQLAlchemyError as exc:  # pragma: no cover
             raise DataAccessError(f"Failed to record run for job {job_name}") from exc
 

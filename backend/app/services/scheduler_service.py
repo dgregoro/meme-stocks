@@ -113,48 +113,89 @@ class SchedulerService:
                     return dt.replace(tzinfo=timezone.utc)
                 return dt
 
+            tz = ZoneInfo(self._settings.market_timezone)
+            local_today = datetime.now(tz).date()
+            local_today_start = datetime.combine(local_today, time.min, tzinfo=tz)
+            today_start_utc = local_today_start.astimezone(timezone.utc)
+
             # Check Reddit collection
             last_reddit = ensure_timezone_aware(job_repo.get_last_run("reddit_collection"))
             if last_reddit is None or (now - last_reddit).total_seconds() > 3600:
                 logger.info("Catching up on Reddit collection...")
+                started = datetime.now(timezone.utc)
                 self._collect_reddit_data(db)  # Stats logged but not used in catch-up
-                job_repo.record_run("reddit_collection", now)
+                finished = datetime.now(timezone.utc)
+                job_repo.record_run(
+                    "reddit_collection",
+                    run_at=finished,
+                    success=True,
+                    started_at=started,
+                    duration_seconds=(finished - started).total_seconds(),
+                )
                 db.commit()
 
             # Check price collection
             last_price = ensure_timezone_aware(job_repo.get_last_run("price_collection"))
             if last_price is None or (now - last_price).total_seconds() > 900:
                 logger.info("Catching up on price collection...")
+                started = datetime.now(timezone.utc)
                 self._collect_price_data(db)
-                job_repo.record_run("price_collection", now)
+                finished = datetime.now(timezone.utc)
+                job_repo.record_run(
+                    "price_collection",
+                    run_at=finished,
+                    success=True,
+                    started_at=started,
+                    duration_seconds=(finished - started).total_seconds(),
+                )
                 db.commit()
 
             # Check daily analysis (run if we haven't run one today, in market timezone)
             last_analysis = ensure_timezone_aware(job_repo.get_last_run("daily_analysis"))
-            tz = ZoneInfo(self._settings.market_timezone)
-            local_today = datetime.now(tz).date()
-            local_today_start = datetime.combine(local_today, time.min, tzinfo=tz)
-            today_start_utc = local_today_start.astimezone(timezone.utc)
             if last_analysis is None or last_analysis < today_start_utc:
                 logger.info("Catching up on daily analysis...")
+                started = datetime.now(timezone.utc)
                 self._run_daily_analysis(db)
-                job_repo.record_run("daily_analysis", now)
+                finished = datetime.now(timezone.utc)
+                job_repo.record_run(
+                    "daily_analysis",
+                    run_at=finished,
+                    success=True,
+                    started_at=started,
+                    duration_seconds=(finished - started).total_seconds(),
+                )
                 db.commit()
 
             # Check notifications
             last_notif = ensure_timezone_aware(job_repo.get_last_run("notification_check"))
             if last_notif is None or (now - last_notif).total_seconds() > 1800:
                 logger.info("Catching up on notification checks...")
+                started = datetime.now(timezone.utc)
                 self._check_notifications(db)
-                job_repo.record_run("notification_check", now)
+                finished = datetime.now(timezone.utc)
+                job_repo.record_run(
+                    "notification_check",
+                    run_at=finished,
+                    success=True,
+                    started_at=started,
+                    duration_seconds=(finished - started).total_seconds(),
+                )
                 db.commit()
 
             # Reddit daily features (run once per day; catch up if not run today, in market timezone)
             last_reddit_daily = ensure_timezone_aware(job_repo.get_last_run("reddit_daily_features"))
             if last_reddit_daily is None or last_reddit_daily < today_start_utc:
                 logger.info("Catching up on Reddit daily features...")
+                started = datetime.now(timezone.utc)
                 self._run_reddit_daily_features(db)
-                job_repo.record_run("reddit_daily_features", now)
+                finished = datetime.now(timezone.utc)
+                job_repo.record_run(
+                    "reddit_daily_features",
+                    run_at=finished,
+                    success=True,
+                    started_at=started,
+                    duration_seconds=(finished - started).total_seconds(),
+                )
                 db.commit()
 
         except Exception as exc:
