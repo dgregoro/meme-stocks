@@ -96,7 +96,7 @@ export const DataCollection: React.FC = () => {
     return `${diffD} days ago`
   }
 
-  if (loading && !status) {
+  if (loading) {
     return <LoadingSpinner message="Loading data collection status..." />
   }
 

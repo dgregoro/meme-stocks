@@ -96,6 +96,7 @@ export type PortfolioSummary = {
   average_loss: number | null
 }
 
+/** Legacy shape for /api/jobs/{job}/runs; prefer JobRunHistoryItem for /api/status/jobs/runs */
 export type JobRun = {
   id: number
   job_name: string
