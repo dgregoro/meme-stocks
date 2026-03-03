@@ -101,6 +101,11 @@ class Settings(BaseSettings):
     intraday_lock_heartbeat_seconds: int = 60
     intraday_lock_name: str = "intraday_ingestion"
 
+    # Causal / lead-lag analysis: minimum buckets for valid analysis
+    causal_min_buckets_15m: int = 200
+    causal_min_buckets_1h: int = 200
+    causal_min_buckets_1d: int = 60
+
     # Reddit daily features (causal research): trading-day assignment and aggregation job
     market_timezone: str = "America/New_York"
     market_close_hour_local: int = 16  # Local hour when market closes
