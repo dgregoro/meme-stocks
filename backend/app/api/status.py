@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -8,6 +8,8 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
 from backend.app.data.database import get_session
+from backend.app.data.repositories.job_execution_repo import JobExecutionRepository
+from backend.app.models.job_run_history import JobRunHistory
 from backend.app.services.status_service import (
     CollectionStatusResult,
     DailyFeatureStatusResult,
@@ -30,6 +32,7 @@ class JobStatus(BaseModel):
     job_id: str
     schedule: str | None = None
     last_run_utc: datetime | None = None
+    last_success_utc: datetime | None = None
     last_status: Literal["ran", "never"]
     last_error: str | None = None
     duration_seconds: float | None = None
@@ -105,6 +108,20 @@ class StaleSymbolStatus(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class JobRun(BaseModel):
+    """Single job run record for history API."""
+
+    id: int | None = None
+    job_name: str
+    started_at_utc: datetime | None = None
+    finished_at_utc: datetime | None = None
+    success: bool | None = None
+    error_message: str | None = None
+    duration_seconds: float | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 def _convert_jobs(results: list[JobStatusResult]) -> list[JobStatus]:
     return [JobStatus.model_validate(r) for r in results]
 
@@ -149,6 +166,76 @@ def get_collection_status_api(db: Session = Depends(get_session)) -> CollectionS
             prices_stale_after_days=status_result.health.prices_stale_after_days,
             features_stale_after_days=status_result.health.features_stale_after_days,
         ),
+    )
+
+
+def _as_utc_aware(dt: datetime | None) -> datetime | None:
+    """Normalize datetime to UTC-aware; treat naive as UTC."""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
+@router.get("/jobs/runs", response_model=list[JobRun])
+def get_job_runs_all(
+    limit: int = Query(200, ge=1, le=500),
+    db: Session = Depends(get_session),
+) -> list[JobRun]:
+    """Return recent job executions across all jobs, most recent first."""
+    try:
+        repo = JobExecutionRepository(db)
+        runs = repo.list_recent_runs(job_name=None, limit=limit)
+        return [_job_run_from_history(h) for h in runs]
+    except DataAccessError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=error_detail("DataAccessError", str(exc)),
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=error_detail("UnexpectedError", str(exc)),
+        ) from exc
+
+
+@router.get("/jobs/{job_name}/runs", response_model=list[JobRun])
+def get_job_runs_for_job(
+    job_name: str,
+    limit: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_session),
+) -> list[JobRun]:
+    """Return recent job executions for a specific job, most recent first."""
+    try:
+        repo = JobExecutionRepository(db)
+        runs = repo.list_recent_runs(job_name=job_name, limit=limit)
+        return [_job_run_from_history(h) for h in runs]
+    except DataAccessError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=error_detail("DataAccessError", str(exc)),
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=error_detail("UnexpectedError", str(exc)),
+        ) from exc
+
+
+def _job_run_from_history(h: JobRunHistory) -> JobRun:
+    """Build JobRun from JobRunHistory, normalizing datetimes to UTC-aware."""
+    finished = _as_utc_aware(h.run_at)
+    started = _as_utc_aware(h.started_at)
+    duration = h.duration_seconds
+    return JobRun(
+        id=h.id,
+        job_name=h.job_name,
+        started_at_utc=started,
+        finished_at_utc=finished,
+        success=h.success,
+        error_message=h.error_message,
+        duration_seconds=duration,
     )
 
 

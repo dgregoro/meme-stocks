@@ -44,6 +44,7 @@ class JobStatusResult:
     job_id: str
     schedule: str | None
     last_run_utc: datetime | None
+    last_success_utc: datetime | None
     last_status: JobStatusValue
     last_error: str | None
     duration_seconds: float | None
@@ -157,6 +158,7 @@ def _build_job_statuses(db: Session, settings: object, now_utc: datetime) -> lis
         if job_id == "intraday_ingestion" and not getattr(settings, "intraday_ingestion_enabled", False):
             continue
         last_run = job_repo.get_last_run(job_id)
+        last_success = job_repo.get_last_success(job_id)
         if last_run is None:
             status: JobStatusValue = "never"
         else:
@@ -167,6 +169,7 @@ def _build_job_statuses(db: Session, settings: object, now_utc: datetime) -> lis
                 job_id=job_id,
                 schedule=schedule,
                 last_run_utc=last_run,
+                last_success_utc=last_success,
                 last_status=status,
                 last_error=None,
                 duration_seconds=None,

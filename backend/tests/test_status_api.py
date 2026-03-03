@@ -11,6 +11,7 @@ from sqlalchemy.pool import StaticPool
 
 from backend.app.data.database import Base, get_session
 from backend.app.main import create_app
+from backend.app.models.job_run_history import JobRunHistory
 from backend.app.models.price_data import PriceData
 from backend.app.models.reddit_daily_feature import RedditDailyFeature
 from backend.app.models.reddit_post import RedditPost
@@ -244,3 +245,108 @@ def test_stale_symbols_with_naive_datetimes(monkeypatch: pytest.MonkeyPatch) -> 
     assert "GME" in symbols
     gme = next(s for s in data if s["symbol"] == "GME")
     assert "reddit_stale" in gme["stale_reasons"]
+
+
+def test_status_jobs_runs_empty_returns_empty_list() -> None:
+    """GET /api/status/jobs/runs returns [] when no runs exist, no 500."""
+    client, _ = _build_test_app_with_db()
+    resp = client.get("/api/status/jobs/runs")
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+def test_status_jobs_runs_returns_history_with_datetimes_and_duration() -> None:
+    """GET /api/status/jobs/runs returns runs with UTC-aware finished_at_utc, started_at, duration."""
+    client, db = _build_test_app_with_db()
+
+    t0 = datetime(2026, 3, 1, 10, 0, 0, tzinfo=timezone.utc)
+    started = datetime(2026, 3, 1, 9, 59, 55, tzinfo=timezone.utc)
+    db.add(
+        JobRunHistory(
+            job_name="reddit_collection",
+            run_at=t0,
+            started_at=started,
+            duration_seconds=5.0,
+            success=True,
+            error_message=None,
+        )
+    )
+    db.commit()
+
+    resp = client.get("/api/status/jobs/runs?limit=10")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 1
+    assert data[0]["job_name"] == "reddit_collection"
+    assert data[0]["success"] is True
+    assert data[0]["duration_seconds"] == 5.0
+    assert "finished_at_utc" in data[0]
+    assert "started_at_utc" in data[0]
+    # ISO8601 should include timezone (Z or +00:00)
+    fin = data[0]["finished_at_utc"]
+    assert fin is not None and ("Z" in str(fin) or "+00:00" in str(fin))
+
+
+def test_status_jobs_job_name_runs_returns_started_finished_duration() -> None:
+    """GET /api/status/jobs/{job_name}/runs returns started_at_utc, finished_at_utc, duration."""
+    client, db = _build_test_app_with_db()
+
+    t0 = datetime(2026, 3, 1, 10, 0, 0, tzinfo=timezone.utc)
+    started = datetime(2026, 3, 1, 9, 59, 55, tzinfo=timezone.utc)
+    db.add(
+        JobRunHistory(
+            job_name="price_collection",
+            run_at=t0,
+            started_at=started,
+            duration_seconds=5.0,
+            success=True,
+            error_message=None,
+        )
+    )
+    db.commit()
+
+    resp = client.get("/api/status/jobs/price_collection/runs?limit=10")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 1
+    assert data[0]["job_name"] == "price_collection"
+    assert data[0]["started_at_utc"] is not None
+    assert data[0]["finished_at_utc"] is not None
+    assert data[0]["duration_seconds"] == 5.0
+
+
+def test_status_collection_includes_last_success_utc() -> None:
+    """Collection status jobs include last_success_utc when available."""
+    client, db = _build_test_app_with_db()
+
+    t0 = datetime(2026, 3, 1, 10, 0, 0, tzinfo=timezone.utc)
+    db.add(JobRunHistory(job_name="reddit_collection", run_at=t0, success=True, error_message=None))
+    db.commit()
+
+    resp = client.get("/api/status/collection")
+    assert resp.status_code == 200
+    jobs = resp.json().get("jobs", [])
+    reddit_job = next((j for j in jobs if j["job_id"] == "reddit_collection"), None)
+    assert reddit_job is not None
+    assert "last_success_utc" in reddit_job
+
+
+def test_status_jobs_runs_returns_500_on_data_access_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    """GET /api/status/jobs/runs returns 500 with error detail when repo raises DataAccessError."""
+    from backend.app.utils.errors import DataAccessError
+
+    def _raise_data_access_error(*args, **kwargs):
+        raise DataAccessError("simulated repo failure")
+
+    monkeypatch.setattr(
+        "backend.app.data.repositories.job_execution_repo.JobExecutionRepository.list_recent_runs",
+        _raise_data_access_error,
+    )
+
+    client, _ = _build_test_app_with_db()
+    resp = client.get("/api/status/jobs/runs?limit=10")
+    assert resp.status_code == 500
+    body = resp.json()
+    assert "detail" in body
+    detail = body["detail"]
+    assert "DataAccessError" in str(detail) or "simulated" in str(detail)
