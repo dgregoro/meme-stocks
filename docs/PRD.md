@@ -30,6 +30,10 @@ In addition to the MVP, this repo tracks a research direction:
 - Prefer interpretable, testable methods first (event-study style analyses, Granger-style predictiveness tests),
   then iterate toward ML models once dataset construction is reliable and reproducible.
 
+**Lead-lag evidence endpoint**: The `/api/analysis/causal/{symbol}` endpoint returns cross-correlation,
+predictive regression, and placebo test results. It is explicitly labeled as **lead-lag evidence**, not
+proven causality. Results should be interpreted with appropriate caution.
+
 This research direction is documented in: `docs/CAUSAL_RESEARCH.md`
 
 ---
@@ -687,6 +691,7 @@ See FR-8 "CLI Command Structure" for the mapping between CLI commands and API en
 | GET | /api/stocks/{symbol}/mentions | Get recent Reddit mentions for symbol (with source: subreddit, url) |
 | GET | /api/stocks/{symbol}/prices | Get price history |
 | GET | /api/analysis/daily | Get daily ranked analysis |
+| GET | /api/analysis/causal/{symbol} | Get lead-lag evidence (mentions/sentiment vs returns) |
 | GET | /api/notifications | List unread notifications |
 | POST | /api/trades | Create paper trade |
 | GET | /api/trades | List paper trades |

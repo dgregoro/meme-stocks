@@ -189,12 +189,24 @@ if alignment_score > COMBINED_SIGNAL_THRESHOLD and confidence > 0.7:
 
 | ID | Task | PRD Ref | Effort |
 |----|------|---------|--------|
+| 3.0 | Lead-lag evidence endpoint (sentiment/mentions vs returns) | PRD §1.2 | Medium |
 | 3.1 | Stock categorization in daily analysis | FR-4.3 | Medium |
 | 3.2 | 7-day trend comparison | FR-4.4 | Medium |
 | 3.3 | Price breakout/breakdown detection | FR-2.6 | Medium |
 | 3.4 | Support/resistance level identification | FR-2.7 | Large |
 | 3.5 | Win rate calculation for paper trading | FR-5.6 | Small |
 | 3.6 | Sentiment momentum tracking | PRD §5 | Medium |
+
+### 3.0 Lead-Lag Evidence Endpoint ✅
+
+**Purpose**: Answer "Does Reddit activity/sentiment lead price moves for SYMBOL at some lag?"
+
+**Endpoint**: `GET /api/analysis/causal/{symbol}`
+
+**Output** (labeled as "lead-lag evidence", not proven causality):
+- Cross-correlation by lag (mentions→returns, sentiment→returns)
+- Out-of-sample predictive regression metrics (R², directional accuracy)
+- Placebo test (shuffled predictor; result should drop)
 
 ### 3.1 Stock Categorization
 
