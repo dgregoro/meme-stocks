@@ -74,10 +74,10 @@ class Settings(BaseSettings):
     )
 
     # Alpaca market data (intraday minute bars)
-    # Free plan: full-market SIP is delayed; use delayed_sip (15-min delay).
-    # Do not query the last ~15 minutes when using delayed SIP on free—requests can fail.
-    # Real-time on free is IEX-only, not consolidated; we use delayed_sip for broad market.
+    # Historical bars endpoint rejects delayed_sip (400 invalid feed); use iex for bars.
+    # alpaca_data_feed kept for future latest/streaming use; bars use alpaca_bars_feed.
     alpaca_data_feed: str = "delayed_sip"
+    alpaca_bars_feed: str = "iex"  # Feed for historical bars; iex works on free plan
     alpaca_free_plan_mode: bool = True
     alpaca_sip_delay_minutes: int = 15
     alpaca_end_time_safety_minutes: int = 20  # end = now - this (default 20 > 15 for clock skew)
@@ -92,6 +92,7 @@ class Settings(BaseSettings):
     intraday_feature_store_root: str = "data/intraday"
     intraday_max_pages_per_batch: int = 100
     intraday_interval_minutes: int = 15  # scheduler interval
+    intraday_group_span_hours: float = 1.0  # max span within a start-window group (avoids refetch duplication)
     # Feature store: when True, read_bars raises if any partition file is unreadable
     feature_store_strict_reads: bool = False
 

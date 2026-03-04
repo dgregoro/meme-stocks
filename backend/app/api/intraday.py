@@ -86,7 +86,7 @@ def get_intraday_status(db: Session = Depends(get_session)) -> IntradayStatusRes
             lock_info["expires_at"] = current_lock.expires_at.isoformat() if current_lock.expires_at else None
 
     return IntradayStatusResponse(
-        alpaca_feed=settings.alpaca_data_feed,
+        alpaca_feed=settings.alpaca_bars_feed,
         free_plan_mode=settings.alpaca_free_plan_mode,
         sip_delay_minutes=sip_delay,
         end_time_safety_minutes=safety,

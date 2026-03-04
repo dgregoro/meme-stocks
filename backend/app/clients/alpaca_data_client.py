@@ -45,6 +45,13 @@ def compute_safe_end_time(
     return now_utc
 
 
+def _feed_for_bars(feed: str) -> str:
+    """Normalize feed for historical bars endpoint. delayed_sip is invalid (400); use iex."""
+    if feed == "delayed_sip":
+        return "iex"
+    return feed
+
+
 class AlpacaDataClient:
     """Client for Alpaca minute-bar data. Uses compute_safe_end_time for all requests."""
 
@@ -53,14 +60,14 @@ class AlpacaDataClient:
         *,
         free_plan_mode: bool = True,
         end_time_safety_minutes: int = 20,
-        feed: str = "delayed_sip",
+        feed: str = "iex",
         api_key_id: str | None = None,
         api_secret_key: str | None = None,
         base_url: str = "https://data.alpaca.markets",
     ) -> None:
         self._free_plan_mode = free_plan_mode
         self._end_time_safety_minutes = end_time_safety_minutes
-        self._feed = feed
+        self._feed = _feed_for_bars(feed)
         self._api_key_id = api_key_id
         self._api_secret_key = api_secret_key
         self._base_url = base_url.rstrip("/")
@@ -123,7 +130,7 @@ class AlpacaDataClient:
         """
         from datetime import timezone
 
-        feed = feed or self._feed
+        feed = _feed_for_bars(feed or self._feed)
         now_utc = datetime.now(timezone.utc)
         end = self._effective_end(end, now_utc)
 
@@ -148,6 +155,7 @@ class AlpacaDataClient:
             headers["APCA-API-SECRET-KEY"] = self._api_secret_key
 
         last_exc: Exception | None = None
+        last_feed = feed
         for attempt in range(ALPACA_MAX_RETRIES):
             try:
                 resp = requests.get(url, params=params, headers=headers or None, timeout=60)
@@ -156,6 +164,16 @@ class AlpacaDataClient:
                     bars = data.get("bars", {})
                     next_token = data.get("next_page_token")
                     return bars, next_token if next_token else None
+                if resp.status_code == 400 and "invalid feed" in (resp.text or "").lower():
+                    if last_feed != "iex":
+                        logger.warning(
+                            "Alpaca bars invalid feed=%s (400); retrying with feed=iex",
+                            last_feed,
+                        )
+                        last_feed = "iex"
+                        params["feed"] = "iex"
+                        last_exc = ExternalAPIError(f"Alpaca invalid feed (400); body={resp.text[:500]}")
+                        continue
                 if resp.status_code == 429:
                     last_exc = ExternalAPIError(f"Alpaca rate limited (429); body={resp.text[:500]}")
                 elif 500 <= resp.status_code < 600:

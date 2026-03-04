@@ -61,6 +61,7 @@ def test_ingestion_service_uses_safe_end_time() -> None:
             mock_settings.alpaca_free_plan_mode = True
             mock_settings.alpaca_end_time_safety_minutes = 20
             mock_settings.alpaca_data_feed = "delayed_sip"
+            mock_settings.alpaca_bars_feed = "iex"
             mock_settings.intraday_universe_mode = "tracked"
             mock_settings.intraday_feature_store_root = "/tmp/test_intraday_store"
             mock_settings.intraday_symbols_batch_size = 200
@@ -84,7 +85,7 @@ def test_ingestion_service_uses_safe_end_time() -> None:
             assert mock_req.called
             if mock_req.called:
                 call_params = mock_req.call_args[1]["params"]
-                assert call_params["feed"] == "delayed_sip"
+                assert call_params["feed"] == "iex"
                 assert "start" in call_params
                 assert "end" in call_params
     finally:
@@ -134,7 +135,7 @@ def test_intraday_status_reports_lag_and_safety() -> None:
     response = client.get("/api/intraday/status")
     assert response.status_code == 200
     data = response.json()
-    assert data["alpaca_feed"] == "delayed_sip"
+    assert data["alpaca_feed"] == "iex"  # default alpaca_bars_feed for historical bars
     assert data["free_plan_mode"] is True
     assert data["sip_delay_minutes"] == 15
     assert data["end_time_safety_minutes"] == 20

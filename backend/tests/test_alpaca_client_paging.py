@@ -10,6 +10,7 @@ import requests
 
 from backend.app.clients.alpaca_data_client import (
     AlpacaDataClient,
+    _feed_for_bars,
     compute_safe_end_time,
 )
 
@@ -60,7 +61,8 @@ def test_fetch_bars_page_returns_bars_and_next_token() -> None:
         assert token is None
         call_args = mock_get.call_args
         assert call_args[1]["params"]["symbols"] == "AAPL"
-        assert call_args[1]["params"]["feed"] == "delayed_sip"
+        # delayed_sip is normalized to iex for historical bars (Alpaca 400 invalid feed)
+        assert call_args[1]["params"]["feed"] == "iex"
         assert call_args[1]["params"]["limit"] == 10000
 
 
@@ -166,3 +168,53 @@ def test_safe_end_time_used_when_free_plan_mode() -> None:
             )
             params = mock_get.call_args[1]["params"]
             assert params["end"] == safe_end.isoformat().replace("+00:00", "Z")
+
+
+@pytest.mark.unit
+def test_feed_for_bars_normalizes_delayed_sip_to_iex() -> None:
+    """delayed_sip is invalid for historical bars; normalize to iex."""
+    assert _feed_for_bars("delayed_sip") == "iex"
+    assert _feed_for_bars("iex") == "iex"
+    assert _feed_for_bars("sip") == "sip"
+
+
+@pytest.mark.unit
+def test_fetch_bars_page_400_invalid_feed_retries_with_iex() -> None:
+    """On 400 invalid feed, client retries once with feed=iex."""
+    client = AlpacaDataClient(
+        free_plan_mode=True,
+        end_time_safety_minutes=20,
+        feed="sip",  # non-iex feed that might be invalid
+        api_key_id="k",
+        api_secret_key="s",
+    )
+    start = datetime(2026, 3, 1, 9, 30, 0, tzinfo=timezone.utc)
+    end = datetime(2026, 3, 1, 11, 30, 0, tzinfo=timezone.utc)
+    captured_params: list[dict] = []
+    r1 = type("R", (), {"status_code": 400, "text": '{"message":"invalid feed: sip"}'})()
+    r2 = type(
+        "R",
+        (),
+        {"status_code": 200, "json": lambda self=None: {"bars": {}, "next_page_token": None}},
+    )()
+    responses = [r1, r2]
+
+    def capture_and_respond(*args: object, **kwargs: object) -> object:
+        params = kwargs.get("params")
+        if isinstance(params, dict):
+            captured_params.append(dict(params))
+        return responses.pop(0)
+
+    with patch.object(requests, "get", side_effect=capture_and_respond):
+        bars, token = client.fetch_bars_page(
+            symbols=["AAPL"],
+            start=start,
+            end=end,
+            feed="sip",
+            page_token=None,
+        )
+    assert bars == {}
+    assert token is None
+    assert len(captured_params) == 2
+    assert captured_params[0]["feed"] == "sip"
+    assert captured_params[1]["feed"] == "iex"
