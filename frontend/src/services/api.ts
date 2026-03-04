@@ -197,6 +197,77 @@ function handle<T>(p: Promise<{ data: T }>): Promise<T> {
   })
 }
 
+// --- Causal / lead-lag evidence ---
+
+export type LagCorrelation = {
+  lag: number
+  corr: number
+  n: number
+}
+
+export type PredictiveResult = {
+  metric: string
+  value: number
+}
+
+export type PlaceboResult = {
+  metric: string
+  value: number
+}
+
+export type CausalEvidenceResponse =
+  | {
+      status?: 'ok'
+      symbol: string
+      freq: string
+      start_utc: string
+      end_utc: string
+      sample_size: number
+      mention_xcorr: LagCorrelation[]
+      sentiment_xcorr: LagCorrelation[]
+      predictive: PredictiveResult[]
+      placebo: PlaceboResult[]
+      notes: string[]
+    }
+  | {
+      status: 'insufficient_data'
+      symbol: string
+      freq: string
+      reason: string
+      buckets_available: number
+      min_required: number
+      notes?: string[]
+    }
+
+export async function fetchCausalEvidence(args: {
+  symbol: string
+  days: number
+  freq: '15min' | '1h' | '1d' | string
+  maxLag: number
+  includePlacebo: boolean
+}): Promise<CausalEvidenceResponse> {
+  const { symbol, days, freq, maxLag, includePlacebo } = args
+  const data = await handle(
+    client.get<CausalEvidenceResponse>(
+      `/api/analysis/causal/${encodeURIComponent(symbol)}`,
+      {
+        params: {
+          days,
+          freq,
+          max_lag: maxLag,
+          include_placebo: includePlacebo,
+        },
+      },
+    ),
+  )
+  if ('buckets_available' in data && 'reason' in data) {
+    return { ...data, status: 'insufficient_data' }
+  }
+  return data
+}
+
+// ---
+
 export const api = {
   health: () => handle(client.get<{ status: string }>('/health')),
   analysisDaily: () => handle(client.get<AnalysisRow[]>('/api/analysis/daily')),
