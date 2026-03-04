@@ -95,10 +95,8 @@ class AlpacaDataClient:
     ) -> list[dict]:
         """Fetch minute bars for symbol from start to end (both UTC).
 
-        Callers must pass end <= compute_safe_end_time(now) when free_plan_mode
-        is True; the ingestion service enforces this. This method does not
-        clamp end so that the single source of truth for safe end is
-        compute_safe_end_time.
+        When free_plan_mode is True, the request end time is clamped to the
+        client's safe end time inside fetch_bars_page().
 
         Returns a list of bar dicts (open, high, low, close, volume, timestamp).
         Implementation may be stubbed until Alpaca API integration is added.

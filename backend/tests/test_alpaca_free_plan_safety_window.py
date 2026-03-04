@@ -140,7 +140,7 @@ def test_intraday_status_reports_lag_and_safety() -> None:
     assert data["sip_delay_minutes"] == 15
     assert data["end_time_safety_minutes"] == 20
     assert data["effective_data_lag_minutes"] == 20
-    assert "delayed SIP" in data["notes"]
+    assert "Historical bars feed=iex" in data["notes"]
     assert "20 minutes" in data["notes"]
     assert "counts_by_status" in data
     assert "newest_last_ts" in data
