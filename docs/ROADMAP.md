@@ -208,6 +208,8 @@ if alignment_score > COMBINED_SIGNAL_THRESHOLD and confidence > 0.7:
 - Out-of-sample predictive regression metrics (R², directional accuracy)
 - Placebo test (shuffled predictor; result should drop)
 
+**UI (Phase 4 UX)**: Causal tab on symbol detail page; controls (days, freq, max_lag, include placebo); results tables; correlation vs lag chart.
+
 ### 3.1 Stock Categorization
 
 **Current**: Daily analysis returns ranked list
@@ -442,6 +444,7 @@ Update this section as work completes:
 | 2026-01-31 | 1 | Add missing tests | ✅ | RedditSymbolMentionRepository tests |
 | 2026-02-01 | 2 | 2.1 Configurable sentiment keywords | ✅ | config.py + sentiment_analyzer.py |
 | 2026-02-01 | 2.5 | CLI implementation started | 🔄 | backend/cli/ scaffold |
+| 2026-03-04 | 4 | Causal UI (lead-lag tab on symbol detail) | ✅ | CausalPanel, fetchCausalEvidence, tab routing |
 
 ---
 
