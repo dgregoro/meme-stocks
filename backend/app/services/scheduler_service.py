@@ -49,8 +49,22 @@ class SchedulerService:
     def __init__(self) -> None:
         self._scheduler = BackgroundScheduler()
         self._settings = get_settings()
-        self._reddit_service = RedditService()
+        self._reddit_service: RedditService | None
+        if self._reddit_configured():
+            self._reddit_service = RedditService()
+        else:
+            self._reddit_service = None
+            logger.info(
+                "Reddit credentials not configured (REDDIT_CLIENT_ID/CLIENT_SECRET); "
+                "Reddit collection will be skipped"
+            )
         self._yahoo_service = YahooFinanceService()
+
+    def _reddit_configured(self) -> bool:
+        """Return True if Reddit API credentials are present and non-empty."""
+        sid = self._settings.reddit_client_id
+        sec = self._settings.reddit_client_secret
+        return bool(sid and sec)
 
     def start(self) -> None:
         """Start the scheduler; run catch-up in background if enabled."""
@@ -378,6 +392,10 @@ class SchedulerService:
             REDDIT_SYMBOLS_MENTIONED: 0,
             REDDIT_STOCKS_CREATED: 0,
         }
+
+        if self._reddit_service is None:
+            logger.debug("Skipping Reddit collection: credentials not configured")
+            return stats
 
         try:
             subreddits = [s.strip() for s in self._settings.reddit_subreddits.split(",")]

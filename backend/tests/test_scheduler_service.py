@@ -50,6 +50,34 @@ def test_scheduler_service_initialization(mock_reddit, mock_yahoo):
     assert scheduler._settings is not None
 
 
+@patch("backend.app.services.scheduler_service.get_settings")
+@patch("backend.app.services.scheduler_service.YahooFinanceService")
+def test_collect_reddit_data_skipped_when_credentials_missing(mock_yahoo, mock_get_settings, db_session):
+    """When Reddit credentials are empty, Reddit collection returns zero stats without calling API."""
+    from backend.app.services.job_metrics import (
+        REDDIT_POSTS_FETCHED,
+        REDDIT_POSTS_INSERTED,
+        REDDIT_SYMBOLS_MENTIONED,
+        REDDIT_STOCKS_CREATED,
+    )
+
+    mock_settings = MagicMock()
+    mock_settings.reddit_client_id = ""
+    mock_settings.reddit_client_secret = ""
+    mock_settings.reddit_subreddits = "wallstreetbets"
+    mock_get_settings.return_value = mock_settings
+
+    scheduler = SchedulerService()
+    assert scheduler._reddit_service is None
+
+    stats = scheduler._collect_reddit_data(db_session)
+
+    assert stats[REDDIT_POSTS_FETCHED] == 0
+    assert stats[REDDIT_POSTS_INSERTED] == 0
+    assert stats[REDDIT_SYMBOLS_MENTIONED] == 0
+    assert stats[REDDIT_STOCKS_CREATED] == 0
+
+
 def test_job_execution_repository_get_last_run_none(db_session):
     """Test getting last run time when job has never run."""
     repo = JobExecutionRepository(db_session)
