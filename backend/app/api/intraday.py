@@ -45,9 +45,11 @@ def get_intraday_status(db: Session = Depends(get_session)) -> IntradayStatusRes
     sip_delay = settings.alpaca_sip_delay_minutes
     effective_lag = max(safety, sip_delay)
     notes = (
-        f"Using delayed SIP; ingestion ends at now - {safety} minutes to avoid free-plan 15-minute restriction."
+        f"Historical bars feed={settings.alpaca_bars_feed}. "
+        f"Free plan mode: ingestion ends at now - {safety} minutes "
+        f"(SIP delay is {sip_delay}m; effective lag is {effective_lag}m)."
         if settings.alpaca_free_plan_mode
-        else "Free plan mode disabled; end time = now."
+        else f"Historical bars feed={settings.alpaca_bars_feed}. Free plan mode disabled; end time = now."
     )
 
     repo = IntradayIngestRepository(db)
@@ -86,7 +88,7 @@ def get_intraday_status(db: Session = Depends(get_session)) -> IntradayStatusRes
             lock_info["expires_at"] = current_lock.expires_at.isoformat() if current_lock.expires_at else None
 
     return IntradayStatusResponse(
-        alpaca_feed=settings.alpaca_data_feed,
+        alpaca_feed=settings.alpaca_bars_feed,
         free_plan_mode=settings.alpaca_free_plan_mode,
         sip_delay_minutes=sip_delay,
         end_time_safety_minutes=safety,

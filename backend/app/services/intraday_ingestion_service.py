@@ -23,6 +23,41 @@ from backend.app.utils.errors import ExternalAPIError, IngestionAlreadyRunningEr
 logger = logging.getLogger(__name__)
 
 
+def _group_symbols_by_start_window(
+    start_by_symbol: dict[str, datetime],
+    max_span: timedelta,
+) -> list[list[str]]:
+    """Partition symbols into groups where span between earliest and latest start <= max_span.
+
+    Symbols are sorted by start time. A new group begins whenever adding a symbol would
+    exceed max_span from the earliest start in the current group.
+    """
+    if not start_by_symbol:
+        return []
+
+    items = sorted(start_by_symbol.items(), key=lambda kv: kv[1])
+    groups: list[list[str]] = []
+    cur_group: list[str] = []
+    cur_group_start: datetime | None = None
+
+    for sym, st in items:
+        if cur_group_start is None:
+            cur_group_start = st
+            cur_group = [sym]
+            continue
+
+        if st - cur_group_start <= max_span:
+            cur_group.append(sym)
+        else:
+            groups.append(cur_group)
+            cur_group_start = st
+            cur_group = [sym]
+
+    if cur_group:
+        groups.append(cur_group)
+    return groups
+
+
 def _parse_bar_ts(bar: dict) -> datetime | None:
     """Return UTC datetime from bar 't' field."""
     import datetime as _dt
@@ -68,7 +103,7 @@ def run_intraday_ingestion(
     client = AlpacaDataClient(
         free_plan_mode=settings.alpaca_free_plan_mode,
         end_time_safety_minutes=settings.alpaca_end_time_safety_minutes,
-        feed=settings.alpaca_data_feed,
+        feed=settings.alpaca_bars_feed,
         api_key_id=settings.alpaca_api_key_id,
         api_secret_key=settings.alpaca_api_secret_key,
         base_url=settings.alpaca_data_base_url,
@@ -94,7 +129,7 @@ def run_intraday_ingestion(
             "start_utc": None,
             "end_utc": safe_end.isoformat(),
             "safe_end_used": safe_end.isoformat(),
-            "feed": settings.alpaca_data_feed,
+            "feed": settings.alpaca_bars_feed,
             "free_plan_mode": settings.alpaca_free_plan_mode,
         }
 
@@ -146,100 +181,121 @@ def run_intraday_ingestion(
     errors_count = 0
     start_utc_used: datetime | None = None
 
+    # Compute start per symbol (incremental: last_ts+1min, or full lookback if none)
+    start_by_symbol: dict[str, datetime] = {}
+    for sym in symbols:
+        st = states.get(sym)
+        if st and st.status == "paused":
+            continue
+        if st and st.last_ts is not None:
+            last = st.last_ts
+            if last.tzinfo is None:
+                last = last.replace(tzinfo=timezone.utc)
+            start_sym = last + timedelta(minutes=1)
+        else:
+            start_sym = safe_end - timedelta(days=lookback_days)
+        if start_sym >= safe_end:
+            continue
+        start_by_symbol[sym] = start_sym
+        if start_utc_used is None or start_sym < start_utc_used:
+            start_utc_used = start_sym
+
+    # Group symbols by start window to avoid "new symbol drags batch_start back 30 days" duplication
+    max_span = timedelta(hours=getattr(settings, "intraday_group_span_hours", 1.0))
+    start_groups = _group_symbols_by_start_window(start_by_symbol, max_span)
+    logger.info(
+        "Intraday ingest grouping: total_symbols=%d groups=%d max_span=%s",
+        len(start_by_symbol),
+        len(start_groups),
+        max_span,
+    )
+
     try:
-        for i in range(0, len(symbols), batch_size):
-            batch = symbols[i : i + batch_size]  # noqa: E203 (black style)
-            # Compute start/end per symbol for this batch (same end for all: safe_end)
-            symbol_starts: dict[str, datetime] = {}
-            for sym in batch:
-                st = states.get(sym)
-                if st and st.status == "paused":
-                    continue
-                if st and st.last_ts is not None:
-                    # next minute after last
-                    last = st.last_ts
-                    if last.tzinfo is None:
-                        last = last.replace(tzinfo=timezone.utc)
-                    start_sym = last + timedelta(minutes=1)
-                else:
-                    start_sym = safe_end - timedelta(days=lookback_days)
-                if start_sym >= safe_end:
-                    continue
-                symbol_starts[sym] = start_sym
-                if start_utc_used is None or start_sym < start_utc_used:
-                    start_utc_used = start_sym
-
-            if not symbol_starts:
-                continue
-
-            batch_list = sorted(symbol_starts.keys(), key=lambda s: symbol_starts[s])
-            # Use single start/end for the batch (min start, safe_end)
-            batch_start = min(symbol_starts[s] for s in batch_list)
-            page_token: str | None = None
-            pages_done = 0
-            max_ts_by_symbol: dict[str, datetime] = {}
-
-            while pages_done < max_pages:
-                try:
-                    bars_page, page_token = client.fetch_bars_page(
-                        symbols=batch_list,
-                        start=batch_start,
-                        end=safe_end,
-                        timeframe="1Min",
-                        feed=settings.alpaca_data_feed,
-                        page_token=page_token,
-                        limit=10000,
+        for group in start_groups:
+            for i in range(0, len(group), batch_size):
+                batch_list = group[i : i + batch_size]  # noqa: E203 (black style)
+                batch_start = min(start_by_symbol[s] for s in batch_list)
+                span = max(start_by_symbol[s] for s in batch_list) - batch_start
+                if span > max_span:
+                    logger.warning(
+                        "Start-span exceeded unexpectedly: span=%s max_span=%s batch=%s",
+                        span,
+                        max_span,
+                        batch_list,
                     )
-                except ExternalAPIError as e:
-                    logger.error("Alpaca fetch failed for batch: %s", e)
-                    for sym in batch_list:
+                logger.debug(
+                    "Fetching Alpaca bars batch: symbols=%d start=%s end=%s span=%s",
+                    len(batch_list),
+                    batch_start.isoformat(),
+                    safe_end.isoformat(),
+                    span,
+                )
+
+                page_token: str | None = None
+                pages_done = 0
+                max_ts_by_symbol: dict[str, datetime] = {}
+
+                while pages_done < max_pages:
+                    try:
+                        bars_page, page_token = client.fetch_bars_page(
+                            symbols=batch_list,
+                            start=batch_start,
+                            end=safe_end,
+                            timeframe="1Min",
+                            feed=settings.alpaca_bars_feed,
+                            page_token=page_token,
+                            limit=10000,
+                        )
+                    except ExternalAPIError as e:
+                        logger.error("Alpaca fetch failed for batch: %s", e)
+                        for sym in batch_list:
+                            repo.mark_error(sym, str(e))
+                        errors_count += len(batch_list)
+                        break
+
+                    if not bars_page:
+                        if page_token:
+                            pages_done += 1
+                            continue
+                        break
+
+                    try:
+                        written = store.write_bars(bars_page)
+                        total_bars += written
+                    except Exception as e:
+                        logger.exception("Parquet write failed: %s", e)
+                        for sym in bars_page.keys():
+                            repo.mark_error(sym, str(e))
+                        errors_count += len(bars_page)
+                        break
+
+                    for sym, bar_list in bars_page.items():
+                        for b in bar_list:
+                            ts = _parse_bar_ts(b)
+                            if ts and (sym not in max_ts_by_symbol or ts > max_ts_by_symbol[sym]):
+                                max_ts_by_symbol[sym] = ts
+
+                    pages_done += 1
+                    if not page_token:
+                        break
+
+                # Persist last_ts for symbols we got data for
+                for sym, ts in max_ts_by_symbol.items():
+                    try:
+                        repo.update_success(sym, ts)
+                    except Exception as e:
+                        logger.warning("Failed to update state for %s: %s", sym, e)
                         repo.mark_error(sym, str(e))
                         errors_count += 1
-                    break
 
-                if not bars_page:
-                    if page_token:
-                        pages_done += 1
-                        continue
-                    break
-
-                try:
-                    written = store.write_bars(bars_page)
-                    total_bars += written
-                except Exception as e:
-                    logger.exception("Parquet write failed: %s", e)
-                    for sym in bars_page.keys():
-                        repo.mark_error(sym, str(e))
-                        errors_count += 1
-                    break
-
-                for sym, bar_list in bars_page.items():
-                    for b in bar_list:
-                        ts = _parse_bar_ts(b)
-                        if ts and (sym not in max_ts_by_symbol or ts > max_ts_by_symbol[sym]):
-                            max_ts_by_symbol[sym] = ts
-
-                pages_done += 1
-                if not page_token:
-                    break
-
-            # Persist last_ts for symbols we got data for
-            for sym, ts in max_ts_by_symbol.items():
-                try:
-                    repo.update_success(sym, ts)
-                except Exception as e:
-                    logger.warning("Failed to update state for %s: %s", sym, e)
-                    repo.mark_error(sym, str(e))
-                    errors_count += 1
-
-            # Heartbeat to keep lock alive (extend lease by full TTL)
-            if lock_acquired and lock_repo:
-                if not lock_repo.heartbeat(lock_name, owner, lock_ttl, datetime.now(timezone.utc)):
-                    raise IngestionAlreadyRunningError(
-                        "Intraday ingestion lock lost (heartbeat failed); aborting.",
-                        owner=owner,
-                        expires_at=None,
-                    )
+                # Heartbeat to keep lock alive (extend lease by full TTL)
+                if lock_acquired and lock_repo:
+                    if not lock_repo.heartbeat(lock_name, owner, lock_ttl, datetime.now(timezone.utc)):
+                        raise IngestionAlreadyRunningError(
+                            "Intraday ingestion lock lost (heartbeat failed); aborting.",
+                            owner=owner,
+                            expires_at=None,
+                        )
     finally:
         if lock_acquired and lock_repo:
             lock_repo.release_lock(lock_name, owner)
@@ -266,6 +322,6 @@ def run_intraday_ingestion(
         "start_utc": start_utc_used.isoformat() if start_utc_used else None,
         "end_utc": safe_end.isoformat(),
         "safe_end_used": safe_end.isoformat(),
-        "feed": settings.alpaca_data_feed,
+        "feed": settings.alpaca_bars_feed,
         "free_plan_mode": settings.alpaca_free_plan_mode,
     }
