@@ -107,6 +107,11 @@ class Settings(BaseSettings):
     causal_min_buckets_1h: int = 200
     causal_min_buckets_1d: int = 60
 
+    # Research API: dataset output and allowed paths for experiments
+    research_dataset_dir: str = (
+        "data/research"  # Output dir for build-dataset; experiments accept only paths under this
+    )
+
     # Reddit daily features (causal research): trading-day assignment and aggregation job
     market_timezone: str = "America/New_York"
     market_close_hour_local: int = 16  # Local hour when market closes

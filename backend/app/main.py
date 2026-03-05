@@ -39,6 +39,7 @@ from .api import paper_trading as paper_trading_api
 from .api import jobs as jobs_api
 from .api import symbol_universe as symbol_universe_api
 from .api import intraday as intraday_api
+from .api import research as research_api
 from .services.scheduler_service import SchedulerService
 
 
@@ -126,6 +127,7 @@ def create_app(
     app.include_router(jobs_api.router)
     app.include_router(symbol_universe_api.router)
     app.include_router(intraday_api.router)
+    app.include_router(research_api.router)
 
     # Serve frontend static files when running in container (SERVING_FRONTEND=true)
     if os.getenv("SERVING_FRONTEND", "").lower() in ("true", "1", "yes"):
