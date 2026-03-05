@@ -8,8 +8,9 @@ import { StockDetail } from './pages/StockDetail'
 import { Notifications } from './pages/Notifications'
 import { PaperTrading } from './pages/PaperTrading'
 import { DataCollection } from './pages/DataCollection'
+import { Research } from './pages/Research'
 
-export type Tab = 'dashboard' | 'stocks' | 'notifications' | 'paper' | 'status'
+export type Tab = 'dashboard' | 'stocks' | 'notifications' | 'paper' | 'status' | 'research'
 
 const NAV_SECTIONS: { id: Tab; path: string; label: string }[] = [
   { id: 'dashboard', path: '/dashboard', label: 'Dashboard' },
@@ -17,6 +18,7 @@ const NAV_SECTIONS: { id: Tab; path: string; label: string }[] = [
   { id: 'notifications', path: '/notifications', label: 'Notifications' },
   { id: 'paper', path: '/paper', label: 'Paper Trading' },
   { id: 'status', path: '/status', label: 'Data Collection' },
+  { id: 'research', path: '/research', label: 'Research' },
 ]
 
 const THEME_STORAGE_KEY = 'meme-stocks-theme'
@@ -84,6 +86,8 @@ export const App: React.FC = () => {
                     ? pathname.startsWith('/stocks')
                     : id === 'status'
                     ? pathname === '/status'
+                    : id === 'research'
+                    ? pathname === '/research'
                     : pathname === path
                 return (
                   <Link
@@ -124,6 +128,7 @@ export const App: React.FC = () => {
             <Route path="/notifications" element={<Notifications />} />
             <Route path="/paper" element={<PaperTrading />} />
             <Route path="/status" element={<DataCollection />} />
+            <Route path="/research" element={<Research />} />
           </Routes>
         )}
       </main>

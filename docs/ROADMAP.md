@@ -445,6 +445,8 @@ Update this section as work completes:
 | 2026-02-01 | 2 | 2.1 Configurable sentiment keywords | ✅ | config.py + sentiment_analyzer.py |
 | 2026-02-01 | 2.5 | CLI implementation started | 🔄 | backend/cli/ scaffold |
 | 2026-03-04 | 4 | Causal UI (lead-lag tab on symbol detail) | ✅ | CausalPanel, fetchCausalEvidence, tab routing |
+| 2026-03-04 | 4 | 4A: Research API (build-dataset, experiments) | ✅ | backend/app/api/research.py, test_research_api.py |
+| 2026-03-04 | 4 | 4B: Research frontend page | ✅ | Research.tsx, nav + route, api client |
 
 ---
 
