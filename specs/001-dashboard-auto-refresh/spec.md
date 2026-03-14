@@ -1,9 +1,9 @@
 # Feature Specification: Dashboard Auto-Refresh
 
-**Feature Branch**: `001-dashboard-auto-refresh`  
-**Created**: 2026-03-13  
-**Status**: Draft  
-**ROADMAP**: Phase 4.1 (NFR-6.3)  
+**Feature Branch**: `001-dashboard-auto-refresh`
+**Created**: 2026-03-13
+**Status**: Draft
+**ROADMAP**: Phase 4.1 (NFR-6.3)
 **Input**: Auto-refresh dashboard data at configurable interval
 
 ## User Scenarios & Testing *(mandatory)*

@@ -250,4 +250,3 @@ except Exception:
     # callers check [ -n "$TEMPLATE" ] to detect "not found".
     return 0
 }
-

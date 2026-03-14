@@ -17,7 +17,7 @@ This repo uses [GitHub Spec Kit](https://github.com/github/spec-kit) for spec-dr
 
 ## Workflow: Adding a New Feature
 
-1. **Align with ROADMAP**  
+1. **Align with ROADMAP**
    Check `docs/ROADMAP.md` for current phase and task. Update ROADMAP if adding net-new work.
 
 2. **Create the spec** (creates branch + `specs/###-short-name/spec.md`):

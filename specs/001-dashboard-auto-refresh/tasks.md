@@ -1,6 +1,6 @@
 # Tasks: Dashboard Auto-Refresh
 
-**Input**: Design documents from specs/001-dashboard-auto-refresh/  
+**Input**: Design documents from specs/001-dashboard-auto-refresh/
 **Prerequisites**: plan.md, spec.md
 
 **Organization**: Single user story (P1).

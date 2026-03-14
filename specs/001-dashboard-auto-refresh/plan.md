@@ -1,6 +1,6 @@
 # Implementation Plan: Dashboard Auto-Refresh
 
-**Branch**: `001-dashboard-auto-refresh` | **Date**: 2026-03-13 | **Spec**: [spec.md](./spec.md)  
+**Branch**: `001-dashboard-auto-refresh` | **Date**: 2026-03-13 | **Spec**: [spec.md](./spec.md)
 **Input**: Feature specification from specs/001-dashboard-auto-refresh/spec.md
 
 ## Summary
@@ -9,12 +9,12 @@ Add automatic polling to the Dashboard page with configurable interval (default 
 
 ## Technical Context
 
-**Language/Version**: TypeScript (React), Python 3.11 (backend unchanged)  
-**Primary Dependencies**: React, Vite, existing `frontend/src/services/api.ts`  
-**Storage**: N/A (stateless frontend; backend unchanged)  
-**Testing**: Vitest (frontend), existing test setup  
-**Target Platform**: Web browser (Chrome, Firefox, Safari)  
-**Project Type**: Frontend enhancement to existing SPA  
+**Language/Version**: TypeScript (React), Python 3.11 (backend unchanged)
+**Primary Dependencies**: React, Vite, existing `frontend/src/services/api.ts`
+**Storage**: N/A (stateless frontend; backend unchanged)
+**Testing**: Vitest (frontend), existing test setup
+**Target Platform**: Web browser (Chrome, Firefox, Safari)
+**Project Type**: Frontend enhancement to existing SPA
 **Constraints**: No new backend endpoints; reuse existing API.
 
 ## Constitution Check
