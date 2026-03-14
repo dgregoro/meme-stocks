@@ -13,7 +13,6 @@ from typing import Any
 
 from backend.app.config import get_settings
 from backend.app.services.activity_detector import ActivitySignal
-from backend.app.services.pattern_analyzer import PriceTrend
 
 
 @dataclass(frozen=True)
@@ -39,9 +38,7 @@ class CombinedEvaluation:
     evaluation_timestamp: datetime
 
 
-def from_activity_signal(
-    signal: ActivitySignal | None, signal_type: str, weight: float
-) -> SignalEvaluated:
+def from_activity_signal(signal: ActivitySignal | None, signal_type: str, weight: float) -> SignalEvaluated:
     """Convert ActivitySignal to SignalEvaluated. None yields fired=False, contribution=0."""
     if signal is None:
         return SignalEvaluated(
