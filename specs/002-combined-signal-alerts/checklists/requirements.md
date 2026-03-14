@@ -1,7 +1,7 @@
 # Specification Quality Checklist: Combined Signal Alerts
 
-**Purpose**: Validate specification completeness and quality before proceeding to planning  
-**Created**: 2026-03-13  
+**Purpose**: Validate specification completeness and quality before proceeding to planning
+**Created**: 2026-03-13
 **Feature**: [spec.md](../spec.md)
 
 ## Content Quality
@@ -31,4 +31,4 @@
 
 ## Notes
 
-- Spec ready for `/speckit.plan`. Aligns with ROADMAP Phase 2.5 and PLAN.md combined-signal logic.
+- Spec tightened: Phase 2 Task 2.5, feature flag, testable scenario matrix, signals_evaluated metadata.

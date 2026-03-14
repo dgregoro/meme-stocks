@@ -7,6 +7,19 @@
 - Backend running: `uvicorn backend.app.main:app --host 127.0.0.1 --port 8000`
 - At least one stock tracked with price and Reddit data
 
+## Config
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `combined_signal_alerts_only` | `false` | When false, individual and combined alerts coexist. When true, only combined alerts. |
+| `combined_signal_weight_sentiment` | 2 | Weight for sentiment shift |
+| `combined_signal_weight_price` | 2 | Weight for price movement |
+| `combined_signal_weight_volume` | 1 | Weight for volume spike |
+| `combined_signal_weight_rsi` | 1 | Weight for RSI signal (overbought/oversold) |
+| `combined_signal_threshold` | 4 | Combined score must be >= this to create alert |
+
+**Operator expectation**: Leave `combined_signal_alerts_only=false` to preserve current behavior. Set `true` when ready for combined-only mode.
+
 ## Validation Steps
 
 ### 1. Run Tests
@@ -16,34 +29,21 @@ pytest backend/tests/test_combined_signal_service.py -v
 pytest backend/tests/test_notification_service.py -v
 ```
 
-### 2. Verify Config
-
-Check that config includes new settings:
-
-```bash
-# In backend/app/config.py or via env
-COMBINED_SIGNAL_WEIGHT_SENTIMENT=2
-COMBINED_SIGNAL_WEIGHT_PRICE=2
-COMBINED_SIGNAL_WEIGHT_VOLUME=1
-COMBINED_SIGNAL_WEIGHT_RSI=1
-COMBINED_SIGNAL_THRESHOLD=4
-```
-
-### 3. Trigger Notification Check
+### 2. Trigger Notification Check
 
 ```bash
 curl -X POST http://127.0.0.1:8000/api/jobs/notification-check
 ```
 
-### 4. List Notifications
+### 3. List Notifications
 
 ```bash
 curl http://127.0.0.1:8000/api/notifications
 ```
 
-Expect notifications with `type: "combined_signal"` to include `signal_metadata` with `signals_fired` and `combined_score`.
+Expect combined alerts to include `signal_metadata` with `evaluation_timestamp`, `combined_score`, `threshold`, `signals_evaluated`.
 
-### 5. Full Verification
+### 4. Full Verification
 
 ```bash
 ./scripts/verify.sh
@@ -51,7 +51,15 @@ Expect notifications with `type: "combined_signal"` to include `signal_metadata`
 
 ## Expected Behavior
 
-- Single-signal events (e.g., volume spike alone) do NOT generate notifications
-- Multiple signals aligning (e.g., sentiment + volume + price) generate one notification with structured metadata
-- Per-symbol failures are logged; job continues for other symbols
-- API response includes `signal_metadata` when type is `combined_signal`
+**Default (`combined_signal_alerts_only=false`)**:
+- Individual alerts (volume, price, sentiment) created as today
+- Combined alerts created when score >= threshold
+- Both coexist
+
+**Combined-only (`combined_signal_alerts_only=true`)**:
+- Only combined alerts created
+- No individual alerts
+
+**Always**:
+- Per-symbol failures logged; job continues
+- signal_metadata includes all signals_evaluated (fired and not fired)

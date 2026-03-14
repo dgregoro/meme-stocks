@@ -1,9 +1,9 @@
 # Feature Specification: Combined Signal Alerts
 
-**Feature Branch**: `002-combined-signal-alerts`  
-**Created**: 2026-03-13  
-**Status**: Draft  
-**ROADMAP**: Phase 2.5 (PLAN.md, PRD FR-3.7)  
+**Feature Branch**: `002-combined-signal-alerts`
+**Created**: 2026-03-13
+**Status**: Draft
+**ROADMAP**: Phase 2, Task 2.5 (combined-signal alerts), PRD FR-3.7
 **Input**: Combined Signal Alerts — aggregate multiple signals before generating alerts
 
 ## User Scenarios & Testing *(mandatory)*
@@ -47,38 +47,65 @@ As a user receiving an alert, I want to see which signals contributed to it and 
 - What is the minimum number of signals required? Configurable; the threshold defines when an alert fires (e.g., score ≥ N).
 - How are weights and thresholds determined? Configurable via application configuration; no hardcoded magic numbers.
 
+## Product Behavior: Combined vs. Individual Alerts
+
+**Default behavior (safe rollout)**: Individual alerts (volume, price, sentiment) continue to be created as today. Combined alerts are created in addition when the combined score meets the threshold. Both coexist.
+
+**When `combined_signal_alerts_only=true`**: Only combined alerts are created; individual alerts are suppressed. Use for rollout after validating combined behavior.
+
+**Config name**: `combined_signal_alerts_only` (bool, default `false`).
+
+**Migration/rollout**: Operators leave default (`false`) to preserve current behavior. Set to `true` when ready to rely solely on combined alerts. No data migration required; flag is runtime-only.
+
+**Operator expectation**: With default, users see both individual and combined alerts. With `true`, users see only combined alerts (fewer, higher-quality).
+
 ## Requirements *(mandatory)*
 
 ### Functional Requirements
 
-- **FR-001**: The system MUST aggregate signals from existing analysis components (sentiment, price, volume, technical indicators) per ticker before deciding whether to create an alert.
+- **FR-001**: The system MUST aggregate signals from **currently available** analysis components (sentiment, price, volume; RSI if present) per ticker before deciding whether to create a combined alert.
 - **FR-002**: Each signal type MUST contribute to a weighted combined score; weights MUST be configurable.
-- **FR-003**: Alerts MUST be generated only when the combined score meets or exceeds a configurable threshold.
-- **FR-004**: Each alert MUST include structured metadata describing which signals fired, their individual values, and the combined score.
-- **FR-005**: The aggregation layer MUST consume outputs from existing detectors (sentiment, price, volume, RSI) without modifying those components.
-- **FR-006**: Missing or unavailable signals MUST be treated as non-contributing (score = 0 for that signal); the system MUST NOT fabricate values.
+- **FR-003**: Combined alerts MUST be generated only when the combined score meets or exceeds a configurable threshold.
+- **FR-004**: Each combined alert MUST include structured metadata with evaluation_timestamp, combined_score, threshold, and signals_evaluated (all evaluated signals, with fired/contribution).
+- **FR-005**: The aggregation layer MUST consume outputs from existing detectors. Lightweight adapter logic to normalize heterogeneous detector outputs is acceptable; detectors themselves are NOT modified.
+- **FR-006**: Missing or unavailable signal sources MUST contribute 0 to the score; the system MUST NOT fabricate values. Volume-confirmation logic (ROADMAP 2.4) is out of scope unless already present.
 - **FR-007**: Per-symbol evaluation failures MUST be logged and MUST NOT stop evaluation of other symbols or the job itself (per PRD §5.0).
+- **FR-008**: When `combined_signal_alerts_only=false` (default), individual alerts continue to be created as today; combined alerts are created in addition. When `true`, only combined alerts are created.
 
 ### Key Entities
 
-- **Signal**: A single indicator (e.g., sentiment spike, price breakout, volume spike, RSI threshold). Has a type, value, and optional contribution to the combined score.
-- **Combined Evaluation**: The result of aggregating signals for a ticker at a point in time. Includes which signals fired, their values, the combined score, and whether the threshold was met.
-- **Alert**: A notification created when the combined score meets the threshold. Includes the structured explanation (signals fired, values, combined score).
+- **SignalEvaluated**: A single signal evaluated for a ticker. Has signal_type, raw_value, fired (bool), contribution, optional reason. All evaluated signals appear in metadata for debugging.
+- **CombinedEvaluation**: The result of aggregating signals for a ticker. Includes signals_evaluated (all), combined_score, threshold, evaluation_timestamp, threshold_met.
+- **Alert**: A notification when combined_score ≥ threshold. Includes signal_metadata with evaluation_timestamp, combined_score, threshold, signals_evaluated.
 
 ## Success Criteria *(mandatory)*
 
+### Testable Scenario Matrix
+
+| Scenario | Input | Expected Outcome | Test Method |
+|----------|-------|------------------|-------------|
+| One signal only | e.g., volume spike alone | No combined alert | Unit/integration test with mocked signals |
+| Two+ signals, score below threshold | e.g., sentiment + volume, weights sum < threshold | No combined alert | Unit test |
+| Two+ signals, score ≥ threshold | e.g., sentiment + volume + price, weights sum ≥ threshold | Combined alert created with signal_metadata | Unit/integration test |
+| Missing signal input | One or more detectors return None | No crash; score computed from available signals only | Unit test with partial inputs |
+| Per-symbol failure | Exception for symbol X | Logged; evaluation continues for other symbols | Integration test |
+| Default config | `combined_signal_alerts_only=false` | Individual alerts created; combined alerts created when threshold met | Integration test |
+| Combined-only config | `combined_signal_alerts_only=true` | Only combined alerts created; no individual alerts | Integration test |
+
 ### Measurable Outcomes
 
-- **SC-001**: Alerts are generated only when at least two signal types contribute and the combined score meets the configured threshold.
-- **SC-002**: Every generated alert includes structured metadata (signals fired, individual values, combined score) that can be displayed or logged.
-- **SC-003**: False positives from single-signal noise decrease compared to the current independent-alert behavior (qualitative improvement; can be validated by manual review).
+- **SC-001**: Combined alerts are generated only when combined_score ≥ threshold; single-signal-only cases produce no combined alert.
+- **SC-002**: Every combined alert includes signal_metadata with evaluation_timestamp, combined_score, threshold, and signals_evaluated (including fired and contribution per signal).
+- **SC-003**: Missing signal sources contribute 0; score is deterministically computed from available inputs.
 - **SC-004**: Per-symbol failures do not cause job failure; the system continues evaluating other symbols.
+- **SC-005**: With default config, individual alerts coexist with combined alerts; with combined-only config, only combined alerts are created.
 
 ## Assumptions
 
-- Existing signal detectors (activity_detector, pattern_analyzer, sentiment_analyzer) remain unchanged; the aggregation layer consumes their outputs.
-- Weights and threshold are stored in configuration (e.g., config module); illustrative values (sentiment +2, price +2, volume +1, RSI +1, threshold) are starting points.
-- Notification storage format may need extension to hold the structured explanation (metadata field or similar); the spec does not prescribe storage schema.
-- RSI and pattern signals are available from existing components; if not yet implemented, those slots contribute 0 until implemented.
+- Aggregation consumes **currently available** signals only: activity_detector (volume, price, sentiment), pattern_analyzer (RSI if present). Missing sources contribute 0.
+- Volume-confirmed pattern logic (ROADMAP 2.4) is NOT in scope unless already present in the codebase.
+- Detector outputs may be heterogeneous; lightweight adapter logic in combined_signal_service or notification_service to normalize into a common structure is acceptable. Detectors themselves are NOT modified.
+- Weights and threshold in config.py; `combined_signal_alerts_only` controls rollout.
+- Notification model extended with signal_metadata column (Text + JSON serialization; see data-model.md).
 - No ML model; scoring is deterministic and rule-based.
-- No UI changes; alerts are consumed by existing notification list/detail endpoints.
+- No UI changes; alerts consumed by existing notification list/detail endpoints.

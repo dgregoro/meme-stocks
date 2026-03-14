@@ -82,7 +82,7 @@ cd frontend && npm run dev
 | 2.2 | Add post body to sentiment analysis | PLAN.md tech debt | Medium | Not Started |
 | 2.3 | Add RSI indicator | PLAN.md tech debt, PRD FR-2.5 | Medium | Not Started |
 | 2.4 | Add volume confirmation to patterns | PLAN.md tech debt | Small | Not Started |
-| 2.5 | Implement combined-signal alerts | PLAN.md tech debt, PRD FR-3.7 | Medium | Not Started |
+| 2.5 | Implement combined-signal alerts | PLAN.md tech debt, PRD FR-3.7 | Medium | ✅ Complete |
 | 2.6 | Fix any deprecation warnings | Test output | Small | ✅ Done in Phase 1 |
 | 2.7 | Increase test coverage to 80%+ | Quality framework | Medium | Not Started |
 

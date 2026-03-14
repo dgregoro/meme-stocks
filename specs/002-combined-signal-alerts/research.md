@@ -4,58 +4,67 @@
 
 ## 1. Signal Aggregation Architecture
 
-**Decision**: Add a new `combined_signal_service` that consumes outputs from existing detectors and computes a weighted score. The notification_service flow changes from "create notification per signal" to "gather all signals → aggregate → create single notification if threshold met."
+**Decision**: Add a new `combined_signal_service` that consumes outputs from existing detectors (via normalized inputs) and computes a weighted score. The notification_service flow: gather all signals → normalize via lightweight adapter if needed → aggregate → create combined notification when threshold met. Individual alerts continue by default.
 
-**Rationale**: Spec requires no modification to existing detectors (FR-005). A dedicated service keeps aggregation logic testable and separate from notification persistence. Follows ARCHITECTURE.md service pattern.
+**Rationale**: Spec requires no modification to detectors (FR-005). Dedicated service keeps aggregation testable. Adapter logic acceptable for heterogeneous detector outputs.
 
-**Alternatives considered**:
-- Modify activity_detector to return a list and aggregate inline — rejected: mixes concerns, violates FR-005.
-- Add aggregation inside notification_service only — acceptable but less testable; we chose a dedicated service for clarity.
+**Alternatives considered**: Modify detectors — rejected. Inline aggregation only — acceptable but less testable.
 
-## 2. Weight and Threshold Storage
+## 2. Feature Flag: Combined vs. Individual Alerts
 
-**Decision**: Store weights and threshold in `backend/app/config.py` as new settings (e.g., `combined_signal_weight_sentiment`, `combined_signal_weight_price`, `combined_signal_weight_volume`, `combined_signal_weight_rsi`, `combined_signal_threshold`). Use environment variables for overrides.
+**Decision**: Add config `combined_signal_alerts_only` (bool, default `false`).
 
-**Rationale**: Constitution requires config-driven thresholds; no magic numbers (config.py pattern already established).
+**Default (`false`)**: Individual alerts (volume, price, sentiment) continue as today. Combined alerts are created in addition when threshold met. Both coexist.
 
-**Alternatives considered**:
-- Database-stored config — overkill for this feature.
-- File-based config — project uses env/config.py consistently.
+**When `true`**: Only combined alerts are created; individual alerts are suppressed.
 
-## 3. Notification Metadata Storage
+**Rationale**: Safe rollout. Operators preserve current behavior by default. Enables phased migration to combined-only mode after validation.
 
-**Decision**: Add a nullable `signal_metadata` column to the Notification model. Type: JSON (SQLite supports JSON; use `Text` with JSON serialization or SQLAlchemy `JSON` type). Structure: `{"signals_fired": [...], "combined_score": float}`.
+**Migration**: Runtime-only; no data migration. Operators set `true` when ready.
 
-**Rationale**: Avoids new tables; Notification already exists. Nullable preserves backward compatibility for any legacy notifications. JSON allows flexible structure for signal list.
+## 3. Weight and Threshold Storage
 
-**Alternatives considered**:
-- New table `notification_signal_details` — normalized but more complexity; spec says "attach metadata to alerts".
-- Store in `message` field — would lose structure; FR-004 requires structured metadata.
+**Decision**: Store in `backend/app/config.py`: `combined_signal_weight_sentiment`, `combined_signal_weight_price`, `combined_signal_weight_volume`, `combined_signal_weight_rsi`, `combined_signal_threshold`, `combined_signal_alerts_only`. Environment variables for overrides.
 
-## 4. RSI Signal Integration
+**Rationale**: Constitution requires config-driven thresholds; no magic numbers.
 
-**Decision**: Use `pattern_analyzer.analyze_price_trend` to obtain `PriceTrend.rsi_signal` ('overbought', 'oversold', 'neutral'). Contribute to combined score when 'overbought' or 'oversold' (configurable weight). 'neutral' or missing RSI contributes 0.
+## 4. Notification Metadata Storage
 
-**Rationale**: RSI already implemented in pattern_analyzer (ROADMAP 2.3). Spec allows RSI slot to contribute 0 if not implemented; we have it.
+**Decision**: Add nullable `signal_metadata` column, type **Text**. Store JSON string via `json.dumps()`. Use explicit serialization/deserialization helpers (e.g., `serialize_signal_metadata()`, `parse_signal_metadata()`). Add tests for round-trip and invalid JSON handling.
 
-**Alternatives considered**:
-- Call RSI calculation separately — duplicates logic; prefer reusing analyze_price_trend.
+**Rationale**: Repo pattern for JSON in DB is Text + json (see `job_run_history.metrics_json`). SQLAlchemy `JSON` type is not used consistently; Text aligns with existing conventions.
 
-## 5. Backward Compatibility and Migration
+**Alternatives considered**: SQLAlchemy JSON type — repo uses Text for metrics_json; prefer consistency.
 
-**Decision**: Add `signal_metadata` as nullable column. Existing notifications remain valid (metadata null). Notification API extends response model to include optional `signal_metadata`; clients that ignore it continue to work.
+## 5. Signal Source Availability and Dependencies
 
-**Rationale**: Constitution favors incremental delivery. Migration must be backward compatible (no data loss).
+**Decision**: Aggregation consumes **currently available** signals only. Missing sources contribute 0. Do NOT assume RSI or volume-confirmation (ROADMAP 2.4) are present unless implemented.
 
-## 6. Integration Point: notification_service
+**Explicit scope**:
+- Consume: activity_detector (volume, price, sentiment), pattern_analyzer RSI if present
+- Out of scope: Volume-confirmed pattern logic (2.4) unless already in codebase
+- Missing detector output → contribution 0; no fabrication
 
-**Decision**: Refactor `generate_notifications_for_stock` to:
-1. Gather all signals (volume, price, sentiment from activity_detector; RSI from pattern_analyzer via price data)
-2. Call `combined_signal_service.evaluate(signals)` → returns `CombinedEvaluation`
-3. If `evaluation.combined_score >= threshold`, create one Notification with `type="combined_signal"`, message summarizing signals, and `signal_metadata` with structured explanation
-4. Do NOT create individual notifications per signal (replaces current per-signal behavior for this flow)
+**Rationale**: Avoid implying unfinished roadmap work is included. Spec must be implementable with today's code.
 
-**Rationale**: Single entry point for notification generation; scheduler continues to call `generate_notifications_for_stock`. The refactor centralizes the "combined vs. individual" decision in one place.
+## 6. Detector Integration: Adapter Logic
 
-**Alternatives considered**:
-- Keep both individual and combined notifications — spec says "alerts only when multiple signals align"; we replace individual alerts with combined-only for clarity. Could add a feature flag later if needed.
+**Decision**: Acknowledge that existing signal sources are heterogeneous (ActivitySignal vs PriceTrend, different structures). Lightweight adapter logic in `combined_signal_service` or `notification_service` to normalize into a common `SignalEvaluated`-like structure is acceptable and expected. Do NOT propose a detector refactor.
+
+**Rationale**: Honest assessment. Clean consumption without any adapter is optimistic; small adapter keeps scope minimal.
+
+## 7. RSI Signal Integration
+
+**Decision**: If `pattern_analyzer.analyze_price_trend` returns `PriceTrend.rsi_signal` ('overbought', 'oversold', 'neutral'), use it. If not implemented or returns None, RSI contributes 0.
+
+**Rationale**: RSI may exist (pattern_analyzer has it); ROADMAP 2.3 says "Not Started" — treat as best-effort. Missing = 0.
+
+## 8. Explainability: Richer Metadata
+
+**Decision**: Metadata includes `evaluation_timestamp`, `combined_score`, `threshold`, and `signals_evaluated` (all evaluated signals, not just fired). Each evaluated signal: `signal_type`, `raw_value`, `fired`, `contribution`, optional `reason`.
+
+**Rationale**: Supports debugging and future UI. Distinguishes "evaluated but did not fire" from "not evaluated."
+
+## 9. Backward Compatibility
+
+**Decision**: `signal_metadata` nullable. Existing notifications remain valid. API extends response with optional `signal_metadata`; clients may ignore. Default config preserves individual alerts.
