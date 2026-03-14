@@ -1,0 +1,34 @@
+---
+description: Spec Kit workflow integration—specs complement existing project guidance
+globs: ["specs/**/*.md", ".specify/**/*.md"]
+alwaysApply: false
+---
+
+# Spec Kit Brownfield Integration
+
+When using Spec Kit (`/speckit.*` commands) in this repo:
+
+## Existing Guidance Applies
+
+- **`.cursorrules`** and **`.cursor/rules/`** remain in force. Spec Kit does not replace them.
+- **Constitution**: `.specify/memory/constitution.md` — project principles; aligns with PRD §5.0 and ROADMAP.
+- **Architecture**: Follow `docs/ARCHITECTURE.md` (Model → Repository → Service → API → Tests).
+- **Verification**: Run `./scripts/verify.sh` before marking any implementation complete.
+
+## Spec Kit Workflow
+
+1. **Constitution** — `/speckit.constitution` — Establish or update principles (already tailored for meme-stocks).
+2. **Specify** — `/speckit.specify <description>` — Create feature spec in `specs/###-short-name/spec.md`.
+3. **Plan** — `/speckit.plan` — Create technical plan; references backend/frontend layout.
+4. **Tasks** — `/speckit.tasks` — Generate implementation tasks.
+5. **Implement** — `/speckit.implement` — Execute tasks. Requires `plan.md` and `tasks.md`.
+
+## Brownfield Context
+
+- Read `docs/BROWNFIELD_SPEC_KIT.md` before creating new specs.
+- Features should align with `docs/ROADMAP.md`; update ROADMAP if adding net-new work.
+- Use `SPECIFY_FEATURE=001-short-name` when not on a feature branch but working on a spec.
+
+## No Conflicts
+
+Spec Kit conventions (specs/, plan.md, tasks.md) complement existing docs (ROADMAP, PRD, ARCHITECTURE). If guidance conflicts, constitution + .cursorrules take precedence for implementation details.
