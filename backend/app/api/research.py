@@ -49,7 +49,7 @@ def _validate_dataset_path(dataset_path: str) -> Path:
         ) from e
     try:
         p.resolve().relative_to(allowed)
-    except ValueError as _:
+    except ValueError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=error_detail(

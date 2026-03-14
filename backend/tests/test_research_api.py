@@ -12,7 +12,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend.app.config import get_settings
-from backend.app.data.database import Base, SessionLocal, engine
+from backend.app.data.database import Base, engine
 from backend.app.main import create_app
 from backend.app.services.scheduler_service import SchedulerService
 
