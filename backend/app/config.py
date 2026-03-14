@@ -47,6 +47,14 @@ class Settings(BaseSettings):
     rsi_overbought: float = 70.0
     rsi_oversold: float = 30.0
 
+    # Combined signal alerts (Phase 2, Task 2.5)
+    combined_signal_weight_sentiment: float = 2.0
+    combined_signal_weight_price: float = 2.0
+    combined_signal_weight_volume: float = 1.0
+    combined_signal_weight_rsi: float = 1.0
+    combined_signal_threshold: float = 4.0
+    combined_signal_alerts_only: bool = False
+
     # CORS
     cors_allowed_origins: str = "http://127.0.0.1:5173,http://localhost:5173"
 
