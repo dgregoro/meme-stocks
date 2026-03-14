@@ -726,6 +726,8 @@ Use `meme-stocks --help` and `meme-stocks <command> --help` for details.
 - **.cursorrules**: Development guidelines and coding standards (references PRD §5.0)
 - **.cursor/rules/reliability.mdc**: Always-applied rule for AI agents implementing Reliability Principles
 - **.cursor/rules/agent-conduct.mdc**: Always-applied rule—be skeptical, don't oversell, verify before claiming
+- **docs/SPEC_KIT_USAGE.md**: How to use Spec Kit for spec-driven development in this repo
+- **docs/BROWNFIELD_SPEC_KIT.md**: Brownfield context for AI agents creating specs
 
 ### D. API Error Response Format
 
