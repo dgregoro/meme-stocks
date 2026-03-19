@@ -8,17 +8,17 @@ ARGS=()
 
 for arg in "$@"; do
     case "$arg" in
-        --json)
-            JSON_MODE=true
+        --json) 
+            JSON_MODE=true 
             ;;
-        --help|-h)
+        --help|-h) 
             echo "Usage: $0 [--json]"
             echo "  --json    Output results in JSON format"
             echo "  --help    Show this help message"
-            exit 0
+            exit 0 
             ;;
-        *)
-            ARGS+=("$arg")
+        *) 
+            ARGS+=("$arg") 
             ;;
     esac
 done
@@ -39,7 +39,7 @@ check_feature_branch "$CURRENT_BRANCH" "$HAS_GIT" || exit 1
 mkdir -p "$FEATURE_DIR"
 
 # Copy plan template if it exists
-TEMPLATE=$(resolve_template "plan-template" "$REPO_ROOT")
+TEMPLATE=$(resolve_template "plan-template" "$REPO_ROOT") || true
 if [[ -n "$TEMPLATE" ]] && [[ -f "$TEMPLATE" ]]; then
     cp "$TEMPLATE" "$IMPL_PLAN"
     echo "Copied plan template to $IMPL_PLAN"
@@ -65,8 +65,9 @@ if $JSON_MODE; then
     fi
 else
     echo "FEATURE_SPEC: $FEATURE_SPEC"
-    echo "IMPL_PLAN: $IMPL_PLAN"
+    echo "IMPL_PLAN: $IMPL_PLAN" 
     echo "SPECS_DIR: $FEATURE_DIR"
     echo "BRANCH: $CURRENT_BRANCH"
     echo "HAS_GIT: $HAS_GIT"
 fi
+
