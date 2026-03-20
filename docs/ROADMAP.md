@@ -196,6 +196,17 @@ if alignment_score > COMBINED_SIGNAL_THRESHOLD and confidence > 0.7:
 | 3.4 | Support/resistance level identification | FR-2.7 | Large |
 | 3.5 | Win rate calculation for paper trading | FR-5.6 | Small |
 | 3.6 | Sentiment momentum tracking | PRD §5 | Medium |
+| 3.7 | Leader-follower signal detection | specs/003 | ✅ Implemented |
+
+### 3.7 Leader-Follower Signal Detection ✅
+
+**Purpose**: Detect significant leader moves, identify follower candidates in same group, emit opportunity signals.
+
+**Implemented**: March 2026. See `specs/003-leader-follower-signal-detection/`.
+
+**API**: `GET /api/leader-follower/signals` (limit, since_date, leader, group)
+
+**Scheduler**: `leader_follower_detection` job (gated by `leader_follower_enabled`; CronTrigger hour=17; max_instances=1, coalesce=True)
 
 ### 3.0 Lead-Lag Evidence Endpoint ✅
 

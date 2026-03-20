@@ -20,6 +20,8 @@ from .models import (  # noqa: F401
     job_execution,
     job_lock,
     job_run_history,
+    leader_event,
+    leader_follower_signal,
     notification,
     paper_trade,
     price_data,
@@ -28,6 +30,7 @@ from .models import (  # noqa: F401
     reddit_post,
     reddit_symbol_mention,
     stock,
+    stock_group,
     symbol_universe,
 )
 from .api import stocks as stocks_api
@@ -39,6 +42,7 @@ from .api import paper_trading as paper_trading_api
 from .api import jobs as jobs_api
 from .api import symbol_universe as symbol_universe_api
 from .api import intraday as intraday_api
+from .api import leader_follower as leader_follower_api
 from .api import research as research_api
 from .services.scheduler_service import SchedulerService
 
@@ -127,6 +131,7 @@ def create_app(
     app.include_router(jobs_api.router)
     app.include_router(symbol_universe_api.router)
     app.include_router(intraday_api.router)
+    app.include_router(leader_follower_api.router)
     app.include_router(research_api.router)
 
     # Serve frontend static files when running in container (SERVING_FRONTEND=true)
