@@ -6,9 +6,11 @@ alwaysApply: true
 
 # meme-stocks Development Guidelines
 
-Auto-generated from all feature plans. Last updated: 2026-03-13
+Auto-generated from all feature plans. Last updated: 2026-03-19
 
 ## Active Technologies
+- Python 3.11 + FastAPI, SQLAlchemy, existing PriceDataRepository, StockRepository, JobExecutionRepository (003-leader-follower-signal-detection)
+- SQLite (existing); new tables: `leader_events`, `leader_follower_signals`, `stock_groups` (003-leader-follower-signal-detection)
 
 - Python 3.11 + FastAPI, SQLAlchemy, existing services (activity_detector, pattern_analyzer, sentiment_analyzer) (002-combined-signal-alerts)
 
@@ -28,6 +30,7 @@ cd src [ONLY COMMANDS FOR ACTIVE TECHNOLOGIES][ONLY COMMANDS FOR ACTIVE TECHNOLO
 Python 3.11: Follow standard conventions
 
 ## Recent Changes
+- 003-leader-follower-signal-detection: Added Python 3.11 + FastAPI, SQLAlchemy, existing PriceDataRepository, StockRepository, JobExecutionRepository
 
 - 002-combined-signal-alerts: Added Python 3.11 + FastAPI, SQLAlchemy, existing services (activity_detector, pattern_analyzer, sentiment_analyzer)
 
