@@ -115,6 +115,18 @@ class Settings(BaseSettings):
     causal_min_buckets_1h: int = 200
     causal_min_buckets_1d: int = 60
 
+    # Leader-follower signal detection (003-leader-follower-signal-detection)
+    leader_follower_enabled: bool = False
+    leader_return_threshold_pct: float = 5.0
+    leader_volume_spike_threshold: float = 1.5
+    leader_follower_cooldown_days: int = 1
+    follower_move_threshold_pct: float = 3.0
+    leader_follower_job_hour: int = 17
+    leader_follower_strength_weight_return: float = 0.6
+    leader_follower_strength_weight_volume: float = 0.4
+    leader_follower_norm_return_cap_pct: float = 15.0
+    leader_follower_norm_volume_cap: float = 4.0
+
     # Research API: dataset output and allowed paths for experiments
     research_dataset_dir: str = (
         "data/research"  # Output dir for build-dataset; experiments accept only paths under this

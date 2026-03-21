@@ -29,6 +29,7 @@ from backend.app.services.job_metrics import (
     REDDIT_SYMBOLS_MENTIONED,
 )
 from backend.app.services.notification_service import generate_notifications_for_stock
+from backend.app.services.leader_follower_service import run_detection
 from backend.app.services.reddit_daily_feature_service import compute_and_store_reddit_daily_features
 from backend.app.services.reddit_service import RedditService
 from backend.app.services.yahoo_service import YahooFinanceService
@@ -334,6 +335,21 @@ class SchedulerService:
             coalesce=True,
             misfire_grace_time=3600,
         )
+
+        # Leader-follower signal detection (when enabled; once per day)
+        if getattr(self._settings, "leader_follower_enabled", False):
+            self._scheduler.add_job(
+                self._leader_follower_detection_job,
+                trigger=CronTrigger(
+                    hour=getattr(self._settings, "leader_follower_job_hour", 17),
+                    minute=0,
+                ),
+                id="leader_follower_detection",
+                replace_existing=True,
+                max_instances=1,
+                coalesce=True,
+                misfire_grace_time=1800,
+            )
 
     def _collect_reddit_data_job(self) -> None:
         """Scheduled job wrapper for Reddit collection."""
@@ -750,6 +766,43 @@ class SchedulerService:
             duration = (finished_at - started_at).total_seconds()
             self._record_job_failure(
                 "reddit_daily_features",
+                exc,
+                started_at=started_at,
+                finished_at=finished_at,
+                duration_seconds=duration,
+            )
+        finally:
+            db.close()
+
+    def _leader_follower_detection_job(self) -> None:
+        """Scheduled job: detect leaders, select followers, create signals."""
+        db = SessionLocal()
+        started_at = datetime.now(timezone.utc)
+        try:
+            metrics = run_detection(db)
+            finished_at = datetime.now(timezone.utc)
+            duration = (finished_at - started_at).total_seconds()
+            leaders = metrics.get("leader_events_detected", 0)
+            signals = metrics.get("signals_emitted", 0)
+            summary = f"leader-follower: {leaders} leaders, {signals} signals"
+            job_repo = JobExecutionRepository(db)
+            job_repo.record_run(
+                "leader_follower_detection",
+                run_at=finished_at,
+                success=True,
+                started_at=started_at,
+                duration_seconds=duration,
+                summary=summary,
+                metrics=metrics,
+            )
+            db.commit()
+        except Exception as exc:
+            logger.error("Error in leader-follower detection job: %s", exc, exc_info=True)
+            db.rollback()
+            finished_at = datetime.now(timezone.utc)
+            duration = (finished_at - started_at).total_seconds()
+            self._record_job_failure(
+                "leader_follower_detection",
                 exc,
                 started_at=started_at,
                 finished_at=finished_at,

@@ -1,66 +1,173 @@
-# Meme-Stocks Constitution
+# Meme-Stocks Project Constitution
 
 <!--
-Sync Impact Report (v1.0.0 initial)
-- Version change: N/A → 1.0.0
-- Added: All principles (brownfield adoption)
-- Templates: N/A (initial creation)
-- Ratification: 2026-03-13
+Brownfield constitution v2.0.0 — reflects actual codebase state, not idealized design.
+Ratification: 2026-03-19
 -->
 
-## Core Principles
+## 1. Purpose
 
-### I. Roadmap Alignment
+### What the Application Does Today
 
-All development work MUST align with `docs/ROADMAP.md`. Identify the current phase and task before implementing. Do not add features or endpoints not in the roadmap unless ROADMAP.md is updated first. When scope is unclear, ask rather than assume.
+Meme-stocks is a **decision-support tool** for retail investors analyzing meme stocks. It:
 
-**Rationale**: Prevents scope creep and keeps delivery predictable.
+- **Ingests** Reddit posts (r/wallstreetbets, r/stocks, r/investing) and Yahoo Finance daily prices.
+- **Derives** sentiment scores (keyword-based), price patterns (SMA, RSI), volume spikes, and daily aggregated Reddit features.
+- **Signals** unusual activity (volume spike, price movement, sentiment shift) and combined multi-signal alerts via notifications.
+- **Outputs** ranked daily analysis, paper trading (stocks and options), and a research API for causal/predictive experiments.
 
-### II. Explicit Failures Over Silence
+It does **not** execute trades. All trading is manual. Paper trading tracks hypothetical positions. The CLI is an API client and requires a running backend.
 
-Prefer explicit failures over silent behavior. Never swallow exceptions. Log and surface meaningful errors. For external APIs (Reddit, Yahoo, etc.), handle network failures, invalid responses, and rate limiting explicitly. Return clear "no data" signals instead of fabricating defaults.
+### Problems It Solves
 
-**Rationale**: Silent failures make debugging impossible and undermine trust in the system.
+1. **Information overload** — Automated Reddit and price collection reduces manual research time.
+2. **Signal vs. noise** — Sentiment scoring, volume confirmation, and combined-signal thresholds help filter noise.
+3. **Practice environment** — Paper trading enables strategy testing without risk.
+4. **Research track** — Evaluation of whether Reddit activity predicts future price movement (lead-lag evidence), with leakage-safe datasets.
 
-### III. Test Discipline
+---
 
-Always add or update tests when adding or changing backend logic. Target 80%+ line coverage on `backend/app`. Each new service, repository, or API endpoint MUST have at least one corresponding test. Prefer unit tests for pure logic; use integration tests for DB/API paths. Run `./scripts/verify.sh` before considering any task complete.
+## 2. Current Architecture (AS-IS)
 
-**Rationale**: Tests protect against regressions and document expected behavior.
+### High-Level Components
 
-### IV. Skepticism and Honest Reporting
+| Component | Location | Responsibility |
+|-----------|----------|----------------|
+| API | `backend/app/api/` | HTTP handling, delegates to services |
+| Services | `backend/app/services/` | Business logic, orchestration, Reddit/Yahoo fetching |
+| Clients | `backend/app/clients/` | **Only Alpaca** (minute bars); Reddit and Yahoo are in services |
+| Repositories | `backend/app/data/repositories/` | Data access (CRUD) |
+| Models | `backend/app/models/` | SQLAlchemy ORM |
+| Utils | `backend/app/utils/` | Errors, ticker extraction, API error formatting |
+| Feature store | `backend/app/feature_store/` | Parquet writer/reader for intraday bars |
+| Frontend | `frontend/src/` | React, Vite, API client in `services/api.ts` |
+| CLI | `backend/cli/` | HTTP client; no direct DB access |
 
-Be skeptical; do not oversell. Verify before claiming completion. Match language to evidence: "All tests pass" only after running them. Acknowledge limitations, edge cases, and deferred work explicitly. Avoid hype language.
+### Data Flow
 
-**Rationale**: Overselling leads to missed issues and lost trust.
+```
+Reddit (PRAW) ──► RedditService ──► reddit_posts, reddit_symbol_mention
+Yahoo (yfinance) ──► YahooFinanceService ──► price_data
+Alpaca (optional) ──► AlpacaDataClient ──► parquet feature store (minute bars)
 
-### V. Reliability and Observability
+reddit_posts + price_data ──► sentiment_analyzer, pattern_analyzer ──► analysis (on-demand)
+reddit_posts ──► reddit_daily_feature_service ──► reddit_daily_feature
+price_data ──► label_service ──► price_labels
+reddit_daily_feature + price_labels ──► dataset_builder_service ──► research datasets (CSV/parquet)
 
-Follow PRD §5.0 Reliability Principles. Use structured API errors (PRD Appendix C); never expose raw stack traces. Log at error/warning levels for external API and job failures. Include correlation context (provider, endpoint, status) when possible. Background jobs must not crash the app on external failure.
+activity_detector + combined_signal_service ──► notifications
+```
 
-**Rationale**: Production systems must degrade gracefully and remain debuggable.
+### Where State Is Stored
 
-### VI. Transparent Assumptions and No Look-Ahead Bias
+- **SQLite** — Default `sqlite:///./data/app.db`. All relational data: stocks, reddit_posts, reddit_symbol_mention, price_data, reddit_daily_feature, price_labels, notifications, paper_trades, symbol_universe, job_run_history, job_executions, job_locks, intraday_ingest_run, intraday_ingest_state.
+- **Parquet** — `data/intraday/` (or `intraday_feature_store_root`). Partitioned by symbol/date. Append-only minute bars from Alpaca.
+- **Research datasets** — `data/research/` (or `research_dataset_dir`). Output of build-dataset; input for experiments.
 
-Preserve explainability for trading and research signals. Document assumptions explicitly. In any predictive or causal work, avoid look-ahead bias and data leakage. Enforce time alignment; never use future information in training or evaluation. Label results as "lead-lag evidence," not proven causality.
+---
 
-**Rationale**: Financial and research claims require methodological rigor to be actionable.
+## 3. Engineering Principles
 
-### VII. Incremental Delivery and Minimal Diffs
+1. **Explicit failures over silence** — Never swallow exceptions. Log and surface meaningful errors. Return clear "no data" signals instead of fabricating defaults.
 
-Keep changes focused and production-minded. Prefer minimal diffs; touch the fewest files possible. Do not refactor unrelated code. Use logical, separate commits. Allowed without ROADMAP update: refactors for testability, reliability/observability improvements, small scaffolding for planned items.
+2. **Always add/update tests for backend logic** — Each new service, repository, or API endpoint must have at least one corresponding test. Target 80%+ line coverage on `backend/app`.
 
-**Rationale**: Small, reviewable changes reduce risk and speed iteration.
+3. **Follow existing patterns unless a spec explicitly changes them** — Do not assume greenfield. New work integrates with the current architecture. Specs that require refactoring must say so.
 
-## Additional Constraints
+4. **Minimize scope of changes** — Prefer minimal diffs. No broad rewrites without an explicit spec and approval. Touch the fewest files possible.
 
-### External API and Configuration
+5. **Keep components loosely coupled** — Business logic in services, not in API routes. Return dataclasses from services, not ORM models. Repositories handle data access only.
 
-All external API calls MUST go through `backend/app/clients/`. Use `backend/app/utils/retry.py` for retries. Thresholds (sentiment, volume, price) MUST be in `backend/app/config.py`; no magic numbers. No hardcoded API keys or secrets.
+---
 
-### Architecture Patterns
+## 4. Reliability Principles
 
-Follow `docs/ARCHITECTURE.md`. Create in order: Model → Repository → Service → API Route → Tests. Keep business logic in services, not in API routes. Return dataclasses from services, not ORM models.
+Align with PRD §5.0:
+
+- **No silent failures** — Handle network failures, invalid responses, and rate limiting for external APIs (Reddit, Yahoo, Alpaca) explicitly.
+- **Explicit error surfaces** — Use `ExternalAPIError`, `DataAccessError`, `ValidationError`, `NotFoundError` as appropriate. API responses use structured format (PRD Appendix C); never expose raw stack traces.
+- **Graceful degradation** — Background jobs must not crash the app on external API failure. Per-symbol failures (e.g., price fetch for invalid ticker) log and continue; one symbol must not stop the job.
+- **Actionable error messages** — Include what failed, why (when known), and context (symbol, job name, subreddit).
+- **Data integrity** — Missing/incomplete data → `None`, `[]`, or explicit "no data" response. Do not fabricate defaults.
+
+**Jobs must be observable** — Every scheduled job records runs in `job_run_history` (or via `JobExecutionRepository`): last run, success/failure, error_message, duration_seconds, summary, metrics_json. The status API (`/api/status`) exposes job health and collection staleness. Failures must be detectable and debuggable. Avoid hidden background behavior.
+
+---
+
+## 5. Data & Signal Integrity
+
+- **Clearly separate** raw data, derived features, and signals:
+  - **Raw**: `reddit_posts`, `reddit_symbol_mention`, `price_data` — immutable after write.
+  - **Derived**: `reddit_daily_feature`, `price_labels` — computed from raw; deterministic and reproducible.
+  - **Signals**: `notifications` — outputs of activity_detector and combined_signal_service.
+
+- **Do not overwrite raw data** — Reddit posts and price rows are additive. Parquet feature store is append-only.
+
+- **Make transformations traceable** — Dataset builder writes metadata sidecar (git sha, date range, horizon). Experiments consume versioned datasets. Label computation uses explicit horizon logic without look-ahead.
+
+- **Prefer reproducibility over cleverness** — Same inputs and config should produce identical datasets. Document assumptions.
+
+---
+
+## 6. Experimentation & Strategy Development
+
+- **New trading ideas must start as experiments** — Not in production signals until validated.
+
+- **Requirements for experiments**:
+  - Hypothesis (e.g., "Reddit mention count predicts 5-day forward return")
+  - Measurable success criteria
+  - Backtest or evaluation plan (directionality, event study, predictiveness)
+
+- **Do not promote signals to production without validation** — Research API (`/api/research`) supports build-dataset, directionality, event_study, predictiveness. Results are labeled as "lead-lag evidence," not proven causality. See `docs/CAUSAL_RESEARCH.md`.
+
+---
+
+## 7. Testing & Validation
+
+- **Unit tests** — Core logic (sentiment, pattern analyzer, activity detector, pure functions). Use `@pytest.mark.unit`. Mock external deps.
+- **Integration tests** — Data flows, jobs, API endpoints. Use `@pytest.mark.integration`. TestClient for API; mock Reddit/Yahoo/Alpaca where practical.
+- **Deterministic behavior** — Prefer deterministic tests. Avoid flaky time-based or random assertions.
+- **Entry point**: `pytest backend/tests/ -v`
+- **Coverage**: `pytest backend/tests/ --cov=backend/app`
+- **Verify before done**: `./scripts/verify.sh` (pre-commit + pytest + bandit + container check)
+
+---
+
+## 8. Incremental Development Model
+
+- **New work** — Go through spec → plan → tasks (Spec Kit or equivalent). Integrate with existing system; do not replace it.
+- **Refactors** — Must be scoped and justified. Update ROADMAP.md if scope changes. No drive-by renames or reorganizations unrelated to the task.
+- **Allowed without ROADMAP update** (as long as external behavior does not change): refactors for testability, reliability/observability improvements, small scaffolding for planned items.
+
+---
+
+## 9. Observability & Debuggability
+
+- **All scheduled jobs must**:
+  - Record last run (via `JobExecutionRepository.record_run`)
+  - Record status (success/failure, error_message)
+  - Record key metrics (e.g., posts_inserted, symbols_mentioned, rows_inserted, notifications_generated)
+
+- **System state inspectable** — Status API (`/api/status`) exposes:
+  - Job status (last run, last success, last error, duration, summary)
+  - Collection health (reddit, prices, daily features)
+  - Stale symbols
+
+- **Logging** — Error/warning for external API and job failures. Include correlation context (provider, endpoint, status) when possible. Do not log secrets.
+
+---
+
+## 10. Constraints / Non-Goals
+
+- **No premature optimization** — Keep it simple until there is evidence of a bottleneck.
+- **No full rewrites without explicit spec** — Incremental change preferred.
+- **Avoid unnecessary infrastructure complexity** — No new message queues, caches, or services unless justified by a spec.
+- **Current gaps (accepted for now)**:
+  - Reddit and Yahoo are in services, not dedicated clients — `.cursorrules` say clients/ but only Alpaca uses clients/. New external APIs should use clients/.
+  - No shared `retry.py` — Reddit/Yahoo use `backoff` inline; Alpaca has its own retry. Prefer extracting a shared helper when adding new API integrations.
+  - Mypy in pre-commit may be disabled — Re-enable when config is fixed; do not remove type hints.
+
+---
 
 ## Development Workflow
 
@@ -70,14 +177,14 @@ Before planning or implementing:
 2. Read `docs/PRD.md` §5.0 and Appendix C
 3. Read `docs/ARCHITECTURE.md` for patterns
 
-For Spec Kit workflows: Specs complement existing docs. The constitution and `.cursorrules` both apply; no conflicts. When using `/speckit.*` commands, also respect `.cursor/rules/` and `.cursorrules`.
+For Spec Kit: Specs complement existing docs. Constitution and `.cursorrules` both apply. Use `docs/BROWNFIELD_SPEC_KIT.md` for Spec Kit usage.
+
+---
 
 ## Governance
 
 - This constitution supersedes ad-hoc guidance for conflicting cases.
 - Amendments require a version bump and clear changelog.
 - Versioning: PATCH (clarifications), MINOR (new principles), MAJOR (backward-incompatible changes).
-- All PRs and agent work must verify compliance with these principles.
-- Use `docs/BROWNFIELD_SPEC_KIT.md` for Spec Kit usage in this repo.
 
-**Version**: 1.0.0 | **Ratified**: 2026-03-13 | **Last Amended**: 2026-03-13
+**Version**: 2.0.0 | **Ratified**: 2026-03-19 | **Last Amended**: 2026-03-19
