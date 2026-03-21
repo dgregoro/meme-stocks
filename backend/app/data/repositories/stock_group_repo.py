@@ -31,7 +31,8 @@ class StockGroupRepository:
             StockGroup.stock_symbol, StockGroup.group_id
         )
         try:
-            return list(self._session.execute(stmt).all())
+            rows = self._session.execute(stmt).all()
+            return [tuple(r) for r in rows]
         except SQLAlchemyError as exc:  # pragma: no cover
             raise DataAccessError("Failed to get symbol-group pairs") from exc
 
