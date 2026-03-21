@@ -43,13 +43,17 @@ class LeaderFollowerSignalRepository:
         from datetime import timedelta
 
         cutoff = since_date - timedelta(days=cooldown_days)
-        stmt = select(LeaderFollowerSignal.id).where(
-            and_(
-                LeaderFollowerSignal.leader_symbol == leader_symbol,
-                LeaderFollowerSignal.follower_symbol == follower_symbol,
-                LeaderFollowerSignal.signal_date >= cutoff,
+        stmt = (
+            select(LeaderFollowerSignal.id)
+            .where(
+                and_(
+                    LeaderFollowerSignal.leader_symbol == leader_symbol,
+                    LeaderFollowerSignal.follower_symbol == follower_symbol,
+                    LeaderFollowerSignal.signal_date >= cutoff,
+                )
             )
-        ).limit(1)
+            .limit(1)
+        )
         try:
             row = self._session.execute(stmt).scalar_one_or_none()
             return row is not None

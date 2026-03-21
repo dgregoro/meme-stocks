@@ -18,9 +18,5 @@ class StockGroup(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     group_id: Mapped[str] = mapped_column(String(64), index=True, nullable=False)
-    stock_symbol: Mapped[str] = mapped_column(
-        String(16), ForeignKey("stocks.symbol"), index=True, nullable=False
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
-    )
+    stock_symbol: Mapped[str] = mapped_column(String(16), ForeignKey("stocks.symbol"), index=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))

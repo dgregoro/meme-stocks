@@ -56,7 +56,9 @@ def _signal_to_item(signal: Any) -> SignalItem:
         leader_symbol=signal.leader_symbol,
         follower_symbol=signal.follower_symbol,
         group_id=signal.group_id,
-        signal_date=signal.signal_date.isoformat() if hasattr(signal.signal_date, "isoformat") else str(signal.signal_date),
+        signal_date=(
+            signal.signal_date.isoformat() if hasattr(signal.signal_date, "isoformat") else str(signal.signal_date)
+        ),
         strength_score=signal.strength_score,
         leader_return_pct=signal.leader_return_pct,
         leader_volume_ratio=signal.leader_volume_ratio,

@@ -17,13 +17,9 @@ class LeaderEvent(Base):
     __tablename__ = "leader_events"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    leader_symbol: Mapped[str] = mapped_column(
-        String(16), ForeignKey("stocks.symbol"), index=True, nullable=False
-    )
+    leader_symbol: Mapped[str] = mapped_column(String(16), ForeignKey("stocks.symbol"), index=True, nullable=False)
     event_date: Mapped[dt.date] = mapped_column(Date, index=True, nullable=False)
     return_pct: Mapped[float] = mapped_column(Float, nullable=False)
     volume_ratio: Mapped[float] = mapped_column(Float, nullable=False)
     direction: Mapped[str] = mapped_column(String(8), nullable=False)  # 'up' | 'down'
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))

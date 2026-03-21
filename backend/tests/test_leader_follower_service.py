@@ -414,9 +414,7 @@ def test_no_candidates_when_no_group_mapping() -> None:
         volume_ratio=2.0,
         direction="up",
     )
-    candidates = select_follower_candidates(
-        leader_event, group_repo, PriceDataRepository(session), date(2026, 3, 14)
-    )
+    candidates = select_follower_candidates(leader_event, group_repo, PriceDataRepository(session), date(2026, 3, 14))
     assert candidates == []
 
 
@@ -457,9 +455,7 @@ def test_signal_created_with_correct_fields() -> None:
         mock.return_value.leader_follower_norm_return_cap_pct = 15.0
         mock.return_value.leader_follower_norm_volume_cap = 4.0
         mock.return_value.leader_follower_cooldown_days = 1
-        n = create_signals(
-            [leader_event], candidates_map, signal_repo, 1, date(2026, 3, 14)
-        )
+        n = create_signals([leader_event], candidates_map, signal_repo, 1, date(2026, 3, 14))
     session.commit()
 
     assert n == 2

@@ -235,9 +235,7 @@ def run_detection(db: Session) -> dict[str, object]:
     candidates_map: dict[int, list[tuple[str, str]]] = {}
     total_candidates = 0
     for event in leader_events:
-        candidates = select_follower_candidates(
-            event, stock_group_repo, price_repo, event_date
-        )
+        candidates = select_follower_candidates(event, stock_group_repo, price_repo, event_date)
         candidates_map[event.id] = candidates
         total_candidates += len(candidates)
 

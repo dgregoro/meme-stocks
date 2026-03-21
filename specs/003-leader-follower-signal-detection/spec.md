@@ -1,9 +1,9 @@
 # Feature Specification: Leader-Follower Signal Detection
 
-**Feature Branch**: `003-leader-follower-signal-detection`  
-**Created**: 2026-03-19  
-**Status**: Draft  
-**ROADMAP**: New feature (Phase 3/4 candidate)  
+**Feature Branch**: `003-leader-follower-signal-detection`
+**Created**: 2026-03-19
+**Status**: Draft
+**ROADMAP**: New feature (Phase 3/4 candidate)
 **Input**: Leader-follower signal detection — detect leader stock movements and identify high-probability follower stocks with delayed movement
 
 ## Clarifications

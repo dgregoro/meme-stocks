@@ -18,11 +18,7 @@ class StockGroupRepository:
 
     def get_groups_for_symbol(self, symbol: str) -> list[str]:
         """Return group_ids for a symbol, ordered lexicographically."""
-        stmt = (
-            select(StockGroup.group_id)
-            .where(StockGroup.stock_symbol == symbol)
-            .order_by(StockGroup.group_id)
-        )
+        stmt = select(StockGroup.group_id).where(StockGroup.stock_symbol == symbol).order_by(StockGroup.group_id)
         try:
             rows = self._session.execute(stmt).scalars().all()
             return [r for r in rows]
@@ -31,9 +27,8 @@ class StockGroupRepository:
 
     def get_all_symbol_group_pairs(self) -> list[tuple[str, str]]:
         """Return all (stock_symbol, group_id) pairs, ordered by symbol, group_id."""
-        stmt = (
-            select(StockGroup.stock_symbol, StockGroup.group_id)
-            .order_by(StockGroup.stock_symbol, StockGroup.group_id)
+        stmt = select(StockGroup.stock_symbol, StockGroup.group_id).order_by(
+            StockGroup.stock_symbol, StockGroup.group_id
         )
         try:
             return list(self._session.execute(stmt).all())
@@ -42,11 +37,7 @@ class StockGroupRepository:
 
     def get_symbols_in_group(self, group_id: str) -> list[str]:
         """Return stock symbols in a group."""
-        stmt = (
-            select(StockGroup.stock_symbol)
-            .where(StockGroup.group_id == group_id)
-            .order_by(StockGroup.stock_symbol)
-        )
+        stmt = select(StockGroup.stock_symbol).where(StockGroup.group_id == group_id).order_by(StockGroup.stock_symbol)
         try:
             rows = self._session.execute(stmt).scalars().all()
             return [r for r in rows]

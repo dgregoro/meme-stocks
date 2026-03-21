@@ -10,14 +10,14 @@ Leader-follower signal detection identifies stocks that have moved significantly
 
 ## Technical Context
 
-**Language/Version**: Python 3.11  
-**Primary Dependencies**: FastAPI, SQLAlchemy, existing PriceDataRepository, StockRepository, JobExecutionRepository  
-**Storage**: SQLite (existing); new tables: `leader_events`, `leader_follower_signals`, `stock_groups`  
-**Testing**: pytest, backend/tests/  
-**Target Platform**: Linux server (existing backend)  
-**Project Type**: Web application (backend service enhancement)  
-**Performance Goals**: Job completes within reasonable time for tracked universe (~tens of symbols)  
-**Constraints**: Per-symbol failures must not stop job; max_instances=1, coalesce=True for scheduler  
+**Language/Version**: Python 3.11
+**Primary Dependencies**: FastAPI, SQLAlchemy, existing PriceDataRepository, StockRepository, JobExecutionRepository
+**Storage**: SQLite (existing); new tables: `leader_events`, `leader_follower_signals`, `stock_groups`
+**Testing**: pytest, backend/tests/
+**Target Platform**: Linux server (existing backend)
+**Project Type**: Web application (backend service enhancement)
+**Performance Goals**: Job completes within reasonable time for tracked universe (~tens of symbols)
+**Constraints**: Per-symbol failures must not stop job; max_instances=1, coalesce=True for scheduler
 **Scale/Scope**: Same as current system (~tens of tracked symbols)
 
 ## Constitution Check
