@@ -23,6 +23,4 @@ class LeaderFollowerCandidate(Base):
     follower_symbol: Mapped[str] = mapped_column(String(16), ForeignKey("stocks.symbol"), nullable=False, index=True)
     group_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     metrics_json: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))

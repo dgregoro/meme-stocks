@@ -16,6 +16,7 @@ echo ""
 
 # Step 1: Pre-commit checks (formatting, linting, types)
 echo "[1/5] Running pre-commit hooks..."
+pre-commit clean 2>/dev/null || true  # Clear cache to avoid stale pass (matches CI)
 if pre-commit run --all-files; then
     echo "✓ Pre-commit passed"
 else
