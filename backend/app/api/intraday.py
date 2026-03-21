@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from uuid import uuid4
 
+from backend.app.utils.datetime_utils import ensure_utc_aware
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -78,10 +80,11 @@ def get_intraday_status(db: Session = Depends(get_session)) -> IntradayStatusRes
         lock_repo = JobLockRepository(db)
         current_lock = lock_repo.get_lock(lock_name)
         now = datetime.now(timezone.utc)
-        if current_lock and current_lock.expires_at and current_lock.expires_at > now:
+        expires_at = ensure_utc_aware(current_lock.expires_at) if current_lock else None
+        if current_lock and expires_at and expires_at > now:
             lock_info["held"] = True
             lock_info["owner"] = current_lock.owner
-            lock_info["expires_at"] = current_lock.expires_at.isoformat()
+            lock_info["expires_at"] = expires_at.isoformat()
             lock_info["heartbeat_at"] = current_lock.heartbeat_at.isoformat() if current_lock.heartbeat_at else None
         elif current_lock:
             lock_info["owner"] = current_lock.owner
