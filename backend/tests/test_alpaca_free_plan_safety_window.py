@@ -147,3 +147,49 @@ def test_intraday_status_reports_lag_and_safety() -> None:
     assert "oldest_last_ts" in data
     assert "latest_run" in data
     assert "intraday_ingestion_enabled" in data
+
+
+@pytest.mark.integration
+def test_intraday_status_with_lock_held_returns_200_and_lock_info() -> None:
+    """GET /api/intraday/status returns 200 with lock.held=True when JobLock exists and is not expired."""
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import StaticPool
+
+    from backend.app.data.database import Base, get_session
+    from backend.app.data.repositories.job_lock_repo import JobLockRepository
+    from backend.app.models import job_lock  # noqa: F401
+
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(bind=engine)
+    TestSession = sessionmaker(bind=engine)
+
+    # Acquire lock so status endpoint sees it (may have naive expires_at from SQLite)
+    db = TestSession()
+    lock_repo = JobLockRepository(db)
+    now = datetime(2026, 3, 1, 12, 0, 0, tzinfo=timezone.utc)
+    lock_repo.try_acquire_lock("intraday_ingestion", "scheduler", ttl_seconds=86400 * 365, now=now)
+    db.commit()
+    db.close()
+
+    def override_get_session():
+        session = TestSession()
+        try:
+            yield session
+        finally:
+            session.close()
+
+    app = create_app(omit_scheduler=True)
+    app.dependency_overrides[get_session] = override_get_session
+    client = TestClient(app)
+    response = client.get("/api/intraday/status")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["lock"]["enabled"] is True
+    assert data["lock"]["held"] is True
+    assert data["lock"]["owner"] == "scheduler"
+    assert "expires_at" in data["lock"]
