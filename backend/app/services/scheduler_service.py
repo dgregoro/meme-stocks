@@ -778,19 +778,20 @@ class SchedulerService:
         """Scheduled job: detect leaders, select followers, create signals."""
         db = SessionLocal()
         started_at = datetime.now(timezone.utc)
+        job_repo = JobExecutionRepository(db)
+        run_id = job_repo.insert_run_start("leader_follower_detection", started_at=started_at)
+        db.commit()  # Persist run row so it survives rollback on failure
         try:
-            metrics = run_detection(db)
+            metrics = run_detection(db, run_id=run_id)
             finished_at = datetime.now(timezone.utc)
             duration = (finished_at - started_at).total_seconds()
             leaders = metrics.get("leader_events_detected", 0)
             signals = metrics.get("signals_emitted", 0)
             summary = f"leader-follower: {leaders} leaders, {signals} signals"
-            job_repo = JobExecutionRepository(db)
-            job_repo.record_run(
-                "leader_follower_detection",
-                run_at=finished_at,
+            job_repo.complete_run(
+                run_id,
                 success=True,
-                started_at=started_at,
+                run_at=finished_at,
                 duration_seconds=duration,
                 summary=summary,
                 metrics=metrics,
@@ -801,6 +802,14 @@ class SchedulerService:
             db.rollback()
             finished_at = datetime.now(timezone.utc)
             duration = (finished_at - started_at).total_seconds()
+            job_repo.complete_run(
+                run_id,
+                success=False,
+                run_at=finished_at,
+                duration_seconds=duration,
+                error_message=str(exc)[:500],
+            )
+            db.commit()
             self._record_job_failure(
                 "leader_follower_detection",
                 exc,

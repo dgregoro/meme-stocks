@@ -35,9 +35,21 @@ class LeaderEventRepository:
         except SQLAlchemyError as exc:  # pragma: no cover
             raise DataAccessError("Failed to list leader events by date") from exc
 
-    def list_recent(self, limit: int = 100) -> Sequence[LeaderEvent]:
-        """List most recent leader events, newest first."""
+    def list_recent(
+        self,
+        limit: int = 100,
+        since_date: dt.date | None = None,
+        leader: str | None = None,
+        run_id: int | None = None,
+    ) -> Sequence[LeaderEvent]:
+        """List most recent leader events, newest first. Optional filters."""
         stmt = select(LeaderEvent).order_by(LeaderEvent.event_date.desc(), LeaderEvent.created_at.desc()).limit(limit)
+        if since_date is not None:
+            stmt = stmt.where(LeaderEvent.event_date >= since_date)
+        if leader is not None:
+            stmt = stmt.where(LeaderEvent.leader_symbol == leader)
+        if run_id is not None:
+            stmt = stmt.where(LeaderEvent.job_run_id == run_id)
         try:
             return list(self._session.execute(stmt).scalars().all())
         except SQLAlchemyError as exc:  # pragma: no cover

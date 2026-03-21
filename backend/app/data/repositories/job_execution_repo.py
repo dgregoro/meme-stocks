@@ -143,6 +143,63 @@ class JobExecutionRepository:
         except SQLAlchemyError as exc:  # pragma: no cover
             raise DataAccessError(f"Failed to record run for job {job_name}") from exc
 
+    def insert_run_start(self, job_name: str, started_at: datetime | None = None) -> int:
+        """Insert a run row at job start; return its id. Call complete_run to finish."""
+        if started_at is None:
+            started_at = datetime.now(timezone.utc)
+        started_at = _as_utc_aware(started_at) or started_at
+        stmt = select(JobExecution).where(JobExecution.job_name == job_name)
+        try:
+            existing = self._session.execute(stmt).scalar_one_or_none()
+            if existing:
+                existing.last_run_at = started_at
+                existing.updated_at = datetime.now(timezone.utc)
+            else:
+                self._session.add(JobExecution(job_name=job_name, last_run_at=started_at))
+            history = JobRunHistory(
+                job_name=job_name,
+                run_at=started_at,
+                started_at=started_at,
+                success=False,
+                error_message=None,
+                summary=None,
+                metrics_json=None,
+            )
+            self._session.add(history)
+            self._session.flush()
+            return history.id
+        except SQLAlchemyError as exc:  # pragma: no cover
+            raise DataAccessError(f"Failed to insert run start for {job_name}") from exc
+
+    def complete_run(
+        self,
+        run_id: int,
+        *,
+        success: bool = True,
+        run_at: datetime | None = None,
+        error_message: str | None = None,
+        duration_seconds: float | None = None,
+        summary: str | None = None,
+        metrics: Mapping[str, Any] | None = None,
+    ) -> None:
+        """Update a run row created by insert_run_start with final data."""
+        stmt = select(JobRunHistory).where(JobRunHistory.id == run_id)
+        try:
+            row = self._session.execute(stmt).scalar_one_or_none()
+            if row is None:
+                raise DataAccessError(f"Run id {run_id} not found")
+            if run_at is not None:
+                row.run_at = _as_utc_aware(run_at) or run_at
+            row.success = success
+            row.error_message = error_message[:500] if error_message else None
+            row.duration_seconds = duration_seconds
+            row.summary = _truncate_summary(summary)
+            if metrics is not None and len(metrics) > 0:
+                row.metrics_json = json.dumps(dict(metrics), separators=(",", ":"), sort_keys=True)
+            self._session.flush()
+        except SQLAlchemyError as exc:  # pragma: no cover
+            raise DataAccessError(f"Failed to complete run {run_id}") from exc
+
     def list_recent_runs(
         self,
         job_name: str | None = None,

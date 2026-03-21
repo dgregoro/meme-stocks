@@ -41,6 +41,7 @@ def compute_event_date(
 def detect_leaders(
     db: Session,
     event_date: dt.date,
+    run_id: int | None = None,
 ) -> list[LeaderEvent]:
     """Detect leaders for event_date. Per-symbol failures are logged and skipped."""
     from backend.app.data.repositories.leader_event_repo import LeaderEventRepository
@@ -86,6 +87,7 @@ def detect_leaders(
                 return_pct=return_pct,
                 volume_ratio=volume_ratio,
                 direction=direction,
+                job_run_id=run_id,
             )
             leader_repo.add(event)
             created.append(event)
@@ -203,7 +205,7 @@ def create_signals(
     return created
 
 
-def run_detection(db: Session) -> dict[str, object]:
+def run_detection(db: Session, run_id: int | None = None) -> dict[str, object]:
     """Run full leader-follower detection pipeline. Returns metrics dict."""
     from backend.app.data.repositories.leader_follower_signal_repo import LeaderFollowerSignalRepository
     from backend.app.data.repositories.price_data_repo import PriceDataRepository
@@ -230,14 +232,35 @@ def run_detection(db: Session) -> dict[str, object]:
     symbols = [s.symbol for s in stock_repo.list()]
     universe_size = len(symbols)
 
-    leader_events = detect_leaders(db, event_date)
+    leader_events = detect_leaders(db, event_date, run_id=run_id)
 
     candidates_map: dict[int, list[tuple[str, str]]] = {}
     total_candidates = 0
+    candidate_repo = None
+    if run_id is not None:
+        from backend.app.data.repositories.leader_follower_candidate_repo import (
+            LeaderFollowerCandidateRepository,
+        )
+        from backend.app.models.leader_follower_candidate import LeaderFollowerCandidate
+
+        candidate_repo = LeaderFollowerCandidateRepository(db)
+
     for event in leader_events:
         candidates = select_follower_candidates(event, stock_group_repo, price_repo, event_date)
         candidates_map[event.id] = candidates
         total_candidates += len(candidates)
+
+        if candidate_repo is not None and run_id is not None:
+            for follower_symbol, group_id in candidates:
+                c = LeaderFollowerCandidate(
+                    job_run_id=run_id,
+                    event_date=event_date,
+                    leader_symbol=event.leader_symbol,
+                    follower_symbol=follower_symbol,
+                    group_id=group_id,
+                    metrics_json=None,
+                )
+                candidate_repo.add(c)
 
     signals_emitted = create_signals(
         leader_events,

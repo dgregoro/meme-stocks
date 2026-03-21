@@ -22,4 +22,5 @@ class LeaderEvent(Base):
     return_pct: Mapped[float] = mapped_column(Float, nullable=False)
     volume_ratio: Mapped[float] = mapped_column(Float, nullable=False)
     direction: Mapped[str] = mapped_column(String(8), nullable=False)  # 'up' | 'down'
+    job_run_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("job_run_history.id"), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))

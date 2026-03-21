@@ -171,6 +171,86 @@ def _migrate_notifications_add_signal_metadata() -> None:
         )
 
 
+def _migrate_leader_events_add_job_run_id() -> None:
+    """Add job_run_id to leader_events for run traceability."""
+    import sqlite3
+
+    if ":memory:" in _db_url or "sqlite" not in _db_url.lower():
+        return
+    path = _db_url.replace("sqlite:///", "", 1).split("?")[0].strip()
+    if not path or path == ":memory:":
+        return
+    path = os.path.abspath(path)
+    if not os.path.exists(path):
+        return
+    try:
+        conn = sqlite3.connect(path)
+        cur = conn.execute("PRAGMA table_info(leader_events)")
+        columns = {row[1] for row in cur.fetchall()}
+        conn.close()
+        with engine.begin() as c:
+            if "job_run_id" not in columns:
+                c.execute(
+                    text("ALTER TABLE leader_events ADD COLUMN job_run_id INTEGER REFERENCES job_run_history(id)")
+                )
+    except Exception as exc:
+        logger.warning(
+            "Migration leader_events job_run_id failed: %s",
+            exc,
+        )
+
+
+def _migrate_create_leader_follower_candidates() -> None:
+    """Create leader_follower_candidates table if it does not exist."""
+    import sqlite3
+
+    if ":memory:" in _db_url or "sqlite" not in _db_url.lower():
+        return
+    path = _db_url.replace("sqlite:///", "", 1).split("?")[0].strip()
+    if not path or path == ":memory:":
+        return
+    path = os.path.abspath(path)
+    if not os.path.exists(path):
+        return
+    try:
+        conn = sqlite3.connect(path)
+        cur = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='leader_follower_candidates'")
+        if cur.fetchone() is None:
+            conn.execute(
+                """
+                CREATE TABLE leader_follower_candidates (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    job_run_id INTEGER NOT NULL REFERENCES job_run_history(id),
+                    event_date DATE NOT NULL,
+                    leader_symbol VARCHAR(16) NOT NULL REFERENCES stocks(symbol),
+                    follower_symbol VARCHAR(16) NOT NULL REFERENCES stocks(symbol),
+                    group_id VARCHAR(64) NOT NULL,
+                    metrics_json TEXT,
+                    created_at DATETIME
+                )
+                """
+            )
+            conn.execute(
+                "CREATE INDEX ix_leader_follower_candidates_job_run_id ON leader_follower_candidates(job_run_id)"
+            )
+            conn.execute(
+                "CREATE INDEX ix_leader_follower_candidates_event_date ON leader_follower_candidates(event_date)"
+            )
+            conn.execute(
+                "CREATE INDEX ix_leader_follower_candidates_leader_symbol ON leader_follower_candidates(leader_symbol)"
+            )
+            conn.execute(
+                "CREATE INDEX ix_leader_follower_candidates_follower_symbol ON leader_follower_candidates(follower_symbol)"
+            )
+        conn.commit()
+        conn.close()
+    except Exception as exc:
+        logger.warning(
+            "Migration leader_follower_candidates failed: %s",
+            exc,
+        )
+
+
 def _migrate_drop_reddit_posts_stock_symbol() -> None:
     """Drop legacy stock_symbol column from reddit_posts if it exists.
 
@@ -208,3 +288,5 @@ def init_db() -> None:
     _migrate_drop_reddit_posts_stock_symbol()
     _migrate_paper_trades_add_option_columns()
     _migrate_notifications_add_signal_metadata()
+    _migrate_leader_events_add_job_run_id()
+    _migrate_create_leader_follower_candidates()
