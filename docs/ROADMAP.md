@@ -82,7 +82,7 @@ cd frontend && npm run dev
 | 2.2 | Add post body to sentiment analysis | PLAN.md tech debt | Medium | Not Started |
 | 2.3 | Add RSI indicator | PLAN.md tech debt, PRD FR-2.5 | Medium | Not Started |
 | 2.4 | Add volume confirmation to patterns | PLAN.md tech debt | Small | Not Started |
-| 2.5 | Implement combined-signal alerts | PLAN.md tech debt, PRD FR-3.7 | Medium | Not Started |
+| 2.5 | Implement combined-signal alerts | PLAN.md tech debt, PRD FR-3.7 | Medium | ✅ Complete |
 | 2.6 | Fix any deprecation warnings | Test output | Small | ✅ Done in Phase 1 |
 | 2.7 | Increase test coverage to 80%+ | Quality framework | Medium | Not Started |
 
@@ -445,6 +445,8 @@ Update this section as work completes:
 | 2026-02-01 | 2 | 2.1 Configurable sentiment keywords | ✅ | config.py + sentiment_analyzer.py |
 | 2026-02-01 | 2.5 | CLI implementation started | 🔄 | backend/cli/ scaffold |
 | 2026-03-04 | 4 | Causal UI (lead-lag tab on symbol detail) | ✅ | CausalPanel, fetchCausalEvidence, tab routing |
+| 2026-03-04 | 4 | 4A: Research API (build-dataset, experiments) | ✅ | backend/app/api/research.py, test_research_api.py |
+| 2026-03-04 | 4 | 4B: Research frontend page | ✅ | Research.tsx, nav + route, api client |
 
 ---
 

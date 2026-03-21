@@ -268,6 +268,117 @@ export async function fetchCausalEvidence(args: {
 
 // ---
 
+// --- Intraday ingestion ---
+
+export type IntradayStatusResponse = {
+  alpaca_feed: string
+  free_plan_mode: boolean
+  sip_delay_minutes: number
+  end_time_safety_minutes: number
+  effective_data_lag_minutes: number
+  notes: string
+  counts_by_status: Record<string, number>
+  newest_last_ts: string | null
+  oldest_last_ts: string | null
+  latest_run: {
+    id?: number
+    started_at?: string
+    ended_at?: string
+    symbols_count?: number
+    bars_written?: number
+    errors_count?: number
+    notes?: string
+  } | null
+  intraday_ingestion_enabled: boolean
+  lock: Record<string, unknown>
+}
+
+export type RunOnceResponse = {
+  symbols_processed: number
+  bars_written: number
+  errors_count: number
+  start_utc: string | null
+  end_utc: string | null
+  safe_end_used: string | null
+  feed: string
+  free_plan_mode: boolean
+}
+
+export const getIntradayStatus = () =>
+  handle(client.get<IntradayStatusResponse>('/api/intraday/status'))
+
+export const runIntradayOnce = () =>
+  handle(client.post<RunOnceResponse>('/api/intraday/run-once'))
+
+// --- Research API ---
+
+export type BuildDatasetRequest = {
+  start_day: string
+  end_day: string
+  horizon?: number
+  symbols?: string[] | null
+}
+
+export type BuildDatasetResponse = {
+  path: string
+  rows_written: number
+  labels_rows_upserted: number
+  features_rows_upserted: number
+  git_sha: string | null
+  dataset_version: string
+}
+
+export type DirectionalityResponse = {
+  mentions_lead_returns_corr: number | null
+  mentions_lead_returns_n: number
+  returns_lead_mentions_corr: number | null
+  returns_lead_mentions_n: number
+}
+
+export type EventStudyResponse = {
+  spike_mean_fwd_return: number | null
+  spike_n: number
+  non_spike_mean_fwd_return: number | null
+  non_spike_n: number
+  spread: number | null
+}
+
+export type PredictivenessResponse = {
+  baseline_direction_accuracy: number | null
+  augmented_direction_accuracy: number | null
+  baseline_ridge_rmse: number | null
+  augmented_ridge_rmse: number | null
+  n_train: number
+  n_test: number
+}
+
+export const buildDataset = (payload: BuildDatasetRequest) =>
+  handle(client.post<BuildDatasetResponse>('/api/research/build-dataset', payload))
+
+export const runDirectionality = (payload: {
+  dataset_path: string
+  k?: number
+  h?: number
+}) =>
+  handle(client.post<DirectionalityResponse>('/api/research/experiment/directionality', payload))
+
+export const runEventStudy = (payload: {
+  dataset_path: string
+  window?: number
+  threshold?: string
+  horizon?: number
+}) =>
+  handle(client.post<EventStudyResponse>('/api/research/experiment/event-study', payload))
+
+export const runPredictiveness = (payload: {
+  dataset_path: string
+  horizon?: number
+  split_date?: string | null
+}) =>
+  handle(client.post<PredictivenessResponse>('/api/research/experiment/predictiveness', payload))
+
+// ---
+
 export const api = {
   health: () => handle(client.get<{ status: string }>('/health')),
   analysisDaily: () => handle(client.get<AnalysisRow[]>('/api/analysis/daily')),
@@ -312,4 +423,10 @@ export const api = {
         params: { limit },
       }),
     ),
+  getIntradayStatus,
+  runIntradayOnce,
+  buildDataset,
+  runDirectionality,
+  runEventStudy,
+  runPredictiveness,
 }

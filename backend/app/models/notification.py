@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import String, Integer, DateTime, Boolean, ForeignKey
+from sqlalchemy import String, Integer, DateTime, Boolean, ForeignKey, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.app.data.database import Base
@@ -23,3 +23,4 @@ class Notification(Base):
     severity: Mapped[str] = mapped_column(String(16))  # 'low' | 'medium' | 'high'
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     read: Mapped[bool] = mapped_column(Boolean, default=False)
+    signal_metadata: Mapped[str | None] = mapped_column(Text, nullable=True)

@@ -47,6 +47,14 @@ class Settings(BaseSettings):
     rsi_overbought: float = 70.0
     rsi_oversold: float = 30.0
 
+    # Combined signal alerts (Phase 2, Task 2.5)
+    combined_signal_weight_sentiment: float = 2.0
+    combined_signal_weight_price: float = 2.0
+    combined_signal_weight_volume: float = 1.0
+    combined_signal_weight_rsi: float = 1.0
+    combined_signal_threshold: float = 4.0
+    combined_signal_alerts_only: bool = False
+
     # CORS
     cors_allowed_origins: str = "http://127.0.0.1:5173,http://localhost:5173"
 
@@ -106,6 +114,11 @@ class Settings(BaseSettings):
     causal_min_buckets_15m: int = 200
     causal_min_buckets_1h: int = 200
     causal_min_buckets_1d: int = 60
+
+    # Research API: dataset output and allowed paths for experiments
+    research_dataset_dir: str = (
+        "data/research"  # Output dir for build-dataset; experiments accept only paths under this
+    )
 
     # Reddit daily features (causal research): trading-day assignment and aggregation job
     market_timezone: str = "America/New_York"

@@ -144,6 +144,33 @@ def _migrate_job_run_history_add_metrics_and_summary() -> None:
         )
 
 
+def _migrate_notifications_add_signal_metadata() -> None:
+    """Add signal_metadata column to notifications for combined-signal alert metadata."""
+    import sqlite3
+
+    if ":memory:" in _db_url or "sqlite" not in _db_url.lower():
+        return
+    path = _db_url.replace("sqlite:///", "", 1).split("?")[0].strip()
+    if not path or path == ":memory:":
+        return
+    path = os.path.abspath(path)
+    if not os.path.exists(path):
+        return
+    try:
+        conn = sqlite3.connect(path)
+        cur = conn.execute("PRAGMA table_info(notifications)")
+        columns = {row[1] for row in cur.fetchall()}
+        conn.close()
+        with engine.begin() as c:
+            if "signal_metadata" not in columns:
+                c.execute(text("ALTER TABLE notifications ADD COLUMN signal_metadata TEXT"))
+    except Exception as exc:
+        logger.warning(
+            "Migration notifications signal_metadata failed: %s",
+            exc,
+        )
+
+
 def _migrate_drop_reddit_posts_stock_symbol() -> None:
     """Drop legacy stock_symbol column from reddit_posts if it exists.
 
@@ -180,3 +207,4 @@ def init_db() -> None:
     _migrate_job_run_history_add_metrics_and_summary()
     _migrate_drop_reddit_posts_stock_symbol()
     _migrate_paper_trades_add_option_columns()
+    _migrate_notifications_add_signal_metadata()

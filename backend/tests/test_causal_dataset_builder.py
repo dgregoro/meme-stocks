@@ -40,8 +40,17 @@ def _write_bars(root: Path, symbol: str, rows: list[tuple]) -> None:
     pq.write_table(table, base / "part.parquet")
 
 
-def _post(collected_at: datetime, title: str = "buy moon", upvotes: int = 10, comments: int = 5):
-    return SimpleNamespace(collected_at=collected_at, title=title, upvotes=upvotes, comments=comments)
+def _post(
+    collected_at: datetime,
+    title: str = "buy moon",
+    upvotes: int = 10,
+    comments: int = 5,
+    posted_at: datetime | None = None,
+):
+    attrs: dict = {"collected_at": collected_at, "title": title, "upvotes": upvotes, "comments": comments}
+    if posted_at is not None:
+        attrs["posted_at"] = posted_at
+    return SimpleNamespace(**attrs)
 
 
 @pytest.mark.unit
@@ -152,3 +161,43 @@ def test_build_dataset_no_lookahead(tmp_path: Path) -> None:
 
     if isinstance(result, CausalDataset):
         assert result.df["mentions"].sum() == 0
+
+
+@pytest.mark.unit
+def test_build_dataset_buckets_by_posted_at(tmp_path: Path) -> None:
+    """Posts with same collected_at but different posted_at land in buckets by posted_at."""
+    base = datetime(2026, 1, 15, 9, 30, tzinfo=timezone.utc)
+    rows = [(base + timedelta(hours=h), 100.0 + h * 0.01, 1000.0) for h in range(30)]
+    _write_bars(tmp_path, "GME", rows)
+
+    collected_late = datetime(2026, 1, 15, 14, 0, tzinfo=timezone.utc)
+    post_a = _post(
+        collected_at=collected_late,
+        title="GME moon",
+        posted_at=datetime(2026, 1, 15, 10, 15, tzinfo=timezone.utc),
+    )
+    post_b = _post(
+        collected_at=collected_late,
+        title="GME buy",
+        posted_at=datetime(2026, 1, 15, 11, 15, tzinfo=timezone.utc),
+    )
+
+    with patch("backend.app.services.causal_dataset_builder.get_settings") as mock:
+        mock.return_value.causal_min_buckets_1h = 10
+
+        result = build_dataset(
+            "GME",
+            datetime(2026, 1, 15, 9, 0, tzinfo=timezone.utc),
+            datetime(2026, 1, 16, 18, 0, tzinfo=timezone.utc),
+            "1h",
+            posts=[post_a, post_b],
+            parquet_root=str(tmp_path),
+        )
+
+    assert isinstance(result, CausalDataset)
+    df = result.df.copy()
+    df["bucket_hour"] = df.index.hour
+    mentions_by_hour = df.groupby("bucket_hour")["mentions"].sum()
+    assert mentions_by_hour.get(10, 0) == 1, "Posted at 10:15 should land in 10:00 bucket"
+    assert mentions_by_hour.get(11, 0) == 1, "Posted at 11:15 should land in 11:00 bucket"
+    assert mentions_by_hour.get(14, 0) == 0, "Collected at 14:00 should not determine bucket"

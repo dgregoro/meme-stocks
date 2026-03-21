@@ -1,13 +1,13 @@
 """Time series dataset builder for lead-lag causal analysis.
 
 Builds aligned series: mention counts, aggregated sentiment, price close, and returns
-per time bucket. No look-ahead: bucket sentiment/mentions only from posts whose
-collected_at falls inside that bucket.
+per time bucket. No look-ahead: bucket sentiment/mentions by posted_at (when the info
+became available to the market) with fallback to collected_at for leakage-safe semantics.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from math import exp, log10
 from typing import Literal
@@ -38,6 +38,7 @@ class InsufficientDataResult:
     reason: str
     buckets_available: int
     min_required: int
+    notes: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -57,6 +58,7 @@ class CausalDataset:
     start_utc: datetime
     end_utc: datetime
     sample_size: int
+    notes: list[str] = field(default_factory=list)
 
 
 def _min_buckets(freq: str) -> int:
@@ -129,6 +131,10 @@ def build_dataset(
             reason="no_price_data",
             buckets_available=0,
             min_required=_min_buckets(freq),
+            notes=[
+                "No intraday bars found in parquet store for this symbol/time window.",
+                "Run intraday ingestion: POST /api/intraday/run-once (or use UI: Data Collection → Intraday ingestion).",
+            ],
         )
 
     resampled = _resample_bars(bars, freq)
@@ -139,6 +145,10 @@ def build_dataset(
             reason="no_price_data_after_resample",
             buckets_available=0,
             min_required=_min_buckets(freq),
+            notes=[
+                "No intraday bars found in parquet store for this symbol/time window.",
+                "Run intraday ingestion: POST /api/intraday/run-once (or use UI: Data Collection → Intraday ingestion).",
+            ],
         )
 
     n_buckets = len(resampled)
@@ -156,10 +166,12 @@ def build_dataset(
     resampled = resampled.rename(columns={"ts": "bucket"})
     bucket_starts = resampled["bucket"].tolist()
 
-    # Assign each post to a bucket (collected_at must fall inside bucket)
-    # Use floor to find bucket: bucket_start <= collected_at < bucket_start + period
+    # Assign each post to a bucket by posted_at (when info became available to market),
+    # with fallback to collected_at for posts missing posted_at.
     period_map = {"15min": "15min", "1h": "1h", "1d": "1D"}
     period = period_map[freq]
+    used_posted_at_count = 0
+    used_collected_at_count = 0
 
     mentions_per_bucket: dict[pd.Timestamp, int] = {}
     sentiment_weighted_per_bucket: dict[pd.Timestamp, float] = {}
@@ -171,27 +183,38 @@ def build_dataset(
         weight_per_bucket[bucket_ts] = 0.0
 
     for post in posts:
-        collected_at = post.collected_at
-        if collected_at.tzinfo is None:
-            collected_at = collected_at.replace(tzinfo=timezone.utc)
+        event_time = getattr(post, "posted_at", None) or post.collected_at
+        if getattr(post, "posted_at", None) is not None:
+            used_posted_at_count += 1
         else:
-            collected_at = collected_at.astimezone(timezone.utc)
+            used_collected_at_count += 1
 
-        if collected_at < start or collected_at > end:
+        if event_time.tzinfo is None:
+            event_time = event_time.replace(tzinfo=timezone.utc)
+        else:
+            event_time = event_time.astimezone(timezone.utc)
+
+        if event_time < start or event_time > end:
             continue
 
-        collected_ts = pd.Timestamp(collected_at)
-        bucket_ts = collected_ts.floor(period)
+        event_ts = pd.Timestamp(event_time)
+        bucket_ts = event_ts.floor(period)
         if bucket_ts not in mentions_per_bucket:
             continue
 
         sentiment = analyze_post_sentiment(post.title)
         engagement = post.upvotes + post.comments + 1
-        weight = _bucket_sentiment_weight(collected_at, collected_at, engagement)
+        weight = _bucket_sentiment_weight(event_time, event_time, engagement)
 
         mentions_per_bucket[bucket_ts] += 1
         sentiment_weighted_per_bucket[bucket_ts] += sentiment * weight
         weight_per_bucket[bucket_ts] += weight
+
+    bucketing_note = (
+        "Bucketed Reddit posts by posted_at (fallback collected_at)."
+        if used_posted_at_count > 0
+        else "Bucketed Reddit posts by collected_at (no posted_at)."
+    )
 
     # Build final df aligned to price buckets
     resampled["mentions"] = resampled["bucket"].map(lambda t: mentions_per_bucket.get(t, 0))
@@ -213,4 +236,5 @@ def build_dataset(
         start_utc=result_df.index.min().to_pydatetime(),
         end_utc=result_df.index.max().to_pydatetime(),
         sample_size=len(result_df),
+        notes=[bucketing_note],
     )
