@@ -24,11 +24,9 @@ from backend.app.models.stock import Stock
 from backend.app.models.stock_group import StockGroup
 from backend.app.services.leader_follower_service import (
     compute_event_date,
-    compute_strength_score,
     create_signals,
     detect_leaders,
     load_symbol_to_primary_group_map,
-    run_detection,
     select_follower_candidates,
 )
 

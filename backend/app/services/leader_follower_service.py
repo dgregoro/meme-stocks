@@ -14,7 +14,6 @@ from backend.app.config import get_settings
 from backend.app.models.leader_event import LeaderEvent
 
 if TYPE_CHECKING:
-    from backend.app.data.repositories.leader_event_repo import LeaderEventRepository
     from backend.app.data.repositories.leader_follower_signal_repo import LeaderFollowerSignalRepository
     from backend.app.data.repositories.price_data_repo import PriceDataRepository
     from backend.app.data.repositories.stock_group_repo import StockGroupRepository
@@ -206,7 +205,6 @@ def create_signals(
 
 def run_detection(db: Session) -> dict[str, object]:
     """Run full leader-follower detection pipeline. Returns metrics dict."""
-    from backend.app.data.repositories.leader_event_repo import LeaderEventRepository
     from backend.app.data.repositories.leader_follower_signal_repo import LeaderFollowerSignalRepository
     from backend.app.data.repositories.price_data_repo import PriceDataRepository
     from backend.app.data.repositories.stock_group_repo import StockGroupRepository
@@ -216,7 +214,6 @@ def run_detection(db: Session) -> dict[str, object]:
     stock_repo = StockRepository(db)
     price_repo = PriceDataRepository(db)
     stock_group_repo = StockGroupRepository(db)
-    leader_repo = LeaderEventRepository(db)
     signal_repo = LeaderFollowerSignalRepository(db)
 
     event_date = compute_event_date(price_repo, stock_repo)
@@ -234,7 +231,6 @@ def run_detection(db: Session) -> dict[str, object]:
     universe_size = len(symbols)
 
     leader_events = detect_leaders(db, event_date)
-    symbol_to_group = load_symbol_to_primary_group_map(stock_group_repo)
 
     candidates_map: dict[int, list[tuple[str, str]]] = {}
     total_candidates = 0
