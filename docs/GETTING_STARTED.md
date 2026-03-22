@@ -142,8 +142,11 @@ The application runs automated background jobs on a schedule:
 - **Price Collection**: Updates price data for tracked stocks (default: every 15 minutes)
 - **Daily Analysis**: Generates end-of-day analysis (default: 4 PM)
 - **Notification Checks**: Scans for unusual activity (default: every 30 minutes)
+- **Leader-Follower Detection** (when `LEADER_FOLLOWER_ENABLED=true`): Detects leaders and follower candidates (default: 5 PM)
 
 **Catch-up functionality**: On startup (e.g., after laptop sleep), the app checks for missed jobs and runs them automatically. Job intervals and subreddits are configurable via environment variables.
+
+**Stock groups bootstrap**: Leader-follower detection needs `stock_groups` populated to produce follower candidates. If empty, the job detects leaders but emits zero candidates. See [Stock Groups Bootstrap](STOCK_GROUPS_BOOTSTRAP.md) for how to seed: `python -m backend.app.cli seed stock-groups`.
 
 ---
 
