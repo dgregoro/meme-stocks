@@ -94,6 +94,21 @@ def test_trigger_notification_check(test_app):
     mock_scheduler._check_notifications.assert_called_once()
 
 
+def test_trigger_leader_follower_detection(test_app):
+    """Test manual leader-follower detection endpoint."""
+    app, mock_scheduler, client = test_app
+
+    mock_scheduler._leader_follower_detection_job = MagicMock()
+
+    response = client.post("/api/jobs/leader-follower-detection")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["job_name"] == "leader_follower_detection"
+    assert data["status"] == "success"
+    mock_scheduler._leader_follower_detection_job.assert_called_once()
+
+
 def test_job_endpoint_without_scheduler():
     """Test that endpoints return 503 if scheduler not initialized."""
     app = create_app(omit_scheduler=True)

@@ -170,12 +170,53 @@ def trigger_notification_check(
         ) from exc
 
 
+@router.post("/leader-follower-detection", response_model=JobResponse)
+def trigger_leader_follower_detection(
+    db: Session = Depends(get_session),
+    scheduler: SchedulerService = Depends(get_scheduler),
+) -> JobResponse:
+    """Manually trigger leader-follower signal detection.
+
+    Runs the detection job immediately, regardless of the scheduled time.
+    Useful for testing or on-demand runs when leader_follower_enabled is set.
+    """
+    try:
+        scheduler._leader_follower_detection_job()
+        job_repo = JobExecutionRepository(db)
+        runs = job_repo.list_recent_runs("leader_follower_detection", limit=1)
+        if runs:
+            r = runs[0]
+            return JobResponse(
+                job_name="leader_follower_detection",
+                status="success",
+                message="Leader-follower detection completed successfully",
+                stats={"run_id": r.id},
+            )
+        return JobResponse(
+            job_name="leader_follower_detection",
+            status="success",
+            message="Leader-follower detection completed",
+            stats=None,
+        )
+    except Exception as exc:
+        logger.error("Error in manual leader-follower detection: %s", exc, exc_info=True)
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=error_detail(
+                "InternalServerError",
+                f"Leader-follower detection failed: {exc}",
+            ),
+        ) from exc
+
+
 # Map URL path segment (hyphenated) to internal job name (underscore)
 JOB_NAME_FROM_PATH: dict[str, str] = {
     "reddit-collection": "reddit_collection",
     "price-collection": "price_collection",
     "daily-analysis": "daily_analysis",
     "notification-check": "notification_check",
+    "leader-follower-detection": "leader_follower_detection",
 }
 
 
@@ -196,7 +237,8 @@ def get_job_runs(
 ) -> List[JobRunResponse]:
     """Get the last 30 runs for a job.
 
-    Valid job_name values: reddit-collection, price-collection, daily-analysis, notification-check
+    Valid job_name values: reddit-collection, price-collection, daily-analysis,
+    notification-check, leader-follower-detection
     """
     internal_name = JOB_NAME_FROM_PATH.get(job_name)
     if internal_name is None:
