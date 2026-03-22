@@ -583,6 +583,9 @@ class SchedulerService:
                     price_repo.add(price_data)
                     saved_count += 1
 
+            # Commit after each stock to release DB lock (allows other jobs e.g. leader-follower to write)
+            db.commit()
+
         logger.info(f"Saved {saved_count} price data points")
         return {
             "symbols": len(stocks),

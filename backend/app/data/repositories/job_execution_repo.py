@@ -145,31 +145,48 @@ class JobExecutionRepository:
 
     def insert_run_start(self, job_name: str, started_at: datetime | None = None) -> int:
         """Insert a run row at job start; return its id. Call complete_run to finish."""
+        import time
+
+        from sqlalchemy.exc import OperationalError
+
         if started_at is None:
             started_at = datetime.now(timezone.utc)
         started_at = _as_utc_aware(started_at) or started_at
         stmt = select(JobExecution).where(JobExecution.job_name == job_name)
-        try:
-            existing = self._session.execute(stmt).scalar_one_or_none()
-            if existing:
-                existing.last_run_at = started_at
-                existing.updated_at = datetime.now(timezone.utc)
-            else:
-                self._session.add(JobExecution(job_name=job_name, last_run_at=started_at))
-            history = JobRunHistory(
-                job_name=job_name,
-                run_at=started_at,
-                started_at=started_at,
-                success=False,
-                error_message=None,
-                summary=None,
-                metrics_json=None,
-            )
-            self._session.add(history)
-            self._session.flush()
-            return history.id
-        except SQLAlchemyError as exc:  # pragma: no cover
-            raise DataAccessError(f"Failed to insert run start for {job_name}") from exc
+        last_exc: SQLAlchemyError | None = None
+        for attempt in range(4):  # 4 attempts: 0s, 1s, 2s, 3s delays
+            try:
+                existing = self._session.execute(stmt).scalar_one_or_none()
+                if existing:
+                    existing.last_run_at = started_at
+                    existing.updated_at = datetime.now(timezone.utc)
+                else:
+                    self._session.add(JobExecution(job_name=job_name, last_run_at=started_at))
+                history = JobRunHistory(
+                    job_name=job_name,
+                    run_at=started_at,
+                    started_at=started_at,
+                    success=False,
+                    error_message=None,
+                    summary=None,
+                    metrics_json=None,
+                )
+                self._session.add(history)
+                self._session.flush()
+                return history.id
+            except OperationalError as exc:
+                msg = str(getattr(exc, "orig", exc)).lower()
+                if "locked" in msg and attempt < 3:
+                    last_exc = exc
+                    self._session.rollback()
+                    time.sleep(1 + attempt)
+                    continue
+                raise DataAccessError(f"Failed to insert run start for {job_name}") from exc
+            except SQLAlchemyError as exc:  # pragma: no cover
+                raise DataAccessError(f"Failed to insert run start for {job_name}") from exc
+        if last_exc:
+            raise DataAccessError(f"Failed to insert run start for {job_name}") from last_exc
+        raise DataAccessError(f"Failed to insert run start for {job_name}")
 
     def complete_run(
         self,

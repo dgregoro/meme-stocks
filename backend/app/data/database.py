@@ -6,7 +6,7 @@ import logging
 import os
 from typing import Generator
 
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import declarative_base, sessionmaker, Session
 
 from backend.app.config import get_settings
@@ -32,8 +32,21 @@ def _ensure_sqlite_path_exists(db_url: str) -> None:
 
 _db_url = _build_engine_url()
 _ensure_sqlite_path_exists(_db_url)
-engine = create_engine(_db_url, future=True)
+_connect_args: dict[str, object] = {}
+if "sqlite" in _db_url.lower():
+    _connect_args["timeout"] = 30  # Wait up to 30s when DB locked (scheduler + API concurrency)
+engine = create_engine(_db_url, future=True, connect_args=_connect_args)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine, class_=Session)
+
+
+@event.listens_for(engine, "connect")
+def _sqlite_connect(dbapi_conn: object, connection_record: object) -> None:
+    """Enable WAL mode and busy timeout for SQLite (file DBs only) to reduce 'database is locked'."""
+    if "sqlite" in _db_url.lower() and ":memory:" not in _db_url:
+        cursor = dbapi_conn.cursor()  # type: ignore[attr-defined]
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA busy_timeout=30000")  # 30s in ms
+        cursor.close()
 
 
 def get_session() -> Generator[Session, None, None]:
