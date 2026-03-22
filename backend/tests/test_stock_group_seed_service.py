@@ -72,7 +72,7 @@ def test_run_bootstrap_seed_does_not_wipe_existing(session: Session) -> None:
     session.commit()
     before_count = group_repo.count_total()
 
-    result = run_bootstrap_seed(session)
+    run_bootstrap_seed(session)
     session.commit()
 
     after_count = group_repo.count_total()

@@ -48,10 +48,7 @@ def list_stock_groups(db: Session = Depends(get_session)) -> GroupListResponse:
         repo = StockGroupRepository(db)
         total = repo.count_total()
         group_ids = repo.list_group_ids()
-        groups = [
-            GroupSummary(group_id=gid, symbol_count=len(repo.get_symbols_in_group(gid)))
-            for gid in group_ids
-        ]
+        groups = [GroupSummary(group_id=gid, symbol_count=len(repo.get_symbols_in_group(gid))) for gid in group_ids]
         return GroupListResponse(
             total_rows=total,
             groups=groups,
