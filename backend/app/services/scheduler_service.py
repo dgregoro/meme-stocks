@@ -785,6 +785,15 @@ class SchedulerService:
         run_id = job_repo.insert_run_start("leader_follower_detection", started_at=started_at)
         db.commit()  # Persist run row so it survives rollback on failure
         try:
+            # Warn if stock_groups empty; follower candidates will be zero
+            from backend.app.data.repositories.stock_group_repo import StockGroupRepository
+
+            sg_repo = StockGroupRepository(db)
+            if sg_repo.count_total() == 0:
+                logger.warning(
+                    "stock_groups is empty; leader detection may work but follower "
+                    "candidate generation will return zero. Run: python -m backend.app.cli seed stock-groups"
+                )
             metrics = run_detection(db, run_id=run_id)
             finished_at = datetime.now(timezone.utc)
             duration = (finished_at - started_at).total_seconds()

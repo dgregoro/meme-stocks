@@ -45,6 +45,42 @@ class StockGroupRepository:
         except SQLAlchemyError as exc:  # pragma: no cover
             raise DataAccessError("Failed to get symbols in group") from exc
 
+    def count_total(self) -> int:
+        """Return total number of stock-group memberships."""
+        from sqlalchemy import func
+
+        stmt = select(func.count(StockGroup.id))
+        try:
+            return self._session.execute(stmt).scalar_one() or 0
+        except SQLAlchemyError as exc:  # pragma: no cover
+            raise DataAccessError("Failed to count stock groups") from exc
+
+    def list_group_ids(self) -> list[str]:
+        """Return distinct group_ids, ordered lexicographically."""
+        stmt = select(StockGroup.group_id).distinct().order_by(StockGroup.group_id)
+        try:
+            rows = self._session.execute(stmt).scalars().all()
+            return [r for r in rows]
+        except SQLAlchemyError as exc:  # pragma: no cover
+            raise DataAccessError("Failed to list group ids") from exc
+
+    def exists(self, group_id: str, stock_symbol: str) -> bool:
+        """Return True if (group_id, stock_symbol) pair exists."""
+        stmt = select(StockGroup.id).where(StockGroup.group_id == group_id, StockGroup.stock_symbol == stock_symbol)
+        try:
+            row = self._session.execute(stmt).first()
+            return row is not None
+        except SQLAlchemyError as exc:  # pragma: no cover
+            raise DataAccessError("Failed to check stock group exists") from exc
+
+    def add_if_missing(self, group_id: str, stock_symbol: str) -> bool:
+        """Add (group_id, stock_symbol) if not exists. Return True if added, False if skipped."""
+        if self.exists(group_id, stock_symbol):
+            return False
+        sg = StockGroup(group_id=group_id, stock_symbol=stock_symbol)
+        self.add(sg)
+        return True
+
     def add(self, stock_group: StockGroup) -> None:
         """Persist a StockGroup. Caller must commit the session."""
         try:

@@ -12,8 +12,17 @@ import typer
 
 from backend.app.data.database import SessionLocal, init_db
 
-# Import all models so init_db can create all tables (FK dependencies)
+# Import all models so init_db can create all tables (FK dependencies, migrations)
 from backend.app.models import (  # noqa: F401
+    intraday_ingest_run,
+    intraday_ingest_state,
+    job_execution,
+    job_lock,
+    job_run_history,
+    leader_event,
+    leader_follower_candidate,
+    leader_follower_signal,
+    notification,
     paper_trade,
     price_data,
     price_labels,
@@ -21,6 +30,8 @@ from backend.app.models import (  # noqa: F401
     reddit_post,
     reddit_symbol_mention,
     stock,
+    stock_group,
+    symbol_universe,
 )
 from backend.app.services.dataset_builder_service import build_training_dataset
 from backend.app.services.experiments.directionality import run_directionality
@@ -36,6 +47,9 @@ app = typer.Typer(
 
 build_dataset_app = typer.Typer(invoke_without_command=True)
 app.add_typer(build_dataset_app, name="build-dataset")
+
+seed_app = typer.Typer(help="Bootstrap and seed data.")
+app.add_typer(seed_app, name="seed")
 
 experiment_app = typer.Typer(help="Run causal research experiments.")
 app.add_typer(experiment_app, name="experiment")
@@ -87,6 +101,30 @@ def build_dataset(
         )
         typer.echo(f"Labels: {label_stats['rows_upserted']} rows (horizons 1/5/10)")
         typer.echo(f"Dataset: {ds_stats['rows_written']} rows written to {out}")
+    finally:
+        db.close()
+
+
+@seed_app.command("stock-groups")
+def seed_stock_groups() -> None:
+    """Seed stock_groups with curated bootstrap data. Idempotent; safe to run twice."""
+    from backend.app.services.stock_group_seed_service import run_bootstrap_seed
+
+    init_db()
+    db = SessionLocal()
+    try:
+        result = run_bootstrap_seed(db)
+        db.commit()
+        typer.echo(
+            f"Stock groups seeded: {result['groups_inserted']} inserted, "
+            f"{result['groups_skipped']} skipped (already existed)"
+        )
+        if result["stocks_created"] > 0:
+            typer.echo(f"Created {result['stocks_created']} missing stocks for FK integrity")
+        if result["symbols_skipped"]:
+            typer.echo("Skipped (with warnings):")
+            for s in result["symbols_skipped"]:
+                typer.echo(f"  - {s}")
     finally:
         db.close()
 
