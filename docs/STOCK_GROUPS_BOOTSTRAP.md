@@ -4,14 +4,26 @@
 
 The `stock_groups` table is the **candidate universe** for leader-follower signal detection:
 
-1. The system detects **leaders** (stocks with significant price/volume moves).
-2. For each leader, it looks up which groups that symbol belongs to.
+1. **Leader detection** is restricted to symbols present in `stock_groups`. Only these symbols are scanned for significant price/volume moves.
+2. For each detected leader, the system looks up which groups that symbol belongs to.
 3. Other symbols in the same group become **follower candidates** (filtered by `follower_move_threshold_pct`).
 4. Candidates that move in the same direction as the leader can produce signals.
 
-**Important**: Without any rows in `stock_groups`, leader detection still runs, but follower candidate generation returns **zero**. No signals will be emitted.
+**Important**: Without any rows in `stock_groups`, leader detection **short-circuits** (no leaders are detected). The pipeline returns early with `grouped_leader_universe_size: 0` and zero signals.
 
 This is **scaffolding**, not the final intelligence of the system. Future versions may learn leader-follower relationships automatically; for now, groups are curated and seeded manually.
+
+---
+
+## Bootstrap-Phase Leader Scoping
+
+During the bootstrap phase, leader detection uses **only** the distinct symbols in `stock_groups` — not the full stock universe. This is intentional:
+
+- **Coherent pipeline**: Any detected leader has a plausible path to follower candidates, because follower candidates also come from groups. Previously, leaders could be detected from the full universe (e.g. 1600+ symbols) while followers came only from groups, causing many leaders with zero follower candidates.
+- **Debuggability**: With a small, curated universe, runs are easier to reason about and evaluate.
+- **Future direction**: The system may later add learned pairwise relationships or broader discovery. For now, restricting leaders to grouped symbols keeps the pipeline coherent and evaluable.
+
+This design does **not** constitute true follower discovery. It is a structural alignment so that during bootstrap, any detected leader can logically produce follower candidates from the same curated groups.
 
 ---
 
@@ -101,9 +113,9 @@ Edit `BOOTSTRAP_GROUPS` to add or remove groups/symbols, then re-run `seed-stock
 When `stock_groups` is empty and leader-follower detection is enabled:
 
 - **Startup**: A warning is logged
-- **Leader-follower job run**: A warning is logged before detection
+- **Leader-follower job run**: The pipeline short-circuits; no leaders are detected. Metrics include `grouped_leader_universe_size: 0`. `GET /api/leader-follower/status` returns `empty_reason: "stock_groups_empty"`.
 
-The warning explains that leader detection may work but follower candidate generation will return zero, and suggests running: `python -m backend.app.cli seed stock-groups`.
+To enable leader-follower detection, run: `python -m backend.app.cli seed stock-groups`.
 
 ---
 

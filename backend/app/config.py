@@ -127,6 +127,22 @@ class Settings(BaseSettings):
     leader_follower_norm_return_cap_pct: float = 15.0
     leader_follower_norm_volume_cap: float = 4.0
 
+    # Leader threshold calibration and bootstrap debugging (006)
+    leader_follower_debug_mode: bool = False
+    leader_return_threshold_pct_debug: float = 3.0
+    leader_volume_spike_threshold_debug: float = 1.2
+
+    # Leader-follower signal evaluation (007)
+    leader_follower_evaluation_horizons: str = "1,3,5"  # Comma-separated trading-day forward horizons
+    leader_follower_evaluation_overlap_window_days: int = 5  # Window for duplicate/overlap count
+
+    # Leader-follower pair filtering and ranking (009)
+    leader_follower_pair_min_signal_count: int = 2  # Min signals for pair to be included
+    leader_follower_pair_min_avg_return_1d: float = 0.0  # Min 1d avg return (pct); 0 = allow positive
+    leader_follower_pair_min_win_rate_1d: float = 0.5  # Min 1d win rate; exclude <50%
+    enable_pair_filtering_for_signals: bool = False  # When true, restrict signal gen to filtered pairs
+    leader_follower_pair_filter_lookback_days: int = 90  # Window for evaluation when filtering signals
+
     # Research API: dataset output and allowed paths for experiments
     research_dataset_dir: str = (
         "data/research"  # Output dir for build-dataset; experiments accept only paths under this

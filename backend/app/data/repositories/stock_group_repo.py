@@ -55,6 +55,15 @@ class StockGroupRepository:
         except SQLAlchemyError as exc:  # pragma: no cover
             raise DataAccessError("Failed to count stock groups") from exc
 
+    def get_all_symbols(self) -> list[str]:
+        """Return distinct symbols present in any group, ordered lexicographically."""
+        stmt = select(StockGroup.stock_symbol).distinct().order_by(StockGroup.stock_symbol)
+        try:
+            rows = self._session.execute(stmt).scalars().all()
+            return [r for r in rows]
+        except SQLAlchemyError as exc:  # pragma: no cover
+            raise DataAccessError("Failed to get all symbols from stock groups") from exc
+
     def list_group_ids(self) -> list[str]:
         """Return distinct group_ids, ordered lexicographically."""
         stmt = select(StockGroup.group_id).distinct().order_by(StockGroup.group_id)

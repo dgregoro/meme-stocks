@@ -74,3 +74,27 @@ def test_add_if_missing_skips_existing(seeded_session: Session) -> None:
     seeded_session.commit()
     assert added is False
     assert repo.count_total() == 3
+
+
+def test_get_all_symbols_empty(session: Session) -> None:
+    repo = StockGroupRepository(session)
+    assert repo.get_all_symbols() == []
+
+
+def test_get_all_symbols_single_group(seeded_session: Session) -> None:
+    repo = StockGroupRepository(seeded_session)
+    symbols = repo.get_all_symbols()
+    assert symbols == ["AMC", "GME"]
+
+
+def test_get_all_symbols_multiple_groups_overlapping(session: Session) -> None:
+    session.add(Stock(symbol="GME", name="GME", sector=None, market_cap=None))
+    session.add(Stock(symbol="NVDA", name="NVDA", sector=None, market_cap=None))
+    session.flush()
+    session.add(StockGroup(group_id="meme", stock_symbol="GME"))
+    session.add(StockGroup(group_id="tech", stock_symbol="GME"))
+    session.add(StockGroup(group_id="tech", stock_symbol="NVDA"))
+    session.commit()
+    repo = StockGroupRepository(session)
+    symbols = repo.get_all_symbols()
+    assert symbols == ["GME", "NVDA"]

@@ -54,6 +54,9 @@ app.add_typer(seed_app, name="seed")
 experiment_app = typer.Typer(help="Run causal research experiments.")
 app.add_typer(experiment_app, name="experiment")
 
+backfill_app = typer.Typer(help="Historical backfill for leader-follower signals.")
+app.add_typer(backfill_app, name="backfill")
+
 
 def _parse_date(s: str) -> date:
     return date.fromisoformat(s)
@@ -125,6 +128,62 @@ def seed_stock_groups() -> None:
             typer.echo("Skipped (with warnings):")
             for s in result["symbols_skipped"]:
                 typer.echo(f"  - {s}")
+    finally:
+        db.close()
+
+
+@backfill_app.command("leader-follower")
+def backfill_leader_follower(
+    start: str = typer.Option(..., "--start", "-s", help="Start date (YYYY-MM-DD)"),
+    end: str = typer.Option(..., "--end", "-e", help="End date (YYYY-MM-DD)"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Compute metrics only; do not persist signals"),
+    replace_range: bool = typer.Option(
+        False, "--replace-range", help="Delete existing signals in [start,end] before replay"
+    ),
+) -> None:
+    """Replay leader-follower detection for a historical date range.
+
+    Uses Alpaca daily bars to backfill PriceData, then runs detection per date.
+    Requires: stock_groups seeded, Alpaca API keys configured.
+    """
+    from backend.app.utils.errors import ExternalAPIError
+
+    start_d = _parse_date(start)
+    end_d = _parse_date(end)
+    if start_d > end_d:
+        typer.echo("Error: start_date must be <= end_date", err=True)
+        raise typer.Exit(1)
+
+    init_db()
+    db = SessionLocal()
+    try:
+        from backend.app.services.leader_follower_replay_service import run_backfill
+
+        result = run_backfill(
+            db,
+            start_d,
+            end_d,
+            dry_run=dry_run,
+            persist=not dry_run,
+            replace_range=replace_range,
+        )
+        typer.echo(f"Backfill leader-follower: {start_d} to {end_d}")
+        typer.echo(f"Days processed: {result['days_processed']}")
+        typer.echo(f"Days skipped: {result['days_skipped']}")
+        typer.echo(f"Leaders detected: {result['leaders_detected']}")
+        typer.echo(f"Candidates found: {result['candidates_found']}")
+        typer.echo(f"Signals emitted: {result['signals_emitted']}")
+        typer.echo(f"Signals skipped (duplicate): {result['signals_skipped_duplicate']}")
+        if result.get("missing_data_warnings"):
+            typer.echo("Warnings: " + ", ".join(result["missing_data_warnings"]))
+        if result.get("errors"):
+            typer.echo("Errors: " + "; ".join(result["errors"][:5]))
+            if len(result["errors"]) > 5:
+                typer.echo(f"  ... and {len(result['errors']) - 5} more")
+            raise typer.Exit(2)
+    except ExternalAPIError as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(2)
     finally:
         db.close()
 

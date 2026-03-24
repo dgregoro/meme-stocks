@@ -21,6 +21,7 @@ from .models import (  # noqa: F401
     job_execution,
     job_lock,
     job_run_history,
+    leader_debug_evaluation,
     leader_event,
     leader_follower_candidate,
     leader_follower_signal,
