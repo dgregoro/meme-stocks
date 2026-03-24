@@ -24,6 +24,8 @@ from .models import (  # noqa: F401
     leader_debug_evaluation,
     leader_event,
     leader_follower_candidate,
+    leader_follower_paper_run,
+    leader_follower_paper_trade,
     leader_follower_signal,
     notification,
     paper_trade,
@@ -46,6 +48,7 @@ from .api import jobs as jobs_api
 from .api import symbol_universe as symbol_universe_api
 from .api import intraday as intraday_api
 from .api import leader_follower as leader_follower_api
+from .api import leader_follower_paper_trading as leader_follower_paper_trading_api
 from .api import research as research_api
 from .api import stock_groups as stock_groups_api
 from .services.scheduler_service import SchedulerService
@@ -152,6 +155,7 @@ def create_app(
     app.include_router(symbol_universe_api.router)
     app.include_router(intraday_api.router)
     app.include_router(leader_follower_api.router)
+    app.include_router(leader_follower_paper_trading_api.router)
     app.include_router(research_api.router)
     app.include_router(stock_groups_api.router)
 

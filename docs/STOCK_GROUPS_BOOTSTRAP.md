@@ -27,18 +27,24 @@ This design does **not** constitute true follower discovery. It is a structural 
 
 ---
 
-## How to Seed stock_groups
+## How to Populate stocks and Seed stock_groups
 
-Run the bootstrap command:
+The stock_groups seed requires symbols to exist in the `stocks` table (FK constraint). Populate stocks first:
 
 ```bash
+# 1. Create Stock rows for all BOOTSTRAP_GROUPS symbols
+python -m backend.app.cli seed stocks
+
+# 2. Add those symbols to stock_groups
 python -m backend.app.cli seed stock-groups
 ```
 
-This command:
+**seed stocks** creates minimal `Stock` rows for every symbol in `BOOTSTRAP_GROUPS`. Idempotent.
+
+**seed stock-groups**:
 
 - Is **idempotent**: running twice does not create duplicates
-- Creates missing stocks with minimal metadata when needed (FK integrity)
+- Skips symbols not in `stocks` table (logs warning, does not create)
 - Logs how many rows were inserted vs skipped
 - Reports any symbols that could not be added (with warnings)
 - Does **not** wipe existing user-defined groups
@@ -94,17 +100,17 @@ There is no dedicated CLI for inspection; use the API or query the database dire
 
 ## Bootstrap Dataset
 
-The seed data lives in `backend/app/data/stock_group_seed.py` as `BOOTSTRAP_GROUPS`:
+The seed data lives in `backend/app/data/stock_group_seed.py` as `BOOTSTRAP_GROUPS`. These are curated peer groups: liquid, established sector names with clear relationships. Expansion is intentionally conservative.
 
-| group_id | Symbols |
-|----------|---------|
-| semis | NVDA, AMD, MU, AVGO, QCOM, INTC, AMAT, LRCX, KLAC, ON |
-| banks | JPM, BAC, WFC, C, GS, MS |
-| oil | XOM, CVX, COP, EOG, OXY, SLB |
-| megacap_tech | AAPL, MSFT, GOOGL, AMZN, META |
-| meme | GME, AMC, BB |
+| group_id | Symbol count | Symbols |
+|----------|--------------|---------|
+| semis | 20 | NVDA, AMD, MU, AVGO, QCOM, INTC, AMAT, LRCX, KLAC, ON, MCHP, MPWR, TXN, SWKS, QRVO, ADI, NXPI, TER, ASML, MRVL |
+| banks | 13 | JPM, BAC, WFC, C, GS, MS, USB, PNC, TFC, BK, SCHW, COF, AXP |
+| oil | 13 | XOM, CVX, COP, EOG, OXY, SLB, HAL, PSX, MPC, VLO, DVN, FANG, APA |
+| megacap_tech | 11 | AAPL, MSFT, GOOGL, AMZN, META, ORCL, CRM, ADBE, NFLX, NOW, IBM |
+| meme | 5 | GME, AMC, BB, KOSS, BYND |
 
-Edit `BOOTSTRAP_GROUPS` to add or remove groups/symbols, then re-run `seed-stock-groups`.
+**Note**: Symbols not present in the `stocks` table are skipped (with a warning). Run `python -m backend.app.cli seed stocks` first to populate stocks for all bootstrap symbols.
 
 ---
 
@@ -122,6 +128,6 @@ To enable leader-follower detection, run: `python -m backend.app.cli seed stock-
 ## Limitations
 
 - Groups are static and curated; no automatic learning of leader-follower pairs
-- Missing symbols: if a symbol in the seed is not in `stocks`, the seeder creates a minimal stock (name `{symbol} (bootstrap)`) to satisfy the FK
+- Missing symbols: if a symbol in the seed is not in `stocks`, the seeder skips it (logs warning, reports in `symbols_skipped`). Run `seed stocks` first to populate stocks.
 - This bootstrap does not replace or preclude future learned pairwise relationships
 - No admin UI; inspect via API or DB

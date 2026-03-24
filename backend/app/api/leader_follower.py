@@ -579,13 +579,24 @@ class EvalHorizonMetrics(BaseModel):
     evaluable_count: int
 
 
+class EvalEventHorizonMetrics(BaseModel):
+    """Per-horizon event-level metrics (one event = one leader-date)."""
+
+    event_win_rate: float
+    event_avg_return_pct: float
+    event_count: int
+
+
 class EvalSummaryResponse(BaseModel):
     """Response for GET /evaluation/summary."""
 
     total_signals: int
+    total_events: int
     signals_per_day: float
+    events_per_day: float
     date_range: dict[str, str | None]
     by_horizon: dict[str, EvalHorizonMetrics]
+    by_event: dict[str, EvalEventHorizonMetrics]
     duplicate_overlap: dict[str, int | float]
 
 
@@ -612,11 +623,21 @@ def get_evaluation_summary(
             median_return_pct=v["median_return_pct"],
             evaluable_count=v["evaluable_count"],
         )
+    by_event: dict[str, EvalEventHorizonMetrics] = {}
+    for k, v in (summary.get("by_event") or {}).items():
+        by_event[k] = EvalEventHorizonMetrics(
+            event_win_rate=v["event_win_rate"],
+            event_avg_return_pct=v["event_avg_return_pct"],
+            event_count=v["event_count"],
+        )
     return EvalSummaryResponse(
         total_signals=summary["total_signals"],
+        total_events=summary.get("total_events", 0),
         signals_per_day=summary["signals_per_day"],
+        events_per_day=summary.get("events_per_day", 0.0),
         date_range=summary["date_range"],
         by_horizon=by_horizon,
+        by_event=by_event,
         duplicate_overlap=summary["duplicate_overlap"],
     )
 

@@ -4,6 +4,7 @@
 
 ## Prerequisites
 
+- Stocks seeded: `python -m backend.app.cli seed stocks`
 - Stock groups seeded: `python -m backend.app.cli seed stock-groups`
 - Alpaca API keys set: `ALPACA_API_KEY_ID`, `ALPACA_API_SECRET_KEY`
 - Database initialized

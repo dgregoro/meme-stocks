@@ -197,3 +197,66 @@ def test_evaluate_signal_and_aggregate_with_price_data() -> None:
         assert summary["by_horizon"]["1d"]["evaluable_count"] >= 1
     finally:
         db.close()
+
+
+@pytest.mark.unit
+def test_aggregate_summary_event_level_with_clustered_signals() -> None:
+    """Event-level metrics: one leader-date with multiple followers; event = avg of follower returns."""
+    from backend.app.main import create_app  # noqa: F401 - ensure all models registered
+    from backend.app.models.stock import Stock
+
+    engine = create_engine(
+        "sqlite:///:memory:",
+        future=True,
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.drop_all(bind=engine)
+    Base.metadata.create_all(bind=engine)
+    SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    db = SessionLocal()
+    try:
+        for sym in ("INTC", "QCOM", "NVDA"):
+            db.add(Stock(symbol=sym, name=sym, sector="Tech", market_cap=None))
+        db.commit()
+
+        price_repo = PriceDataRepository(db)
+        # QCOM: 50->51 (2%), NVDA: 100->99 (-1%)
+        for d, q, n in [
+            (date(2026, 3, 1), 50.0, 100.0),
+            (date(2026, 3, 2), 51.0, 99.0),
+        ]:
+            for sym, c in [("QCOM", q), ("NVDA", n)]:
+                price_repo.add(PriceData(stock_symbol=sym, date=d, open=c, high=c, low=c, close=c, volume=1_000_000))
+        db.commit()
+
+        signal_repo = LeaderFollowerSignalRepository(db)
+        for follower in ("QCOM", "NVDA"):
+            signal_repo.add(
+                LeaderFollowerSignal(
+                    leader_symbol="INTC",
+                    follower_symbol=follower,
+                    group_id="semis",
+                    signal_date=date(2026, 3, 1),
+                    strength_score=1.0,
+                    leader_return_pct=5.0,
+                    leader_volume_ratio=1.5,
+                )
+            )
+        db.commit()
+
+        signals, price_by_symbol, horizons = run_evaluation(db)
+        summary = aggregate_summary(signals, price_by_symbol, horizons)
+
+        assert summary["total_signals"] == 2
+        assert summary["total_events"] == 1
+        assert summary["by_horizon"]["1d"]["evaluable_count"] == 2
+        assert summary["by_horizon"]["1d"]["win_rate"] == 0.5  # 1 win, 1 loss
+
+        by_event = summary.get("by_event", {})
+        assert "1d" in by_event
+        assert by_event["1d"]["event_count"] == 1
+        assert by_event["1d"]["event_win_rate"] == 1.0  # avg (2, -1) = 0.5 > 0
+        assert abs(by_event["1d"]["event_avg_return_pct"] - 0.5) < 0.01
+    finally:
+        db.close()

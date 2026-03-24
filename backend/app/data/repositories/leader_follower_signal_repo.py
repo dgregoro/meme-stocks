@@ -86,22 +86,23 @@ class LeaderFollowerSignalRepository:
 
     def list_signals(
         self,
-        limit: int = 50,
+        limit: int | None = 50,
         since_date: dt.date | None = None,
         until_date: dt.date | None = None,
         leader: str | None = None,
         follower: str | None = None,
         group: str | None = None,
     ) -> Sequence[LeaderFollowerSignal]:
-        """List signals with optional filters. Ordered by signal_date desc, created_at desc."""
-        stmt = (
-            select(LeaderFollowerSignal)
-            .order_by(
-                LeaderFollowerSignal.signal_date.desc(),
-                LeaderFollowerSignal.created_at.desc(),
-            )
-            .limit(limit)
+        """List signals with optional filters. Ordered by signal_date desc, created_at desc.
+
+        If limit is None, return all matching rows (use for batch simulation).
+        """
+        stmt = select(LeaderFollowerSignal).order_by(
+            LeaderFollowerSignal.signal_date.desc(),
+            LeaderFollowerSignal.created_at.desc(),
         )
+        if limit is not None:
+            stmt = stmt.limit(limit)
         if since_date is not None:
             stmt = stmt.where(LeaderFollowerSignal.signal_date >= since_date)
         if until_date is not None:

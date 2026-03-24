@@ -17,24 +17,33 @@
 
 ## GET /summary
 
-**Purpose**: Aggregate metrics (counts, win rate, avg return by horizon).
+**Purpose**: Aggregate metrics (counts, win rate, avg return by horizon). Includes **event-level** metrics to avoid correlation inflation (one leader-date = one event; event return = avg of follower returns).
 
 **Response**:
 ```json
 {
   "total_signals": 42,
+  "total_events": 18,
   "signals_per_day": 2.1,
+  "events_per_day": 0.9,
   "date_range": {"since": "2026-03-01", "until": "2026-03-22"},
   "by_horizon": {
     "1d": {"win_rate": 0.55, "avg_return_pct": 0.3, "median_return_pct": 0.1, "evaluable_count": 40},
     "3d": {"win_rate": 0.52, "avg_return_pct": -0.2, "median_return_pct": 0.0, "evaluable_count": 35},
     "5d": {"win_rate": 0.48, "avg_return_pct": -0.5, "median_return_pct": -0.1, "evaluable_count": 30}
   },
+  "by_event": {
+    "1d": {"event_win_rate": 0.60, "event_avg_return_pct": 0.25, "event_count": 18},
+    "3d": {"event_win_rate": 0.56, "event_avg_return_pct": -0.10, "event_count": 18},
+    "5d": {"event_win_rate": 0.50, "event_avg_return_pct": -0.35, "event_count": 18}
+  },
   "duplicate_overlap": {"repeat_pair_in_window": 3, "window_days": 5}
 }
 ```
 
-**Empty state**: zeros and empty by_horizon when no signals.
+**Event-level semantics**: One event = (leader_symbol, signal_date). For each event, average follower returns → event return. Event wins if event return > 0. Use `by_event` to validate edge without correlation inflation.
+
+**Empty state**: zeros and empty by_horizon/by_event when no signals.
 
 ---
 

@@ -141,7 +141,7 @@ def test_run_backfill_alpaca_keys_missing() -> None:
         db.add(StockGroup(group_id="tech", stock_symbol="AAPL"))
         db.commit()
 
-        with patch("backend.app.config.get_settings") as mock_settings:
+        with patch("backend.app.services.leader_follower_replay_service.get_settings") as mock_settings:
             mock_settings.return_value.alpaca_api_key_id = None
             mock_settings.return_value.alpaca_api_secret_key = None
             mock_settings.return_value.alpaca_free_plan_mode = True

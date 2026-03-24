@@ -219,13 +219,78 @@ def aggregate_summary(
             }
 
     duplicate_overlap = compute_duplicate_overlap(signals, overlap_window)
+
+    # Event-level metrics: group by (leader, date), avg follower return per event, then aggregate
+    by_event_horizon = _aggregate_by_event(signals, price_by_symbol, horizons)
+    total_events = by_event_horizon.get("total_events", 0)
+    days_ev = 1.0
+    if date_range["since"] and date_range["until"]:
+        try:
+            since_d = date.fromisoformat(date_range["since"] or "")
+            until_d = date.fromisoformat(date_range["until"] or "")
+            days_ev = max(1.0, (until_d - since_d).days + 1)
+        except (ValueError, TypeError):
+            pass
+    events_per_day = round(total_events / days_ev, 2) if total_events else 0.0
+
     return {
         "total_signals": total,
+        "total_events": total_events,
         "signals_per_day": signals_per_day,
+        "events_per_day": events_per_day,
         "date_range": date_range,
         "by_horizon": by_horizon,
+        "by_event": by_event_horizon.get("by_event", {}),
         "duplicate_overlap": duplicate_overlap,
     }
+
+
+def _aggregate_by_event(
+    signals: Sequence[LeaderFollowerSignal],
+    price_by_symbol: dict[str, list[tuple[date, float]]],
+    horizons: tuple[int, ...],
+) -> dict[str, Any]:
+    """Compute event-level metrics. Event = (leader_symbol, signal_date).
+
+    For each event: average follower returns across all signals in that event.
+    Event wins if avg_return > 0.
+    Returns total_events, by_event (per-horizon: event_win_rate, event_avg_return_pct, event_count).
+    """
+    event_to_signals: dict[tuple[str, date], list[LeaderFollowerSignal]] = defaultdict(list)
+    for s in signals:
+        event_to_signals[(s.leader_symbol, s.signal_date)].append(s)
+
+    if not event_to_signals:
+        return {
+            "total_events": 0,
+            "by_event": {
+                f"{h}d": {"event_win_rate": 0.0, "event_avg_return_pct": 0.0, "event_count": 0} for h in horizons
+            },
+        }
+
+    by_event: dict[str, dict[str, Any]] = {}
+    for h in horizons:
+        event_returns: list[float] = []
+        for (leader, sig_date), sigs in event_to_signals.items():
+            returns: list[float] = []
+            for s in sigs:
+                fwd = compute_forward_return(s.follower_symbol, sig_date, h, price_by_symbol)
+                if fwd is not None:
+                    returns.append(fwd)
+            if returns:
+                event_avg = sum(returns) / len(returns)
+                event_returns.append(event_avg)
+        key = f"{h}d"
+        if not event_returns:
+            by_event[key] = {"event_win_rate": 0.0, "event_avg_return_pct": 0.0, "event_count": 0}
+        else:
+            wins = sum(1 for r in event_returns if r > 0)
+            by_event[key] = {
+                "event_win_rate": round(wins / len(event_returns), 4),
+                "event_avg_return_pct": round(sum(event_returns) / len(event_returns), 4),
+                "event_count": len(event_returns),
+            }
+    return {"total_events": len(event_to_signals), "by_event": by_event}
 
 
 def aggregate_by_pair(

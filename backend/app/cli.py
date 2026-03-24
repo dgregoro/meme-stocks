@@ -6,7 +6,7 @@ Invoke with: python -m backend.app.cli build-dataset --start 2026-01-01 --end 20
 from __future__ import annotations
 
 from datetime import date
-from typing import Literal
+from typing import Literal, cast
 
 import typer
 
@@ -21,6 +21,8 @@ from backend.app.models import (  # noqa: F401
     job_run_history,
     leader_event,
     leader_follower_candidate,
+    leader_follower_paper_run,
+    leader_follower_paper_trade,
     leader_follower_signal,
     notification,
     paper_trade,
@@ -56,6 +58,9 @@ app.add_typer(experiment_app, name="experiment")
 
 backfill_app = typer.Typer(help="Historical backfill for leader-follower signals.")
 app.add_typer(backfill_app, name="backfill")
+
+simulate_app = typer.Typer(help="Simulate leader-follower paper trading from signals + price data.")
+app.add_typer(simulate_app, name="simulate")
 
 
 def _parse_date(s: str) -> date:
@@ -108,9 +113,24 @@ def build_dataset(
         db.close()
 
 
+@seed_app.command("stocks")
+def seed_stocks() -> None:
+    """Seed stocks table with symbols from BOOTSTRAP_GROUPS. Idempotent; run before stock-groups."""
+    from backend.app.services.stock_seed_service import seed_stocks_for_bootstrap
+
+    init_db()
+    db = SessionLocal()
+    try:
+        result = seed_stocks_for_bootstrap(db)
+        db.commit()
+        typer.echo(f"Stocks seeded: {result['created']} created, {result['total'] - result['created']} already existed")
+    finally:
+        db.close()
+
+
 @seed_app.command("stock-groups")
 def seed_stock_groups() -> None:
-    """Seed stock_groups with curated bootstrap data. Idempotent; safe to run twice."""
+    """Seed stock_groups with curated bootstrap data. Idempotent; run 'seed stocks' first."""
     from backend.app.services.stock_group_seed_service import run_bootstrap_seed
 
     init_db()
@@ -184,6 +204,60 @@ def backfill_leader_follower(
     except ExternalAPIError as e:
         typer.echo(f"Error: {e}", err=True)
         raise typer.Exit(2)
+    finally:
+        db.close()
+
+
+@simulate_app.command("leader-follower")
+def simulate_leader_follower(
+    start: str = typer.Option(..., "--start", "-s", help="Start date (YYYY-MM-DD)"),
+    end: str = typer.Option(..., "--end", "-e", help="End date (YYYY-MM-DD)"),
+    entry: str = typer.Option("next_open", "--entry", help="next_open | same_close"),
+    exit_mode: str = typer.Option("fixed_days", "--exit", help="fixed_days | early_exit"),
+    holding_days: int = typer.Option(3, "--holding_days", help="Trading days to hold (fixed exit)"),
+    max_positions_per_event: int = typer.Option(2, "--max_positions_per_event"),
+    cost_pct: float = typer.Option(0.1, "--cost_pct", help="Round-trip cost in percentage points"),
+    min_pair_score: float | None = typer.Option(None, "--min_pair_score"),
+) -> None:
+    """Run paper-trading simulation; persists a run and trades for API inspection."""
+    from backend.app.services.leader_follower_paper_trading_service import (
+        EntryMode,
+        ExitMode,
+        PaperTradingConfig,
+        run_paper_trading_simulation,
+    )
+
+    if entry not in ("next_open", "same_close"):
+        typer.echo("Error: --entry must be next_open or same_close", err=True)
+        raise typer.Exit(1)
+    if exit_mode not in ("fixed_days", "early_exit"):
+        typer.echo("Error: --exit must be fixed_days or early_exit", err=True)
+        raise typer.Exit(1)
+
+    start_d = _parse_date(start)
+    end_d = _parse_date(end)
+    if start_d > end_d:
+        typer.echo("Error: start_date must be <= end_date", err=True)
+        raise typer.Exit(1)
+
+    cfg = PaperTradingConfig(
+        entry_mode=cast(EntryMode, entry),
+        exit_mode=cast(ExitMode, exit_mode),
+        holding_days=holding_days,
+        max_positions_per_event=max_positions_per_event,
+        min_pair_score=min_pair_score,
+        per_trade_cost_pct=cost_pct,
+    )
+
+    init_db()
+    db = SessionLocal()
+    try:
+        run = run_paper_trading_simulation(db, start_d, end_d, cfg)
+        typer.echo(f"Paper trading run id={run.id}")
+        typer.echo(f"  trades={run.total_trades} skipped={run.skipped_count}")
+        typer.echo(f"  cumulative_return_pct={run.cumulative_return_pct:.4f}")
+        typer.echo(f"  max_drawdown_pct={run.max_drawdown_pct:.4f}")
+        typer.echo(f"  win_rate={run.win_rate:.4f} avg_return_pct={run.avg_return_pct:.4f}")
     finally:
         db.close()
 
