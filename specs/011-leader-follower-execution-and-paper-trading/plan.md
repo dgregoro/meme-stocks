@@ -64,3 +64,28 @@ backend/tests/
 
 - **Trading calendar**: Derived from available `price_data` dates per symbol (no external calendar).
 - **Performance**: Batch load price rows per symbol if needed; MVP may N+1 for clarity with tests covering correctness first.
+
+---
+
+## Phase 0 — Research
+
+**Output**: [research.md](./research.md)
+
+Resolved decisions: trading calendar source, determinism/tie-breaks, single round-trip cost, early-exit semantics. No blocking unknowns.
+
+---
+
+## Phase 1 — Design artifacts
+
+**Output**: [data-model.md](./data-model.md), [contracts/paper-trading-api.md](./contracts/paper-trading-api.md), [quickstart.md](./quickstart.md)
+
+---
+
+## Constitution Check (post-design)
+
+- [x] Explicit failures — skipped trades counted; API uses structured errors (`error_detail` / 404)
+- [x] Tests — service + API tests added; `./scripts/verify.sh` passes
+- [x] Layering — routes delegate to service; repos for persistence
+- [x] Scope — no live trading; no duplicate paper-trade system beyond leader-follower simulation tables
+
+**Complexity tracking**: None required.

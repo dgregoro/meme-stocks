@@ -1,162 +1,111 @@
 # Feature Specification: Leader-Follower Execution and Paper Trading
 
-**Feature Name**: leader-follower-execution-and-paper-trading
-**Feature ID**: 011
+**Feature Branch**: `011-leader-follower-execution-and-paper-trading`
 **Created**: 2026-03-24
 **Status**: Draft
-**Note**: Numbered **011** because **009** is reserved for pair filtering and ranking.
+**Input**: User description: "011-leader-follower-execution-and-paper-trading"
+
+## User Scenarios & Testing *(mandatory)*
+
+### User Story 1 — See whether the strategy pays off after costs (Priority: P1)
+
+A researcher or portfolio analyst needs to turn historical leader-follower **signals** into **simulated trades** with explicit entry and exit prices, gross and net returns, and holding length—so they can judge if a documented edge (e.g. from prior evaluation) still holds once execution and costs are applied.
+
+**Why this priority**: Without simulated P&L, it is impossible to claim the strategy is actionable; this is the core value of the feature.
+
+**Independent Test**: Run a simulation over a chosen historical window with default rules and confirm that each recorded trade has entry/exit prices, times, holding length, gross return, and net return after a single configurable cost deduction.
+
+**Acceptance Scenarios**:
+
+1. **Given** historical signals and daily price history for follower symbols over a window, **When** the user runs a simulation, **Then** each executed trade includes entry price, exit price, entry time, exit time, trading-day holding length, gross return (%), and net return (%) after costs.
+2. **Given** a follower day with no usable price bar at the required entry or exit, **When** the simulation processes that signal, **Then** the trade is skipped and the skip is counted (no silent fabrication of prices).
 
 ---
 
-## Problem Statement
+### User Story 2 — Control how entries and exits are modeled (Priority: P2)
 
-Leader-follower detection, evaluation, backfill, and pair filtering exist. Event-level evaluation shows a modest edge (e.g. ~58% win rate at 3d, ~0.48% average return per event). That edge must survive **execution costs**, **position limits per event**, and **realistic entry/exit rules** before the strategy can be considered tradable.
+The same user needs to vary **how** a position is opened and closed (e.g. enter on the next session open vs. same-day close; exit after a fixed number of trading days vs. an early exit rule)—so scenarios match different realism assumptions without changing the underlying signal set.
 
-This feature adds a **simulation layer**: convert historical signals into simulated trades with configurable execution rules, transaction costs, and portfolio-level metrics—without live brokerage integration.
+**Why this priority**: Different execution assumptions materially change outcomes; configurability is required for credible what-if analysis.
 
----
+**Independent Test**: Run two simulations with the same signals and window but different entry/exit modes and confirm results differ only as expected (deterministically reproducible for identical configuration).
 
-## Goals
+**Acceptance Scenarios**:
 
-- Convert `leader_follower_signals` + `price_data` into simulated trades with explicit entry/exit prices and returns.
-- Make execution rules and costs **configurable** and **deterministic** (same inputs → same outputs).
-- Support **event-based position caps** (top N followers per leader event).
-- Expose results via **API** and **CLI** for analysis.
+1. **Given** a configurable entry mode (next trading session open vs. same-day close) and exit mode (fixed holding length vs. early exit rule), **When** the user selects a combination, **Then** the engine applies the documented rules consistently for every trade.
+2. **Given** a default holding length and a maximum number of follower positions per leader **event** (same leader and signal date), **When** the simulation runs, **Then** at most that many follower trades are taken per event, chosen by a clear ranking (strength of relationship first, then tie-breakers), and the same configuration always yields the same trade list.
 
 ---
 
-## Non-Goals
+### User Story 3 — Review portfolio-level outcomes and retrieve results (Priority: P3)
 
-- No live trading or brokerage integration.
-- No rich UI (API + CLI only).
-- No portfolio optimization, leverage, or multi-asset allocation beyond simple equal-notional sequential simulation.
-- No options, shorting, or borrow costs (long-only on follower leg unless extended later).
+The user needs **cumulative** performance, drawdown, win rate, and an equity progression—plus **access** to saved runs and per-trade detail (including pagination for large runs)—so they can compare runs and share results.
 
----
+**Why this priority**: Trade-level output alone is insufficient for risk and drawdown assessment; retrieval supports collaboration and audit.
 
-## User Stories
+**Independent Test**: After a simulation completes, list saved runs, open one run for summary and paginated trades, and fetch an equity progression; confirm a missing run yields a clear “not found” style response without exposing internal error details.
 
-### US1 — Simulate trades from signals
+**Acceptance Scenarios**:
 
-As a user, I want signals converted into simulated trades so I can measure realistic P&L.
-
-**Acceptance criteria:**
-
-- Each executed trade records:
-  - `entry_price`, `exit_price`
-  - `entry_time`, `exit_time` (UTC; typically market-day boundaries for daily bars)
-  - `holding_period_days` (trading days between entry and exit dates)
-  - `gross_return_pct`, `net_return_pct`
+1. **Given** one or more completed simulation runs, **When** the user lists runs, **Then** they see identifiers, date range, and headline metrics (e.g. trade count, cumulative return, drawdown) sufficient to choose a run.
+2. **Given** a valid run identifier, **When** the user requests detail, **Then** they receive the configuration used, summary metrics, and trades (paginated if many), and **When** they request the equity progression, **Then** they receive ordered points that match the sequential compounding of net returns per trade.
 
 ---
 
-### US2 — Configurable execution rules
+### Edge Cases
 
-As a user, I want to define how trades are executed.
-
-**Acceptance criteria:**
-
-- Config options:
-  - `entry_mode`: `next_open` | `same_close`
-  - `exit_mode`: `fixed_days` | `early_exit`
-  - `holding_days` (default `3`)
-  - `max_positions_per_event` (default `2`)
-  - `min_pair_score` (optional; filters by signal `strength_score` when set)
-
-**Semantics (normative):**
-
-- **`next_open`**: Entry price = follower **open** on the first trading day **strictly after** `signal_date` with a price bar.
-- **`same_close`**: Entry price = follower **close** on `signal_date` (skip if bar missing).
-- **`fixed_days`**: Exit price = follower **close** on the trading day that is `holding_days` **trading days after** the entry date (entry day = day 0).
-- **`early_exit`**: Walk forward from the first trading day after entry; exit at **close** of the first day where `close < entry_price` (simple stop); if not triggered, exit at the same date as `fixed_days`.
+- **No signals** in the window: simulation completes with zero trades and zero cumulative return; no crash.
+- **No price data** for a symbol on a required day: skip that trade; count skips.
+- **Identical configuration** run twice: same trade set and same aggregate metrics (deterministic).
+- **Many signals on the same leader-event**: only top-N followers per event (configurable), ranked deterministically.
+- **Invalid or unknown run identifier** on retrieval: user-facing failure without raw technical error content.
 
 ---
 
-### US3 — Transaction cost model
+## Requirements *(mandatory)*
 
-As a user, I want transaction costs included.
+### Functional Requirements
 
-**Acceptance criteria:**
+- **FR-001**: The system MUST convert eligible historical signals into simulated long-only follower trades with explicit entry and exit prices, gross return, and net return after a single configurable round-trip cost (percentage points).
+- **FR-002**: The system MUST support configurable entry behavior (next session open vs. same-day close) and exit behavior (fixed trading-day horizon vs. early exit per the rule defined in assumptions).
+- **FR-003**: The system MUST cap how many follower trades are taken per leader **event** (leader + signal date), selecting candidates by a defined ranking order and optional minimum strength filter.
+- **FR-004**: The system MUST compute portfolio-level metrics: cumulative return, maximum drawdown on the equity path, trade count, win rate (net > 0), and average net return per trade.
+- **FR-005**: The system MUST persist each simulation run with its configuration and aggregate results, and persist each executed trade with enough detail to audit entry/exit and returns.
+- **FR-006**: The system MUST allow users to list runs, inspect a run (summary + trades with pagination), and obtain an equity curve for a run.
+- **FR-007**: The system MUST support running the same simulation from a command-line interface with parameters equivalent to the configurable execution and cost options.
+- **FR-008**: The system MUST treat missing prices as “skip trade” and increment a skip count; it MUST NOT invent prices or returns.
 
-- `per_trade_cost_pct` (default `0.1`) — **one** round-trip cost subtracted once per trade from gross return (percentage points):
-  `net_return_pct = gross_return_pct - per_trade_cost_pct`
+### Key Entities
 
----
+- **Simulation run**: A single execution over a date range with a frozen set of rules and costs; stores aggregate metrics and a link to its trades.
+- **Simulated trade**: One row per executed follower signal outcome: leader, follower, signal date, entry/exit prices and times, holding length, gross and net returns, optional link back to the originating signal.
+- **Leader–follower event**: The grouping of all signals sharing the same leader and signal date; used for ranking and position caps.
 
-### US4 — Event-based position selection
+### Assumptions
 
-As a user, I want to limit trades per leader event to reduce correlated overexposure.
-
-**Acceptance criteria:**
-
-- Group signals by `(leader_symbol, signal_date)`.
-- Within each group, rank candidates by:
-  1. `strength_score` descending
-  2. Tie-break: `leader_return_pct` descending
-  3. Tie-break: `follower_symbol` ascending (deterministic)
-- Take top `N = max_positions_per_event` after optional `min_pair_score` filter.
-
----
-
-### US5 — Portfolio simulation
-
-As a user, I want a running portfolio view.
-
-**Acceptance criteria:**
-
-- Equal notional per trade; **sequential compound** equity: start `1.0`, after each trade `equity *= (1 + net_return_pct / 100)`.
-- Report: cumulative return %, equity curve (per trade step), max drawdown %, trade count, win rate (net > 0).
+- **Early exit rule**: If enabled, exit at the first trading day after entry where the session close is below the entry price; otherwise exit at the fixed horizon (same calendar of trading days as “fixed days” exit).
+- **Cost model**: One round-trip cost per trade is subtracted from gross return (percentage points); not split into separate commission and spread unless extended later.
+- **Equity path**: Equal notional per trade; sequential compounding of net returns in run order.
+- **Trading calendar**: Determined from available daily price history for each symbol (no separate exchange calendar in scope).
+- **Signals and prices** are produced elsewhere; this feature consumes them as inputs.
 
 ---
 
-### US6 — Evaluation API
+## Success Criteria *(mandatory)*
 
-**Endpoints:**
+### Measurable Outcomes
 
-- `GET /api/leader-follower/paper-trading/runs` — list runs (recent first).
-- `GET /api/leader-follower/paper-trading/{run_id}` — run detail: config, summary metrics, **paginated** trades (`offset`, `limit`).
-- `GET /api/leader-follower/paper-trading/{run_id}/equity-curve` — ordered points `{ trade_index, equity }` or `{ after_trade_n, cumulative_return_pct }`.
-
-Errors: structured (404 if run missing), no raw tracebacks.
-
----
-
-### US7 — CLI integration
-
-```bash
-python -m backend.app.cli simulate leader-follower \
-  --start 2025-02-01 \
-  --end 2026-03-20 \
-  --entry next_open \
-  --holding_days 3 \
-  --max_positions_per_event 2 \
-  --cost_pct 0.1
-```
-
-CLI uses the same backend service as the API (direct DB + service layer), consistent with `backfill leader-follower` in `backend/app/cli.py`.
+- **SC-001**: For any simulation window with at least one eligible trade, the user can report **total net return** after costs and **maximum drawdown** on the equity path, expressed as percentages.
+- **SC-002**: For a fixed configuration and inputs, repeating the simulation yields **identical** trade lists and aggregate metrics (determinism).
+- **SC-003**: The user can answer **“What fraction of trades were profitable after costs?”** (win rate) and **“What was the average net return per trade?”** for any completed run.
+- **SC-004**: When price data is missing for a required leg, the user sees **fewer executed trades than raw signals** and a **non-zero skip count** (or explicit zero when nothing was skipped).
+- **SC-005**: Users can **retrieve** a saved run’s configuration and results without re-running the simulation.
 
 ---
 
-## Data Model
+## Out of Scope
 
-See [data-model.md](./data-model.md).
-
----
-
-## Success Criteria
-
-We can answer: **“Does this strategy make money after costs under realistic constraints?”** using cumulative return, drawdown, win rate, and stability over time (manual comparison of multiple date windows).
-
----
-
-## Dependencies
-
-- `leader_follower_signals`, `price_data` populated (e.g. backfill).
-- Stocks/symbols present for price bars used.
-
----
-
-## Out of Scope (Future)
-
-- Borrow costs, slippage models beyond fixed %, partial fills.
-- UI dashboards.
+- Live trading, broker connectivity, or order routing.
+- Rich graphical dashboards (tables and exports are sufficient).
+- Shorting, options, leverage, or borrow costs.
+- Portfolio optimization across multiple correlated strategies beyond the simple sequential equity model defined here.
