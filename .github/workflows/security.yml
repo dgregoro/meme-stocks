@@ -33,7 +33,10 @@ jobs:
 
       - name: pip-audit (requirements)
         run: |
-          pip-audit -r backend/requirements.txt --progress-spinner=off
+          # pygments: requirements use patched GitHub tarball (post-PR#3064, CVE-2026-4539); PyPI
+          # still only ships 2.19.2 and pip-audit matches the reported version string. Drop
+          # --ignore-vuln when pygments>=2.19.3 is published.
+          pip-audit -r backend/requirements.txt --progress-spinner=off --ignore-vuln CVE-2026-4539
 
       - name: Bandit (security lint)
         run: |
