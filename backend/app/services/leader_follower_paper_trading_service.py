@@ -178,17 +178,37 @@ def _resolve_trade(
     }
 
 
-def run_paper_trading_simulation(
+@dataclass(frozen=True)
+class PaperSimulationMetrics:
+    """Aggregate metrics from one simulation window (no persistence)."""
+
+    total_trades: int
+    skipped_count: int
+    win_rate: float
+    avg_return_pct: float
+    cumulative_return_pct: float
+    max_drawdown_pct: float
+
+    def to_json_dict(self) -> dict[str, Any]:
+        return {
+            "total_trades": self.total_trades,
+            "skipped_count": self.skipped_count,
+            "cumulative_return_pct": self.cumulative_return_pct,
+            "avg_return_pct": self.avg_return_pct,
+            "win_rate": self.win_rate,
+            "max_drawdown_pct": self.max_drawdown_pct,
+        }
+
+
+def run_paper_trading_core(
     db: Session,
     start_date: date,
     end_date: date,
     cfg: PaperTradingConfig,
-) -> LeaderFollowerPaperRun:
-    """Execute simulation, persist run + trades, return the run row (with trades loaded optional)."""
+) -> tuple[PaperSimulationMetrics, list[dict[str, Any]]]:
+    """Load signals and prices, resolve trades, return metrics + trade payloads (with ``signal`` key)."""
     sig_repo = LeaderFollowerSignalRepository(db)
     price_repo = PriceDataRepository(db)
-    run_repo = LeaderFollowerPaperRunRepository(db)
-    trade_repo = LeaderFollowerPaperTradeRepository(db)
 
     raw = sig_repo.list_signals(
         limit=None,
@@ -206,7 +226,6 @@ def run_paper_trading_simulation(
     skipped = 0
     trades_payload: list[dict[str, Any]] = []
 
-    # Cache follower calendars
     cal_cache: dict[str, list[date]] = {}
 
     for sig in sorted(selected, key=lambda s: (s.signal_date, s.leader_symbol, s.follower_symbol)):
@@ -233,16 +252,50 @@ def run_paper_trading_simulation(
     cum_pct = (equities[-1] - 1.0) * 100.0 if equities else 0.0
     max_dd = max_drawdown_from_equity(equities)
 
-    run = LeaderFollowerPaperRun(
-        config_json=json.dumps(cfg.to_json_dict()),
-        start_date=start_date,
-        end_date=end_date,
+    metrics = PaperSimulationMetrics(
         total_trades=n,
         skipped_count=skipped,
         win_rate=win_rate,
         avg_return_pct=avg_ret,
         cumulative_return_pct=cum_pct,
         max_drawdown_pct=max_dd,
+    )
+    return metrics, trades_payload
+
+
+def compute_paper_trading_metrics(
+    db: Session,
+    start_date: date,
+    end_date: date,
+    cfg: PaperTradingConfig,
+) -> PaperSimulationMetrics:
+    """Run simulation for one window without persisting runs or trades."""
+    metrics, _ = run_paper_trading_core(db, start_date, end_date, cfg)
+    return metrics
+
+
+def run_paper_trading_simulation(
+    db: Session,
+    start_date: date,
+    end_date: date,
+    cfg: PaperTradingConfig,
+) -> LeaderFollowerPaperRun:
+    """Execute simulation, persist run + trades, return the run row (with trades loaded optional)."""
+    run_repo = LeaderFollowerPaperRunRepository(db)
+    trade_repo = LeaderFollowerPaperTradeRepository(db)
+
+    metrics, trades_payload = run_paper_trading_core(db, start_date, end_date, cfg)
+
+    run = LeaderFollowerPaperRun(
+        config_json=json.dumps(cfg.to_json_dict()),
+        start_date=start_date,
+        end_date=end_date,
+        total_trades=metrics.total_trades,
+        skipped_count=metrics.skipped_count,
+        win_rate=metrics.win_rate,
+        avg_return_pct=metrics.avg_return_pct,
+        cumulative_return_pct=metrics.cumulative_return_pct,
+        max_drawdown_pct=metrics.max_drawdown_pct,
     )
     run_repo.add(run)
     db.flush()

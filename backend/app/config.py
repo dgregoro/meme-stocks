@@ -143,6 +143,9 @@ class Settings(BaseSettings):
     enable_pair_filtering_for_signals: bool = False  # When true, restrict signal gen to filtered pairs
     leader_follower_pair_filter_lookback_days: int = 90  # Window for evaluation when filtering signals
 
+    # Walk-forward optimization (010): cap Cartesian product size (research CLI)
+    leader_follower_optimization_max_grid_points: int = 256
+
     # Research API: dataset output and allowed paths for experiments
     research_dataset_dir: str = (
         "data/research"  # Output dir for build-dataset; experiments accept only paths under this

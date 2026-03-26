@@ -2,7 +2,7 @@
 
 This roadmap organizes future development work into prioritized phases.
 
-**Last Updated**: February 1, 2026
+**Last Updated**: March 26, 2026
 
 ---
 
@@ -198,6 +198,7 @@ if alignment_score > COMBINED_SIGNAL_THRESHOLD and confidence > 0.7:
 | 3.6 | Sentiment momentum tracking | PRD §5 | Medium |
 | 3.7 | Leader-follower signal detection | specs/003 | ✅ Implemented |
 | 3.8 | Leader-follower paper trading simulation | specs/011 | ✅ Implemented |
+| 3.9 | Leader-follower walk-forward optimization (research) | specs/010-leader-follower-walk-forward-optimization | ✅ Implemented |
 
 ### 3.7 Leader-Follower Signal Detection ✅
 
@@ -218,6 +219,18 @@ if alignment_score > COMBINED_SIGNAL_THRESHOLD and confidence > 0.7:
 **API**: `GET /api/leader-follower/paper-trading/runs`, `GET /.../{run_id}`, `GET /.../{run_id}/equity-curve`
 
 **CLI**: `python -m backend.app.cli simulate leader-follower --start ... --end ...`
+
+### 3.9 Leader-Follower Walk-Forward Optimization ✅
+
+**Purpose**: Research-only grid search over paper-trading parameters with explicit train / validate / optional test windows, robustness-first ranking (not peak in-sample return), persisted runs for inspection.
+
+**Spec**: `specs/010-leader-follower-walk-forward-optimization/`
+
+**API**: `GET /api/leader-follower/optimization/runs`, `GET /.../{run_id}`, `GET /.../{run_id}/top-results`
+
+**CLI**: `python -m backend.app.cli optimize leader-follower --train-start ... --train-end ... --validate-start ... --validate-end ... [--test-start/--test-end] [--grid-file path.json]`
+
+**Notes**: Uses stored signals and `PaperTradingConfig` axes only (no per-cell detection replay). Example custom grid: `optimization_grid.json` at repo root. Interpret results cautiously—positive validation with negative test (or huge train drawdown) is a common fragility pattern.
 
 ### 3.0 Lead-Lag Evidence Endpoint ✅
 
