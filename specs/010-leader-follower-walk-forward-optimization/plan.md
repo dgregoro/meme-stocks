@@ -1,6 +1,6 @@
 # Implementation Plan: Leader-Follower Walk-Forward Optimization
 
-**Branch**: `010-leader-follower-walk-forward-optimization` | **Date**: 2026-03-24  
+**Branch**: `010-leader-follower-walk-forward-optimization` | **Date**: 2026-03-24
 **Spec**: [spec.md](./spec.md)
 
 ## Summary

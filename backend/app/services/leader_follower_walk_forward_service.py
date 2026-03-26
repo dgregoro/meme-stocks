@@ -184,9 +184,7 @@ def run_walk_forward_optimization(
 ) -> LeaderFollowerOptimizationRun:
     """Execute full walk-forward run; persist run and ranked results. Commits the session."""
     st = settings or get_settings()
-    validate_walk_forward_windows(
-        train_start, train_end, validate_start, validate_end, test_start, test_end
-    )
+    validate_walk_forward_windows(train_start, train_end, validate_start, validate_end, test_start, test_end)
     normalized = load_grid_config_from_dict(grid_payload)
     base_config = normalized["base_config"]
     ranking = normalized["ranking"]
@@ -260,9 +258,7 @@ def run_walk_forward_optimization(
     result_repo = LeaderFollowerOptimizationResultRepository(db)
     result_rows: list[LeaderFollowerOptimizationResult] = []
     for rank_idx, ev in enumerate(evaluated, start=1):
-        test_json = (
-            json.dumps(ev.test.to_json_dict(), sort_keys=True) if ev.test is not None else None
-        )
+        test_json = json.dumps(ev.test.to_json_dict(), sort_keys=True) if ev.test is not None else None
         result_rows.append(
             LeaderFollowerOptimizationResult(
                 run_id=run_row.id,

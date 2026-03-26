@@ -30,11 +30,7 @@ class LeaderFollowerOptimizationRunRepository:
             raise DataAccessError("Failed to get optimization run") from exc
 
     def list_recent(self, limit: int = 50) -> Sequence[LeaderFollowerOptimizationRun]:
-        stmt = (
-            select(LeaderFollowerOptimizationRun)
-            .order_by(LeaderFollowerOptimizationRun.id.desc())
-            .limit(limit)
-        )
+        stmt = select(LeaderFollowerOptimizationRun).order_by(LeaderFollowerOptimizationRun.id.desc()).limit(limit)
         try:
             return list(self._session.execute(stmt).scalars().all())
         except SQLAlchemyError as exc:  # pragma: no cover
@@ -43,8 +39,10 @@ class LeaderFollowerOptimizationRunRepository:
     def count_results_for_run(self, run_id: int) -> int:
         from backend.app.models.leader_follower_optimization_result import LeaderFollowerOptimizationResult
 
-        stmt = select(func.count()).select_from(LeaderFollowerOptimizationResult).where(
-            LeaderFollowerOptimizationResult.run_id == run_id
+        stmt = (
+            select(func.count())
+            .select_from(LeaderFollowerOptimizationResult)
+            .where(LeaderFollowerOptimizationResult.run_id == run_id)
         )
         try:
             return int(self._session.execute(stmt).scalar_one())

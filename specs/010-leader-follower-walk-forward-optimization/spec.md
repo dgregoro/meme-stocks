@@ -1,9 +1,9 @@
 # Feature Specification: Leader-Follower Walk-Forward Optimization
 
-**Feature Name**: leader-follower-walk-forward-optimization  
-**Feature ID**: 010 (walk-forward optimization; distinct from `010-event-level-evaluation`)  
-**Created**: 2026-03-24  
-**Status**: Draft  
+**Feature Name**: leader-follower-walk-forward-optimization
+**Feature ID**: 010 (walk-forward optimization; distinct from `010-event-level-evaluation`)
+**Created**: 2026-03-24
+**Status**: Draft
 **Branch (suggested)**: `010-leader-follower-walk-forward-optimization`
 
 ---
@@ -51,8 +51,8 @@ This feature adds **research-grade walk-forward optimization** for the existing 
 
 ### User Story 1: Run walk-forward optimization
 
-As a **developer or researcher**,  
-I want to run an optimization over defined historical periods,  
+As a **developer or researcher**,
+I want to run an optimization over defined historical periods,
 so that I can compare a **limited** set of parameter configurations under walk-forward rules.
 
 **Acceptance criteria**
@@ -68,8 +68,8 @@ so that I can compare a **limited** set of parameter configurations under walk-f
 
 ### User Story 2: Tune key parameters
 
-As a **developer or researcher**,  
-I want to tune a **small** set of meaningful parameters,  
+As a **developer or researcher**,
+I want to tune a **small** set of meaningful parameters,
 so that I can search for **stable** settings without exploding the grid.
 
 **Acceptance criteria**
@@ -88,8 +88,8 @@ so that I can search for **stable** settings without exploding the grid.
 
 ### User Story 3: Rank by robustness
 
-As a **developer or researcher**,  
-I want results ranked by **stability across periods**,  
+As a **developer or researcher**,
+I want results ranked by **stability across periods**,
 so that fragile but lucky parameter sets are not selected.
 
 **Acceptance criteria**
@@ -105,8 +105,8 @@ so that fragile but lucky parameter sets are not selected.
 
 ### User Story 4: Inspect top parameter sets
 
-As a **developer or researcher**,  
-I want to inspect the **top** parameter configurations by robustness,  
+As a **developer or researcher**,
+I want to inspect the **top** parameter configurations by robustness,
 so that I can **choose** one deliberately for further research.
 
 **Acceptance criteria**
@@ -122,8 +122,8 @@ so that I can **choose** one deliberately for further research.
 
 ### User Story 5: Preserve reproducibility
 
-As a **developer or researcher**,  
-I want optimization runs to be **reproducible**,  
+As a **developer or researcher**,
+I want optimization runs to be **reproducible**,
 so that results can be trusted and compared over time.
 
 **Acceptance criteria**

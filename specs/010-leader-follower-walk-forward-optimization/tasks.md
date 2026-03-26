@@ -1,6 +1,6 @@
 # Tasks: Leader-Follower Walk-Forward Optimization
 
-**Input**: `specs/010-leader-follower-walk-forward-optimization/`  
+**Input**: `specs/010-leader-follower-walk-forward-optimization/`
 **Prerequisites**: plan.md, spec.md, research.md, data-model.md, contracts/
 
 ## Phase 1: Setup
@@ -16,7 +16,7 @@
 
 ## Phase 3: User Story 1 — Run walk-forward optimization (P1)
 
-**Goal**: CLI runs grid over train/validate/(optional) test and persists run + results.  
+**Goal**: CLI runs grid over train/validate/(optional) test and persists run + results.
 **Independent Test**: CLI with in-memory DB fixture returns run id and result_count > 0.
 
 - [X] T006 [US1] Implement `run_walk_forward_optimization`, split validation, grid expansion, ranking in `/home/dgregor/projects/meme-stocks/backend/app/services/leader_follower_walk_forward_service.py`
@@ -24,28 +24,28 @@
 
 ## Phase 4: User Story 2 — Tune parameters (P2)
 
-**Goal**: JSON grid supports `PaperTradingConfig` keys and caps combinations.  
+**Goal**: JSON grid supports `PaperTradingConfig` keys and caps combinations.
 **Independent Test**: Unit test rejects grid exceeding max points.
 
 - [X] T008 [US2] Grid JSON parsing and Cartesian product with cap in `/home/dgregor/projects/meme-stocks/backend/app/services/leader_follower_walk_forward_service.py`
 
 ## Phase 5: User Story 3 — Rank by robustness (P2)
 
-**Goal**: `walk_forward_v1` scoring documented in research.md.  
+**Goal**: `walk_forward_v1` scoring documented in research.md.
 **Independent Test**: Unit test ranking penalizes train>validate and low trade count.
 
 - [X] T009 [US3] Ranking function and deterministic sort/tie-break in `/home/dgregor/projects/meme-stocks/backend/app/services/leader_follower_walk_forward_service.py`
 
 ## Phase 6: User Story 4 — Inspect top results (P3)
 
-**Goal**: Read-only API for runs, detail, top-results.  
+**Goal**: Read-only API for runs, detail, top-results.
 **Independent Test**: TestClient GETs return 200/404 per contract.
 
 - [X] T010 [US4] Add `/home/dgregor/projects/meme-stocks/backend/app/api/leader_follower_optimization.py` and register router in `/home/dgregor/projects/meme-stocks/backend/app/main.py`
 
 ## Phase 7: User Story 5 — Reproducibility (P3)
 
-**Goal**: Stored `config_json` + metrics per period.  
+**Goal**: Stored `config_json` + metrics per period.
 **Independent Test**: Two runs with same DB data and config yield same ranks/scores.
 
 - [X] T011 [US5] Persist full `config_json` and `ranking_method` on run; ensure `params_json` frozen per result in `/home/dgregor/projects/meme-stocks/backend/app/services/leader_follower_walk_forward_service.py`

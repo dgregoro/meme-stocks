@@ -27,8 +27,8 @@
 Let `V = validate cumulative_return_pct`, `T = train cumulative_return_pct`, `D = validate max_drawdown_pct`, `n = validate total_trades`, `n_min` = minimum trades floor (config default e.g. 5).
 
 - If `n < n_min`: `raw_score = -10_000 + n` (severe penalty, deterministic tie-break by n).
-- Else:  
-  `raw_score = V - w_deg * max(0, T - V) - w_dd * D`  
+- Else:
+  `raw_score = V - w_deg * max(0, T - V) - w_dd * D`
   with defaults `w_deg = 0.5`, `w_dd = 0.25` (stored in run `config_json` under `ranking`).
 
 **Rationale**: Validation-first; penalizes train→validate degradation (overfitting signal) and deep drawdowns; low sample invalidate.
