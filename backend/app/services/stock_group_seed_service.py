@@ -1,7 +1,7 @@
 """Bootstrap seeding for stock groups.
 
-Idempotent: running twice does not create duplicates. Creates missing stocks
-with minimal metadata when needed for FK integrity. Skips symbols that cannot
+Idempotent: running twice does not create duplicates. Skips symbols not present
+in the stocks table (logs warning, does not create). Skips symbols that cannot
 be added (e.g. constraint violation) and logs a warning.
 """
 
@@ -15,7 +15,6 @@ from sqlalchemy.orm import Session
 from backend.app.data.stock_group_seed import BOOTSTRAP_GROUPS
 from backend.app.data.repositories.stock_group_repo import StockGroupRepository
 from backend.app.data.repositories.stock_repo import StockRepository
-from backend.app.models.stock import Stock
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +24,7 @@ class SeedResult(TypedDict):
 
     groups_inserted: int
     groups_skipped: int
-    stocks_created: int
+    stocks_created: int  # Always 0; kept for CLI compatibility
     symbols_skipped: list[str]
 
 
@@ -33,10 +32,10 @@ def run_bootstrap_seed(db: Session) -> SeedResult:
     """Seed stock_groups with bootstrap data. Idempotent; does not wipe existing groups.
 
     For each (group_id, symbol) in BOOTSTRAP_GROUPS:
-    - Ensures stock exists (creates minimal Stock if missing)
+    - Skips symbol if not present in stocks table (logs warning)
     - Adds stock-group membership only if not already present
 
-    Returns stats: groups_inserted, groups_skipped, stocks_created, symbols_skipped.
+    Returns stats: groups_inserted, groups_skipped, stocks_created (0), symbols_skipped.
     """
     stock_repo = StockRepository(db)
     group_repo = StockGroupRepository(db)
@@ -51,19 +50,10 @@ def run_bootstrap_seed(db: Session) -> SeedResult:
     for group_id, symbols in BOOTSTRAP_GROUPS.items():
         for symbol in symbols:
             try:
-                # Ensure stock exists (FK constraint)
-                stock = stock_repo.get(symbol)
-                if stock is None:
-                    stock = Stock(
-                        symbol=symbol,
-                        name=f"{symbol} (bootstrap)",
-                        sector=None,
-                        market_cap=None,
-                    )
-                    stock_repo.add(stock)
-                    db.flush()
-                    result["stocks_created"] += 1
-                    logger.info("Created bootstrap stock: %s", symbol)
+                if stock_repo.get(symbol) is None:
+                    logger.warning("Skipped %s in group %s: symbol not in stocks table", symbol, group_id)
+                    result["symbols_skipped"].append(f"{group_id}:{symbol} (not in stocks)")
+                    continue
 
                 if group_repo.add_if_missing(group_id, symbol):
                     result["groups_inserted"] += 1

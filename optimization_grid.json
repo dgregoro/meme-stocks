@@ -1,0 +1,18 @@
+{
+  "base_config": {
+    "entry_mode": "next_open",
+    "exit_mode": "fixed_days"
+  },
+  "grid": {
+    "holding_days": [1, 3, 5],
+    "max_positions_per_event": [1, 2],
+    "per_trade_cost_pct": [0.1],
+    "min_pair_score": [null, 0.5]
+  },
+  "ranking": {
+    "method": "walk_forward_v1",
+    "min_trades_validate": 5,
+    "w_deg": 0.5,
+    "w_dd": 0.25
+  }
+}

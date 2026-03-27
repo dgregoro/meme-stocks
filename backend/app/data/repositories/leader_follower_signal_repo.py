@@ -27,6 +27,30 @@ class LeaderFollowerSignalRepository:
         except SQLAlchemyError as exc:  # pragma: no cover
             raise DataAccessError("Failed to add leader follower signal") from exc
 
+    def exists_for(
+        self,
+        leader_symbol: str,
+        follower_symbol: str,
+        signal_date: dt.date,
+    ) -> bool:
+        """Return True if a signal for (leader, follower, signal_date) already exists. For idempotent replay."""
+        stmt = (
+            select(LeaderFollowerSignal.id)
+            .where(
+                and_(
+                    LeaderFollowerSignal.leader_symbol == leader_symbol,
+                    LeaderFollowerSignal.follower_symbol == follower_symbol,
+                    LeaderFollowerSignal.signal_date == signal_date,
+                )
+            )
+            .limit(1)
+        )
+        try:
+            row = self._session.execute(stmt).scalar_one_or_none()
+            return row is not None
+        except SQLAlchemyError as exc:  # pragma: no cover
+            raise DataAccessError("Failed to check signal exists") from exc
+
     def exists_within_cooldown(
         self,
         leader_symbol: str,
@@ -62,24 +86,31 @@ class LeaderFollowerSignalRepository:
 
     def list_signals(
         self,
-        limit: int = 50,
+        limit: int | None = 50,
         since_date: dt.date | None = None,
+        until_date: dt.date | None = None,
         leader: str | None = None,
+        follower: str | None = None,
         group: str | None = None,
     ) -> Sequence[LeaderFollowerSignal]:
-        """List signals with optional filters. Ordered by signal_date desc, created_at desc."""
-        stmt = (
-            select(LeaderFollowerSignal)
-            .order_by(
-                LeaderFollowerSignal.signal_date.desc(),
-                LeaderFollowerSignal.created_at.desc(),
-            )
-            .limit(limit)
+        """List signals with optional filters. Ordered by signal_date desc, created_at desc.
+
+        If limit is None, return all matching rows (use for batch simulation).
+        """
+        stmt = select(LeaderFollowerSignal).order_by(
+            LeaderFollowerSignal.signal_date.desc(),
+            LeaderFollowerSignal.created_at.desc(),
         )
+        if limit is not None:
+            stmt = stmt.limit(limit)
         if since_date is not None:
             stmt = stmt.where(LeaderFollowerSignal.signal_date >= since_date)
+        if until_date is not None:
+            stmt = stmt.where(LeaderFollowerSignal.signal_date <= until_date)
         if leader is not None:
             stmt = stmt.where(LeaderFollowerSignal.leader_symbol == leader)
+        if follower is not None:
+            stmt = stmt.where(LeaderFollowerSignal.follower_symbol == follower)
         if group is not None:
             stmt = stmt.where(LeaderFollowerSignal.group_id == group)
         try:

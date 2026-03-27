@@ -14,6 +14,7 @@ from sqlalchemy.pool import StaticPool
 from backend.app.main import create_app
 from backend.app.data.database import Base, get_session
 from backend.app.models.job_run_history import JobRunHistory
+from backend.app.models.leader_debug_evaluation import LeaderDebugEvaluation
 from backend.app.models.leader_event import LeaderEvent
 from backend.app.models.leader_follower_candidate import LeaderFollowerCandidate
 from backend.app.models.leader_follower_signal import LeaderFollowerSignal
@@ -136,10 +137,11 @@ def test_status_failed_run_returns_failed() -> None:
 
 @pytest.mark.integration
 def test_status_successful_zero_signals_returns_stage_reason() -> None:
-    """GET /api/leader-follower/status returns no_leaders when metrics show zero leaders."""
+    """GET /api/leader-follower/status returns no_leaders when metrics show zero leaders (grouped universe non-empty)."""
     client, db = _create_test_app()
     metrics = {
         "input_universe_size": 25,
+        "grouped_leader_universe_size": 10,
         "leader_events_detected": 0,
         "follower_candidates_found": 0,
         "signals_emitted": 0,
@@ -171,6 +173,7 @@ def test_status_successful_with_signals_returns_ok() -> None:
     client, db = _create_test_app()
     metrics = {
         "input_universe_size": 25,
+        "grouped_leader_universe_size": 10,
         "leader_events_detected": 3,
         "follower_candidates_found": 12,
         "signals_emitted": 5,
@@ -194,6 +197,68 @@ def test_status_successful_with_signals_returns_ok() -> None:
     assert data["last_run"] is not None
     assert data["stage_counts"]["signals_emitted"] == 5
     assert data["empty_reason"] == "ok"
+
+
+@pytest.mark.integration
+def test_status_includes_grouped_leader_universe_size() -> None:
+    """GET /api/leader-follower/status returns stage_counts.grouped_leader_universe_size when run has metrics."""
+    client, db = _create_test_app()
+    metrics = {
+        "input_universe_size": 1600,
+        "grouped_leader_universe_size": 42,
+        "leader_events_detected": 2,
+        "follower_candidates_found": 5,
+        "signals_emitted": 3,
+    }
+    db.add(
+        JobRunHistory(
+            job_name="leader_follower_detection",
+            run_at=datetime(2026, 3, 21, 17, 0, 0, tzinfo=timezone.utc),
+            started_at=datetime(2026, 3, 21, 17, 0, 0, tzinfo=timezone.utc),
+            duration_seconds=2.0,
+            success=True,
+            error_message=None,
+            summary="ok",
+            metrics_json=json.dumps(metrics),
+        )
+    )
+    db.commit()
+    resp = client.get("/api/leader-follower/status")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["stage_counts"]["grouped_leader_universe_size"] == 42
+    assert data["stage_counts"]["input_universe_size"] == 1600
+
+
+@pytest.mark.integration
+def test_status_stock_groups_empty_returns_stock_groups_empty_reason() -> None:
+    """GET /api/leader-follower/status returns empty_reason stock_groups_empty when grouped_leader_universe_size is 0."""
+    client, db = _create_test_app()
+    metrics = {
+        "input_universe_size": 1600,
+        "grouped_leader_universe_size": 0,
+        "leader_events_detected": 0,
+        "follower_candidates_found": 0,
+        "signals_emitted": 0,
+    }
+    db.add(
+        JobRunHistory(
+            job_name="leader_follower_detection",
+            run_at=datetime(2026, 3, 21, 17, 0, 0, tzinfo=timezone.utc),
+            started_at=datetime(2026, 3, 21, 17, 0, 0, tzinfo=timezone.utc),
+            duration_seconds=0.5,
+            success=True,
+            error_message=None,
+            summary="short-circuited: no stock groups",
+            metrics_json=json.dumps(metrics),
+        )
+    )
+    db.commit()
+    resp = client.get("/api/leader-follower/status")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["empty_reason"] == "stock_groups_empty"
+    assert data["stage_counts"]["grouped_leader_universe_size"] == 0
 
 
 @pytest.mark.integration
@@ -241,6 +306,59 @@ def test_runs_with_data_returns_parsed_metrics() -> None:
     assert run["success"] is True
     assert run["metrics"]["leader_events_detected"] == 3
     assert run["metrics"]["signals_emitted"] == 5
+
+
+@pytest.mark.integration
+def test_runs_with_date_filters_and_near_miss_count() -> None:
+    """GET /api/leader-follower/runs?since_date=X&until_date=Y filters by run_at; near_miss_count in metrics."""
+    client, db = _create_test_app()
+    metrics_in_range = {
+        "input_universe_size": 25,
+        "leader_events_detected": 1,
+        "near_miss_count": 8,
+        "signals_emitted": 2,
+    }
+    metrics_out_range = {"input_universe_size": 25, "leader_events_detected": 0}
+    db.add(
+        JobRunHistory(
+            job_name="leader_follower_detection",
+            run_at=datetime(2026, 3, 20, 17, 0, 0, tzinfo=timezone.utc),
+            started_at=datetime(2026, 3, 20, 17, 0, 0, tzinfo=timezone.utc),
+            success=True,
+            metrics_json=json.dumps(metrics_out_range),
+        )
+    )
+    db.add(
+        JobRunHistory(
+            job_name="leader_follower_detection",
+            run_at=datetime(2026, 3, 22, 17, 0, 0, tzinfo=timezone.utc),
+            started_at=datetime(2026, 3, 22, 17, 0, 0, tzinfo=timezone.utc),
+            success=True,
+            metrics_json=json.dumps(metrics_in_range),
+        )
+    )
+    db.add(
+        JobRunHistory(
+            job_name="leader_follower_detection",
+            run_at=datetime(2026, 3, 24, 17, 0, 0, tzinfo=timezone.utc),
+            started_at=datetime(2026, 3, 24, 17, 0, 0, tzinfo=timezone.utc),
+            success=True,
+            metrics_json=json.dumps(metrics_out_range),
+        )
+    )
+    db.commit()
+
+    resp = client.get("/api/leader-follower/runs?since_date=2026-03-22&until_date=2026-03-22&limit=10")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data["runs"]) == 1
+    run = data["runs"][0]
+    assert "2026-03-22" in run["run_at"]
+    assert run["metrics"].get("near_miss_count") == 8
+
+    resp2 = client.get("/api/leader-follower/runs?since_date=2026-03-21&until_date=2026-03-23&limit=10")
+    assert resp2.status_code == 200
+    assert len(resp2.json()["runs"]) == 1
 
 
 @pytest.mark.integration
@@ -382,9 +500,10 @@ def test_signals_empty_returns_diagnostics() -> None:
     assert diag["stage_counts"] is None
     assert diag["empty_reason"] == "no_run"
 
-    # Add a run with no_leaders metrics; still no signals → diagnostics with run info
+    # Add a run with no_leaders metrics (grouped universe non-empty); still no signals → diagnostics with run info
     metrics = {
         "input_universe_size": 25,
+        "grouped_leader_universe_size": 10,
         "leader_events_detected": 0,
         "follower_candidates_found": 0,
         "signals_emitted": 0,
@@ -439,3 +558,408 @@ def test_signals_with_results_omits_diagnostics() -> None:
     data = resp.json()
     assert len(data["signals"]) == 1
     assert data.get("diagnostics") is None
+
+
+@pytest.mark.integration
+def test_leader_debug_returns_evaluations() -> None:
+    """GET /api/leader-follower/leader-debug returns evaluations for run; 404 when run missing."""
+    client, db = _create_test_app()
+    run = JobRunHistory(
+        job_name="leader_follower_detection",
+        run_at=datetime(2026, 3, 22, 17, 0, 0, tzinfo=timezone.utc),
+        started_at=datetime(2026, 3, 22, 17, 0, 0, tzinfo=timezone.utc),
+        success=True,
+        metrics_json=json.dumps({"event_date": "2026-03-22", "leader_events_detected": 1}),
+    )
+    db.add(run)
+    db.flush()
+    db.add(
+        LeaderDebugEvaluation(
+            job_run_id=run.id,
+            stock_symbol="GME",
+            return_pct=2.1,
+            volume_ratio=1.3,
+            qualified_as_leader=False,
+            rejection_reasons=json.dumps(["below_return_threshold", "insufficient_volume"]),
+        )
+    )
+    db.add(
+        LeaderDebugEvaluation(
+            job_run_id=run.id,
+            stock_symbol="NVDA",
+            return_pct=None,
+            volume_ratio=None,
+            qualified_as_leader=False,
+            rejection_reasons=json.dumps(["insufficient_bars"]),
+        )
+    )
+    db.add(
+        LeaderDebugEvaluation(
+            job_run_id=run.id,
+            stock_symbol="AAPL",
+            return_pct=6.0,
+            volume_ratio=2.0,
+            qualified_as_leader=True,
+            rejection_reasons=json.dumps([]),
+        )
+    )
+    db.commit()
+
+    resp = client.get(f"/api/leader-follower/leader-debug?run_id={run.id}")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["run_id"] == run.id
+    assert data["event_date"] == "2026-03-22"
+    assert data["evaluated_count"] == 3
+    assert data["leaders_count"] == 1
+    assert len(data["evaluations"]) == 3
+    gme = next(e for e in data["evaluations"] if e["symbol"] == "GME")
+    assert gme["return_pct"] == 2.1
+    assert gme["volume_ratio"] == 1.3
+    assert gme["qualified_as_leader"] is False
+    assert set(gme["rejection_reasons"]) == {"below_return_threshold", "insufficient_volume"}
+
+    resp404 = client.get("/api/leader-follower/leader-debug?run_id=99999")
+    assert resp404.status_code == 404
+
+
+@pytest.mark.integration
+def test_leader_debug_empty_when_no_data() -> None:
+    """GET /api/leader-follower/leader-debug returns 200 with empty evaluations when run has no debug data."""
+    client, db = _create_test_app()
+    run = JobRunHistory(
+        job_name="leader_follower_detection",
+        run_at=datetime(2026, 3, 22, 17, 0, 0, tzinfo=timezone.utc),
+        started_at=datetime(2026, 3, 22, 17, 0, 0, tzinfo=timezone.utc),
+        success=True,
+        metrics_json=json.dumps({"event_date": "2026-03-22"}),
+    )
+    db.add(run)
+    db.flush()
+    db.commit()
+
+    resp = client.get(f"/api/leader-follower/leader-debug?run_id={run.id}")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["evaluated_count"] == 0
+    assert data["leaders_count"] == 0
+    assert data["evaluations"] == []
+
+
+@pytest.mark.integration
+def test_leader_near_miss_returns_near_misses() -> None:
+    """GET /api/leader-follower/leader-near-miss returns near-misses; 404 when run missing."""
+    client, db = _create_test_app()
+    run = JobRunHistory(
+        job_name="leader_follower_detection",
+        run_at=datetime(2026, 3, 22, 17, 0, 0, tzinfo=timezone.utc),
+        started_at=datetime(2026, 3, 22, 17, 0, 0, tzinfo=timezone.utc),
+        success=True,
+    )
+    db.add(run)
+    db.flush()
+    db.add(
+        LeaderDebugEvaluation(
+            job_run_id=run.id,
+            stock_symbol="GME",
+            return_pct=4.2,
+            volume_ratio=1.4,
+            qualified_as_leader=False,
+            rejection_reasons=json.dumps(["below_return_threshold", "insufficient_volume"]),
+            metrics_json=json.dumps({"return_threshold": 5.0, "volume_threshold": 1.5}),
+        )
+    )
+    db.add(
+        LeaderDebugEvaluation(
+            job_run_id=run.id,
+            stock_symbol="NVDA",
+            return_pct=2.1,
+            volume_ratio=0.9,
+            qualified_as_leader=False,
+            rejection_reasons=json.dumps(["below_return_threshold", "insufficient_volume"]),
+            metrics_json=json.dumps({"return_threshold": 5.0, "volume_threshold": 1.5}),
+        )
+    )
+    db.commit()
+
+    resp = client.get(f"/api/leader-follower/leader-near-miss?run_id={run.id}")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["run_id"] == run.id
+    assert len(data["near_misses"]) == 2
+    assert data["near_misses"][0]["symbol"] == "GME"
+    assert data["near_misses"][0]["return_pct"] == 4.2
+    assert data["near_misses"][0]["return_threshold"] == 5.0
+    assert data["near_misses"][0]["volume_threshold"] == 1.5
+
+    resp404 = client.get("/api/leader-follower/leader-near-miss?run_id=99999")
+    assert resp404.status_code == 404
+
+
+@pytest.mark.integration
+def test_leader_near_miss_empty_when_none() -> None:
+    """GET /api/leader-follower/leader-near-miss returns 200 with empty when no near-misses."""
+    client, db = _create_test_app()
+    run = JobRunHistory(
+        job_name="leader_follower_detection",
+        run_at=datetime(2026, 3, 22, 17, 0, 0, tzinfo=timezone.utc),
+        started_at=datetime(2026, 3, 22, 17, 0, 0, tzinfo=timezone.utc),
+        success=True,
+    )
+    db.add(run)
+    db.flush()
+    db.commit()
+
+    resp = client.get(f"/api/leader-follower/leader-near-miss?run_id={run.id}")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["near_misses"] == []
+
+
+# --- Evaluation endpoints (007) ---
+
+
+@pytest.mark.unit
+def test_evaluation_summary_empty() -> None:
+    """GET /api/leader-follower/evaluation/summary returns zeros when no signals."""
+    client, _ = _create_test_app()
+    resp = client.get("/api/leader-follower/evaluation/summary")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total_signals"] == 0
+    assert data["signals_per_day"] == 0.0
+    assert "by_horizon" in data
+    assert "1d" in data["by_horizon"]
+    assert data["by_horizon"]["1d"]["evaluable_count"] == 0
+    assert "duplicate_overlap" in data
+    assert data["duplicate_overlap"]["repeat_pair_in_window"] == 0
+
+
+@pytest.mark.unit
+def test_evaluation_summary_with_signal_and_prices() -> None:
+    """GET /api/leader-follower/evaluation/summary returns metrics when signal and price data exist."""
+    from backend.app.models.price_data import PriceData
+
+    client, db = _create_test_app()
+    db.add(Stock(symbol="INTC", name="Intel", sector="Tech", market_cap=None))
+    db.add(Stock(symbol="QCOM", name="Qualcomm", sector="Tech", market_cap=None))
+    db.commit()
+    for d, c in [(date(2026, 3, 1), 50.0), (date(2026, 3, 2), 51.0), (date(2026, 3, 3), 52.0)]:
+        db.add(
+            PriceData(
+                stock_symbol="QCOM",
+                date=d,
+                open=c - 0.5,
+                high=c + 0.5,
+                low=c - 0.5,
+                close=c,
+                volume=1_000_000,
+            )
+        )
+    db.add(
+        LeaderFollowerSignal(
+            leader_symbol="INTC",
+            follower_symbol="QCOM",
+            group_id="semis",
+            signal_date=date(2026, 3, 1),
+            strength_score=1.0,
+            leader_return_pct=5.0,
+            leader_volume_ratio=1.5,
+        )
+    )
+    db.commit()
+
+    resp = client.get("/api/leader-follower/evaluation/summary")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total_signals"] == 1
+    assert data["by_horizon"]["1d"]["evaluable_count"] == 1
+    assert data["by_horizon"]["1d"]["avg_return_pct"] == 2.0  # 51/50 - 1 = 2%
+    assert data["by_horizon"]["1d"]["win_rate"] == 1.0
+
+
+@pytest.mark.unit
+def test_evaluation_pairs_and_signals_empty() -> None:
+    """GET /evaluation/pairs and /evaluation/signals return empty lists when no signals."""
+    client, _ = _create_test_app()
+    resp_pairs = client.get("/api/leader-follower/evaluation/pairs")
+    assert resp_pairs.status_code == 200
+    assert resp_pairs.json()["pairs"] == []
+    resp_signals = client.get("/api/leader-follower/evaluation/signals")
+    assert resp_signals.status_code == 200
+    assert resp_signals.json()["signals"] == []
+
+
+# --- Pairs filtering and ranking (009) ---
+
+
+def _seed_evaluation_data(db: Session) -> None:
+    """Seed stocks, price data, and signals for pairs evaluation tests."""
+    from backend.app.models.price_data import PriceData
+
+    db.add(Stock(symbol="INTC", name="Intel", sector="Tech", market_cap=None))
+    db.add(Stock(symbol="QCOM", name="Qualcomm", sector="Tech", market_cap=None))
+    db.add(Stock(symbol="NVDA", name="NVIDIA", sector="Tech", market_cap=None))
+    db.commit()
+    for d, c in [
+        (date(2026, 3, 1), 50.0),
+        (date(2026, 3, 2), 51.0),
+        (date(2026, 3, 3), 52.0),
+        (date(2026, 3, 4), 53.0),
+        (date(2026, 3, 5), 54.0),
+        (date(2026, 3, 6), 55.0),
+    ]:
+        for sym in ("QCOM", "NVDA"):
+            db.add(
+                PriceData(
+                    stock_symbol=sym,
+                    date=d,
+                    open=c - 0.5,
+                    high=c + 0.5,
+                    low=c - 0.5,
+                    close=c,
+                    volume=1_000_000,
+                )
+            )
+    db.add(
+        LeaderFollowerSignal(
+            leader_symbol="INTC",
+            follower_symbol="QCOM",
+            group_id="semis",
+            signal_date=date(2026, 3, 1),
+            strength_score=1.0,
+            leader_return_pct=5.0,
+            leader_volume_ratio=1.5,
+        )
+    )
+    db.add(
+        LeaderFollowerSignal(
+            leader_symbol="INTC",
+            follower_symbol="QCOM",
+            group_id="semis",
+            signal_date=date(2026, 3, 2),
+            strength_score=0.9,
+            leader_return_pct=3.0,
+            leader_volume_ratio=1.2,
+        )
+    )
+    db.add(
+        LeaderFollowerSignal(
+            leader_symbol="INTC",
+            follower_symbol="NVDA",
+            group_id="semis",
+            signal_date=date(2026, 3, 1),
+            strength_score=0.8,
+            leader_return_pct=4.0,
+            leader_volume_ratio=1.1,
+        )
+    )
+    db.commit()
+
+
+@pytest.mark.unit
+def test_pairs_ranked_empty() -> None:
+    """GET /pairs/ranked returns empty when no signals."""
+    client, _ = _create_test_app()
+    resp = client.get("/api/leader-follower/pairs/ranked")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "pairs" in data
+    assert data["pairs"] == []
+
+
+@pytest.mark.unit
+def test_pairs_ranked_with_data() -> None:
+    """GET /pairs/ranked returns pairs sorted by avg_return_1d desc by default."""
+    client, db = _create_test_app()
+    _seed_evaluation_data(db)
+    resp = client.get("/api/leader-follower/pairs/ranked")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "pairs" in data
+    pairs = data["pairs"]
+    assert len(pairs) >= 1
+    for p in pairs:
+        assert "leader_symbol" in p
+        assert "follower_symbol" in p
+        assert "signal_count" in p
+        assert "1d" in p
+    # Default sort: avg_return_1d desc; higher avg first
+    for i in range(len(pairs) - 1):
+        curr = pairs[i].get("1d", {}) or {}
+        next_p = pairs[i + 1].get("1d", {}) or {}
+        curr_avg = float(curr.get("avg_return_pct", 0) or 0)
+        next_avg = float(next_p.get("avg_return_pct", 0) or 0)
+        assert curr_avg >= next_avg
+
+
+@pytest.mark.unit
+def test_pairs_ranked_sort_order() -> None:
+    """GET /pairs/ranked respects sort_by and sort_order query params."""
+    client, db = _create_test_app()
+    _seed_evaluation_data(db)
+    resp = client.get("/api/leader-follower/pairs/ranked?sort_by=signal_count&sort_order=asc")
+    assert resp.status_code == 200
+    pairs = resp.json()["pairs"]
+    for i in range(len(pairs) - 1):
+        assert pairs[i]["signal_count"] <= pairs[i + 1]["signal_count"]
+
+
+@pytest.mark.unit
+def test_pairs_ranked_invalid_sort_by() -> None:
+    """GET /pairs/ranked returns 400 for invalid sort_by."""
+    client, db = _create_test_app()
+    _seed_evaluation_data(db)
+    resp = client.get("/api/leader-follower/pairs/ranked?sort_by=invalid_field")
+    assert resp.status_code == 400
+
+
+@pytest.mark.unit
+def test_pairs_filtered_empty() -> None:
+    """GET /pairs/filtered returns empty when no signals."""
+    client, _ = _create_test_app()
+    resp = client.get("/api/leader-follower/pairs/filtered")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["pairs"] == []
+    assert data["total_before_filter"] == 0
+    assert data["total_after_filter"] == 0
+
+
+@pytest.mark.unit
+def test_pairs_filtered_with_data() -> None:
+    """GET /pairs/filtered returns pairs with filter_status and metadata."""
+    client, db = _create_test_app()
+    _seed_evaluation_data(db)
+    resp = client.get("/api/leader-follower/pairs/filtered")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "pairs" in data
+    assert "total_before_filter" in data
+    assert "total_after_filter" in data
+    assert data["total_before_filter"] >= data["total_after_filter"]
+    for p in data["pairs"]:
+        assert p["filter_status"] in ("pass", "fail", "insufficient_data")
+        assert "thresholds_applied" in p
+
+
+@pytest.mark.unit
+def test_pairs_filtered_threshold_overrides() -> None:
+    """GET /pairs/filtered respects min_signal_count override."""
+    client, db = _create_test_app()
+    _seed_evaluation_data(db)
+    resp = client.get("/api/leader-follower/pairs/filtered?min_signal_count=10")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total_after_filter"] == 0
+
+
+@pytest.mark.unit
+def test_pairs_blacklist() -> None:
+    """GET /pairs/blacklist returns empty list for MVP."""
+    client, _ = _create_test_app()
+    resp = client.get("/api/leader-follower/pairs/blacklist")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "pairs" in data
+    assert data["pairs"] == []

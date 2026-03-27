@@ -6,13 +6,25 @@ alwaysApply: true
 
 # meme-stocks Development Guidelines
 
-Auto-generated from all feature plans. Last updated: 2026-03-21
+Auto-generated from all feature plans. Last updated: 2026-03-26
 
 ## Active Technologies
 - Python 3.11 + FastAPI, SQLAlchemy, existing PriceDataRepository, StockRepository, JobExecutionRepository (003-leader-follower-signal-detection)
 - SQLite (existing); new tables: `leader_events`, `leader_follower_signals`, `stock_groups` (003-leader-follower-signal-detection)
 - Python 3.11+ (existing) + FastAPI, SQLAlchemy, existing JobExecutionRepository, LeaderEventRepository, LeaderFollowerSignalRepository (004-leader-follower-api-observability)
 - SQLite (existing); new table `leader_follower_candidates`; add `job_run_id` to `leader_events` (004-leader-follower-api-observability)
+- Python 3.11+ (existing) + FastAPI, SQLAlchemy, existing StockGroupRepository, leader_follower_service, leader_follower API (005-grouped-leader-universe-for-leader-follower)
+- SQLite (existing); no schema changes; uses existing `stock_groups`, `stocks`, `job_run_history` (005-grouped-leader-universe-for-leader-follower)
+- Python 3.11+ (existing) + FastAPI, SQLAlchemy, existing leader_follower_service, leader_event_repo, job_run_history (006-leader-threshold-calibration-and-bootstrap-debugging)
+- SQLite (existing); new table `leader_debug_evaluations` (run_id, symbol, metrics_json, rejection_reasons); extend metrics_json with `near_miss_count`, `debug_mode` (006-leader-threshold-calibration-and-bootstrap-debugging)
+- Python 3.11 + FastAPI, SQLAlchemy, Alpaca API (requests), existing AlpacaDataClient (008-leader-follower-historical-backfill-and-replay)
+- SQLite (PriceData, LeaderFollowerSignal); reuse existing schema (008-leader-follower-historical-backfill-and-replay)
+- Python 3.11+ + FastAPI, SQLAlchemy, Pydantic (existing) (009-leader-follower-pair-filtering-and-ranking)
+- SQLite (existing); no new tables for MVP (009-leader-follower-pair-filtering-and-ranking)
+- Python 3.11+ + FastAPI, SQLAlchemy, LeaderFollowerSignalRepository, PriceDataRepository (011-leader-follower-execution-and-paper-trading)
+- SQLite (existing); new tables `leader_follower_paper_runs`, `leader_follower_paper_trades` (011-leader-follower-execution-and-paper-trading)
+- Python 3.11+ + FastAPI, SQLAlchemy, walk-forward optimization service, read-only optimization API (010-leader-follower-walk-forward-optimization)
+- SQLite (existing); new tables `leader_follower_optimization_runs`, `leader_follower_optimization_results` (010-leader-follower-walk-forward-optimization)
 
 - Python 3.11 + FastAPI, SQLAlchemy, existing services (activity_detector, pattern_analyzer, sentiment_analyzer) (002-combined-signal-alerts)
 
@@ -32,10 +44,10 @@ cd src [ONLY COMMANDS FOR ACTIVE TECHNOLOGIES][ONLY COMMANDS FOR ACTIVE TECHNOLO
 Python 3.11: Follow standard conventions
 
 ## Recent Changes
-- 004-leader-follower-api-observability: Added Python 3.11+ (existing) + FastAPI, SQLAlchemy, existing JobExecutionRepository, LeaderEventRepository, LeaderFollowerSignalRepository
-- 003-leader-follower-signal-detection: Added Python 3.11 + FastAPI, SQLAlchemy, existing PriceDataRepository, StockRepository, JobExecutionRepository
-
-- 002-combined-signal-alerts: Added Python 3.11 + FastAPI, SQLAlchemy, existing services (activity_detector, pattern_analyzer, sentiment_analyzer)
+- 010-leader-follower-walk-forward-optimization: Walk-forward CLI/API, robustness ranking, optimization run/result tables
+- 011-leader-follower-execution-and-paper-trading: Paper trading simulation API + CLI; new paper run/trade tables
+- 009-leader-follower-pair-filtering-and-ranking: Added Python 3.11+ + FastAPI, SQLAlchemy, Pydantic (existing)
+- 008-leader-follower-historical-backfill-and-replay: Added Python 3.11 + FastAPI, SQLAlchemy, Alpaca API (requests), existing AlpacaDataClient
 
 <!-- MANUAL ADDITIONS START -->
 <!-- MANUAL ADDITIONS END -->

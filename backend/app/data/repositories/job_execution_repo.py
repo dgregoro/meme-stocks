@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from typing import Any, Mapping, Sequence
 
 from sqlalchemy import select
@@ -217,15 +217,33 @@ class JobExecutionRepository:
         except SQLAlchemyError as exc:  # pragma: no cover
             raise DataAccessError(f"Failed to complete run {run_id}") from exc
 
+    def get_run_by_id(self, run_id: int) -> JobRunHistory | None:
+        """Return the run with the given id, or None if not found."""
+        stmt = select(JobRunHistory).where(JobRunHistory.id == run_id)
+        try:
+            return self._session.execute(stmt).scalar_one_or_none()
+        except SQLAlchemyError as exc:  # pragma: no cover
+            raise DataAccessError(f"Failed to get run {run_id}") from exc
+
     def list_recent_runs(
         self,
         job_name: str | None = None,
         limit: int = 200,
+        since_date: date | None = None,
+        until_date: date | None = None,
     ) -> Sequence[JobRunHistory]:
-        """Return the last `limit` runs, most recent first. If job_name set, filter by job."""
+        """Return the last `limit` runs, most recent first. If job_name set, filter by job.
+        If since_date/until_date set, filter run_at to that date range (inclusive).
+        """
         stmt = select(JobRunHistory).order_by(JobRunHistory.run_at.desc()).limit(limit)
         if job_name is not None:
             stmt = stmt.where(JobRunHistory.job_name == job_name)
+        if since_date is not None:
+            since_dt = datetime.combine(since_date, time.min, tzinfo=timezone.utc)
+            stmt = stmt.where(JobRunHistory.run_at >= since_dt)
+        if until_date is not None:
+            until_end = datetime.combine(until_date + timedelta(days=1), time.min, tzinfo=timezone.utc)
+            stmt = stmt.where(JobRunHistory.run_at < until_end)
         try:
             result = self._session.execute(stmt)
             return result.scalars().all()

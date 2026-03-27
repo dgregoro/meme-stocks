@@ -54,6 +54,15 @@ class PriceDataRepository:
         except SQLAlchemyError as exc:  # pragma: no cover
             raise DataAccessError("Failed to get max date") from exc
 
+    def list_dates_for_symbol(self, symbol: str) -> list[date]:
+        """Sorted ascending list of dates with a bar for symbol."""
+        stmt = select(PriceData.date).where(PriceData.stock_symbol == symbol).order_by(PriceData.date.asc())
+        try:
+            rows = self._session.execute(stmt).scalars().all()
+            return list(rows)
+        except SQLAlchemyError as exc:  # pragma: no cover
+            raise DataAccessError("Failed to list dates for symbol") from exc
+
     def list_in_date_range(self, start_date: date, end_date: date) -> Sequence[PriceData]:
         """List all price data rows where date is in [start_date, end_date], ordered by symbol, date."""
         stmt = (

@@ -35,6 +35,9 @@ deployment/.env
 /data/
 logs/
 
+# Local leader-follower evaluation dumps (repo root)
+lf_*.json
+
 # Node / frontend
 node_modules/
 npm-debug.log*

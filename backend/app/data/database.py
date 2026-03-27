@@ -264,6 +264,50 @@ def _migrate_create_leader_follower_candidates() -> None:
         )
 
 
+def _migrate_create_leader_debug_evaluations() -> None:
+    """Create leader_debug_evaluations table if it does not exist."""
+    import sqlite3
+
+    if ":memory:" in _db_url or "sqlite" not in _db_url.lower():
+        return
+    path = _db_url.replace("sqlite:///", "", 1).split("?")[0].strip()
+    if not path or path == ":memory:":
+        return
+    path = os.path.abspath(path)
+    if not os.path.exists(path):
+        return
+    try:
+        conn = sqlite3.connect(path)
+        cur = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='leader_debug_evaluations'")
+        if cur.fetchone() is None:
+            conn.execute(
+                """
+                CREATE TABLE leader_debug_evaluations (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    job_run_id INTEGER NOT NULL REFERENCES job_run_history(id),
+                    stock_symbol VARCHAR(16) NOT NULL,
+                    return_pct REAL,
+                    volume_ratio REAL,
+                    qualified_as_leader INTEGER NOT NULL,
+                    rejection_reasons TEXT NOT NULL,
+                    metrics_json TEXT,
+                    created_at DATETIME,
+                    UNIQUE(job_run_id, stock_symbol)
+                )
+                """
+            )
+            conn.execute(
+                "CREATE INDEX ix_leader_debug_evaluations_job_run_id " "ON leader_debug_evaluations(job_run_id)"
+            )
+        conn.commit()
+        conn.close()
+    except Exception as exc:
+        logger.warning(
+            "Migration leader_debug_evaluations failed: %s",
+            exc,
+        )
+
+
 def _migrate_drop_reddit_posts_stock_symbol() -> None:
     """Drop legacy stock_symbol column from reddit_posts if it exists.
 
@@ -303,3 +347,4 @@ def init_db() -> None:
     _migrate_notifications_add_signal_metadata()
     _migrate_leader_events_add_job_run_id()
     _migrate_create_leader_follower_candidates()
+    _migrate_create_leader_debug_evaluations()
