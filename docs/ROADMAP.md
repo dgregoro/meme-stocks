@@ -199,6 +199,7 @@ if alignment_score > COMBINED_SIGNAL_THRESHOLD and confidence > 0.7:
 | 3.7 | Leader-follower signal detection | specs/003 | ✅ Implemented |
 | 3.8 | Leader-follower paper trading simulation | specs/011 | ✅ Implemented |
 | 3.9 | Leader-follower walk-forward optimization (research) | specs/010-leader-follower-walk-forward-optimization | ✅ Implemented |
+| 3.10 | Leader-follower rolling walk-forward robustness (research) | specs/012-leader-follower-rolling-walk-forward-robustness | ✅ Implemented |
 
 ### 3.7 Leader-Follower Signal Detection ✅
 
@@ -231,6 +232,18 @@ if alignment_score > COMBINED_SIGNAL_THRESHOLD and confidence > 0.7:
 **CLI**: `python -m backend.app.cli optimize leader-follower --train-start ... --train-end ... --validate-start ... --validate-end ... [--test-start/--test-end] [--grid-file path.json]`
 
 **Notes**: Uses stored signals and `PaperTradingConfig` axes only (no per-cell detection replay). Example custom grid: `optimization_grid.json` at repo root. Interpret results cautiously—positive validation with negative test (or huge train drawdown) is a common fragility pattern.
+
+### 3.10 Leader-Follower Rolling Walk-Forward Robustness ✅
+
+**Purpose**: Many rolling train / validate / (optional) test splits over one overall range; same grid or explicit candidates evaluated on every split; cross-split aggregates and `rolling_robustness_v1` ranking (median validation + consistency, not single-split peak).
+
+**Spec**: `specs/012-leader-follower-rolling-walk-forward-robustness/`
+
+**API**: `GET /api/leader-follower/robustness/runs`, `GET /.../{run_id}`, `GET /.../{run_id}/top-results`, `GET /.../{run_id}/splits`
+
+**CLI**: `python -m backend.app.cli robustness leader-follower --overall-start ... --overall-end ... --train-window-months ... --validate-window-months ... --step-months ... [--test-window-months N] (--grid-file path.json | --candidates-file path.json)`
+
+**Config**: `leader_follower_robustness_max_evaluations` (cap `splits × candidates`); grid/candidate list size still bounded by `leader_follower_optimization_max_grid_points`.
 
 ### 3.0 Lead-Lag Evidence Endpoint ✅
 

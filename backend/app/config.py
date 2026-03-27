@@ -146,6 +146,9 @@ class Settings(BaseSettings):
     # Walk-forward optimization (010): cap Cartesian product size (research CLI)
     leader_follower_optimization_max_grid_points: int = 256
 
+    # Rolling robustness (012): cap splits × candidates (research CLI)
+    leader_follower_robustness_max_evaluations: int = 5000
+
     # Research API: dataset output and allowed paths for experiments
     research_dataset_dir: str = (
         "data/research"  # Output dir for build-dataset; experiments accept only paths under this
