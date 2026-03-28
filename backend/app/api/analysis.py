@@ -95,6 +95,7 @@ class InsufficientDataApiResponse(BaseModel):
     reason: str
     buckets_available: int
     min_required: int
+    notes: List[str] = []
 
 
 @router.get(
@@ -155,6 +156,7 @@ def get_causal_evidence(
             reason=result.reason,
             buckets_available=result.buckets_available,
             min_required=result.min_required,
+            notes=result.notes,
         )
 
     return CausalEvidenceApiResponse(

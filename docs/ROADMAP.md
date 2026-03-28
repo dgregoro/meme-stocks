@@ -2,7 +2,7 @@
 
 This roadmap organizes future development work into prioritized phases.
 
-**Last Updated**: February 1, 2026
+**Last Updated**: March 26, 2026
 
 ---
 
@@ -82,7 +82,7 @@ cd frontend && npm run dev
 | 2.2 | Add post body to sentiment analysis | PLAN.md tech debt | Medium | Not Started |
 | 2.3 | Add RSI indicator | PLAN.md tech debt, PRD FR-2.5 | Medium | Not Started |
 | 2.4 | Add volume confirmation to patterns | PLAN.md tech debt | Small | Not Started |
-| 2.5 | Implement combined-signal alerts | PLAN.md tech debt, PRD FR-3.7 | Medium | Not Started |
+| 2.5 | Implement combined-signal alerts | PLAN.md tech debt, PRD FR-3.7 | Medium | ✅ Complete |
 | 2.6 | Fix any deprecation warnings | Test output | Small | ✅ Done in Phase 1 |
 | 2.7 | Increase test coverage to 80%+ | Quality framework | Medium | Not Started |
 
@@ -196,6 +196,54 @@ if alignment_score > COMBINED_SIGNAL_THRESHOLD and confidence > 0.7:
 | 3.4 | Support/resistance level identification | FR-2.7 | Large |
 | 3.5 | Win rate calculation for paper trading | FR-5.6 | Small |
 | 3.6 | Sentiment momentum tracking | PRD §5 | Medium |
+| 3.7 | Leader-follower signal detection | specs/003 | ✅ Implemented |
+| 3.8 | Leader-follower paper trading simulation | specs/011 | ✅ Implemented |
+| 3.9 | Leader-follower walk-forward optimization (research) | specs/010-leader-follower-walk-forward-optimization | ✅ Implemented |
+| 3.10 | Leader-follower rolling walk-forward robustness (research) | specs/012-leader-follower-rolling-walk-forward-robustness | ✅ Implemented |
+
+### 3.7 Leader-Follower Signal Detection ✅
+
+**Purpose**: Detect significant leader moves, identify follower candidates in same group, emit opportunity signals.
+
+**Implemented**: March 2026. See `specs/003-leader-follower-signal-detection/`.
+
+**API**: `GET /api/leader-follower/signals` (limit, since_date, leader, group)
+
+**Scheduler**: `leader_follower_detection` job (gated by `leader_follower_enabled`; CronTrigger hour=17; max_instances=1, coalesce=True)
+
+### 3.8 Leader-Follower Paper Trading Simulation ✅
+
+**Purpose**: Simulate trades from historical leader-follower signals with configurable entry/exit, costs, and per-event position caps; report cumulative return and drawdown.
+
+**Spec**: `specs/011-leader-follower-execution-and-paper-trading/`
+
+**API**: `GET /api/leader-follower/paper-trading/runs`, `GET /.../{run_id}`, `GET /.../{run_id}/equity-curve`
+
+**CLI**: `python -m backend.app.cli simulate leader-follower --start ... --end ...`
+
+### 3.9 Leader-Follower Walk-Forward Optimization ✅
+
+**Purpose**: Research-only grid search over paper-trading parameters with explicit train / validate / optional test windows, robustness-first ranking (not peak in-sample return), persisted runs for inspection.
+
+**Spec**: `specs/010-leader-follower-walk-forward-optimization/`
+
+**API**: `GET /api/leader-follower/optimization/runs`, `GET /.../{run_id}`, `GET /.../{run_id}/top-results`
+
+**CLI**: `python -m backend.app.cli optimize leader-follower --train-start ... --train-end ... --validate-start ... --validate-end ... [--test-start/--test-end] [--grid-file path.json]`
+
+**Notes**: Uses stored signals and `PaperTradingConfig` axes only (no per-cell detection replay). Example custom grid: `optimization_grid.json` at repo root. Interpret results cautiously—positive validation with negative test (or huge train drawdown) is a common fragility pattern.
+
+### 3.10 Leader-Follower Rolling Walk-Forward Robustness ✅
+
+**Purpose**: Many rolling train / validate / (optional) test splits over one overall range; same grid or explicit candidates evaluated on every split; cross-split aggregates and `rolling_robustness_v1` ranking (median validation + consistency, not single-split peak).
+
+**Spec**: `specs/012-leader-follower-rolling-walk-forward-robustness/`
+
+**API**: `GET /api/leader-follower/robustness/runs`, `GET /.../{run_id}`, `GET /.../{run_id}/top-results`, `GET /.../{run_id}/splits`
+
+**CLI**: `python -m backend.app.cli robustness leader-follower --overall-start ... --overall-end ... --train-window-months ... --validate-window-months ... --step-months ... [--test-window-months N] (--grid-file path.json | --candidates-file path.json)`
+
+**Config**: `leader_follower_robustness_max_evaluations` (cap `splits × candidates`); grid/candidate list size still bounded by `leader_follower_optimization_max_grid_points`.
 
 ### 3.0 Lead-Lag Evidence Endpoint ✅
 
@@ -207,6 +255,8 @@ if alignment_score > COMBINED_SIGNAL_THRESHOLD and confidence > 0.7:
 - Cross-correlation by lag (mentions→returns, sentiment→returns)
 - Out-of-sample predictive regression metrics (R², directional accuracy)
 - Placebo test (shuffled predictor; result should drop)
+
+**UI (Phase 4 UX)**: Causal tab on symbol detail page; controls (days, freq, max_lag, include placebo); results tables; correlation vs lag chart.
 
 ### 3.1 Stock Categorization
 
@@ -442,6 +492,9 @@ Update this section as work completes:
 | 2026-01-31 | 1 | Add missing tests | ✅ | RedditSymbolMentionRepository tests |
 | 2026-02-01 | 2 | 2.1 Configurable sentiment keywords | ✅ | config.py + sentiment_analyzer.py |
 | 2026-02-01 | 2.5 | CLI implementation started | 🔄 | backend/cli/ scaffold |
+| 2026-03-04 | 4 | Causal UI (lead-lag tab on symbol detail) | ✅ | CausalPanel, fetchCausalEvidence, tab routing |
+| 2026-03-04 | 4 | 4A: Research API (build-dataset, experiments) | ✅ | backend/app/api/research.py, test_research_api.py |
+| 2026-03-04 | 4 | 4B: Research frontend page | ✅ | Research.tsx, nav + route, api client |
 
 ---
 

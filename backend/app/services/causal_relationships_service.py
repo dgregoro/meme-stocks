@@ -187,17 +187,19 @@ def run_causal_analysis(
     predictive = _predictive_metrics(mentions, sentiment, returns, max_lag)
 
     placebo: list[PlaceboResult] = []
+    notes: list[str] = list(getattr(ds, "notes", []) or [])
     if include_placebo:
         placebo = _placebo_metrics(mentions, sentiment, returns, max_lag)
-        notes: list[str] = []
+        placebo_notes: list[str] = []
         for pr in predictive:
             pb = next((p for p in placebo if p.metric == pr.metric), None)
             if pb and abs(pr.value - pb.value) < 0.01:
-                notes.append(f"Placebo {pr.metric} close to real; evidence may be weak")
-        if not notes:
-            notes.append("Placebo test: shuffled predictors yield lower metrics (expected)")
+                placebo_notes.append(f"Placebo {pr.metric} close to real; evidence may be weak")
+        if not placebo_notes:
+            placebo_notes.append("Placebo test: shuffled predictors yield lower metrics (expected)")
+        notes.extend(placebo_notes)
     else:
-        notes = ["Placebo test skipped"]
+        notes.append("Placebo test skipped")
 
     return CausalEvidenceResponse(
         symbol=ds.symbol,

@@ -1,7 +1,11 @@
 name: CI - Lint and Test
 
-# Runs after Security passes (workflow_run) so pipeline order is: Security → CI → Deploy.
+# Runs on every PR/push to main, and after Security (workflow_run) for full pipeline: Security → CI → Deploy.
 on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
   workflow_run:
     workflows: ["Security and Dependency Hygiene"]
     types:

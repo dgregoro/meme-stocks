@@ -24,7 +24,7 @@ def build_app_with_db():
     TestSessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
     session = TestSessionLocal()
 
-    app = create_app()
+    app = create_app(omit_scheduler=True)
 
     def override_get_session():
         db = TestSessionLocal()

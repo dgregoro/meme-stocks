@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from typing import Any, Mapping, Sequence
 
 from sqlalchemy import select
@@ -143,15 +143,107 @@ class JobExecutionRepository:
         except SQLAlchemyError as exc:  # pragma: no cover
             raise DataAccessError(f"Failed to record run for job {job_name}") from exc
 
+    def insert_run_start(self, job_name: str, started_at: datetime | None = None) -> int:
+        """Insert a run row at job start; return its id. Call complete_run to finish."""
+        import time
+
+        from sqlalchemy.exc import OperationalError
+
+        if started_at is None:
+            started_at = datetime.now(timezone.utc)
+        started_at = _as_utc_aware(started_at) or started_at
+        stmt = select(JobExecution).where(JobExecution.job_name == job_name)
+        last_exc: SQLAlchemyError | None = None
+        for attempt in range(4):  # 4 attempts: 0s, 1s, 2s, 3s delays
+            try:
+                existing = self._session.execute(stmt).scalar_one_or_none()
+                if existing:
+                    existing.last_run_at = started_at
+                    existing.updated_at = datetime.now(timezone.utc)
+                else:
+                    self._session.add(JobExecution(job_name=job_name, last_run_at=started_at))
+                history = JobRunHistory(
+                    job_name=job_name,
+                    run_at=started_at,
+                    started_at=started_at,
+                    success=False,
+                    error_message=None,
+                    summary=None,
+                    metrics_json=None,
+                )
+                self._session.add(history)
+                self._session.flush()
+                return history.id
+            except OperationalError as exc:
+                msg = str(getattr(exc, "orig", exc)).lower()
+                if "locked" in msg and attempt < 3:
+                    last_exc = exc
+                    self._session.rollback()
+                    time.sleep(1 + attempt)
+                    continue
+                raise DataAccessError(f"Failed to insert run start for {job_name}") from exc
+            except SQLAlchemyError as exc:  # pragma: no cover
+                raise DataAccessError(f"Failed to insert run start for {job_name}") from exc
+        if last_exc:
+            raise DataAccessError(f"Failed to insert run start for {job_name}") from last_exc
+        raise DataAccessError(f"Failed to insert run start for {job_name}")
+
+    def complete_run(
+        self,
+        run_id: int,
+        *,
+        success: bool = True,
+        run_at: datetime | None = None,
+        error_message: str | None = None,
+        duration_seconds: float | None = None,
+        summary: str | None = None,
+        metrics: Mapping[str, Any] | None = None,
+    ) -> None:
+        """Update a run row created by insert_run_start with final data."""
+        stmt = select(JobRunHistory).where(JobRunHistory.id == run_id)
+        try:
+            row = self._session.execute(stmt).scalar_one_or_none()
+            if row is None:
+                raise DataAccessError(f"Run id {run_id} not found")
+            if run_at is not None:
+                row.run_at = _as_utc_aware(run_at) or run_at
+            row.success = success
+            row.error_message = error_message[:500] if error_message else None
+            row.duration_seconds = duration_seconds
+            row.summary = _truncate_summary(summary)
+            if metrics is not None and len(metrics) > 0:
+                row.metrics_json = json.dumps(dict(metrics), separators=(",", ":"), sort_keys=True)
+            self._session.flush()
+        except SQLAlchemyError as exc:  # pragma: no cover
+            raise DataAccessError(f"Failed to complete run {run_id}") from exc
+
+    def get_run_by_id(self, run_id: int) -> JobRunHistory | None:
+        """Return the run with the given id, or None if not found."""
+        stmt = select(JobRunHistory).where(JobRunHistory.id == run_id)
+        try:
+            return self._session.execute(stmt).scalar_one_or_none()
+        except SQLAlchemyError as exc:  # pragma: no cover
+            raise DataAccessError(f"Failed to get run {run_id}") from exc
+
     def list_recent_runs(
         self,
         job_name: str | None = None,
         limit: int = 200,
+        since_date: date | None = None,
+        until_date: date | None = None,
     ) -> Sequence[JobRunHistory]:
-        """Return the last `limit` runs, most recent first. If job_name set, filter by job."""
+        """Return the last `limit` runs, most recent first. If job_name set, filter by job.
+        If since_date/until_date set, filter run_at to that date range (inclusive).
+        """
         stmt = select(JobRunHistory).order_by(JobRunHistory.run_at.desc()).limit(limit)
         if job_name is not None:
             stmt = stmt.where(JobRunHistory.job_name == job_name)
+        if since_date is not None:
+            since_dt = datetime.combine(since_date, time.min, tzinfo=timezone.utc)
+            stmt = stmt.where(JobRunHistory.run_at >= since_dt)
+        if until_date is not None:
+            until_end = datetime.combine(until_date + timedelta(days=1), time.min, tzinfo=timezone.utc)
+            stmt = stmt.where(JobRunHistory.run_at < until_end)
         try:
             result = self._session.execute(stmt)
             return result.scalars().all()

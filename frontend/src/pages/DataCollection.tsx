@@ -3,8 +3,10 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   api,
   type CollectionStatus,
+  type IntradayStatusResponse,
   type JobRunHistoryItem,
   type JobStatus,
+  type RunOnceResponse,
   type StaleSymbolStatus,
 } from '../services/api'
 import { LoadingSpinner } from '../components/LoadingSpinner'
@@ -14,6 +16,10 @@ type StatusFilter = 'all' | 'bad'
 
 export const DataCollection: React.FC = () => {
   const [status, setStatus] = useState<CollectionStatus | null>(null)
+  const [intradayStatus, setIntradayStatus] = useState<IntradayStatusResponse | null>(null)
+  const [intradayRunResult, setIntradayRunResult] = useState<RunOnceResponse | null>(null)
+  const [intradayRunError, setIntradayRunError] = useState<string | null>(null)
+  const [intradayRunning, setIntradayRunning] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [lastUpdatedIso, setLastUpdatedIso] = useState<string | null>(null)
@@ -31,19 +37,36 @@ export const DataCollection: React.FC = () => {
 
   const fetchStatus = () => {
     setError(null)
+    setIntradayRunError(null)
     Promise.all([
       api.getCollectionStatus(),
       api.getStaleSymbols(25),
       api.getJobRunsHistory(200),
+      api.getIntradayStatus().catch(() => null),
     ])
-      .then(([collection, stale, runs]) => {
+      .then(([collection, stale, runs, intraday]) => {
         setStatus(collection)
         setStaleSymbols(stale)
         setJobRunsHistory(runs)
+        setIntradayStatus(intraday ?? null)
         setLastUpdatedIso(new Date().toISOString())
       })
       .catch((e) => setError(String(e)))
       .finally(() => setLoading(false))
+  }
+
+  const runIntradayOnce = () => {
+    setIntradayRunning(true)
+    setIntradayRunError(null)
+    setIntradayRunResult(null)
+    api
+      .runIntradayOnce()
+      .then((res) => {
+        setIntradayRunResult(res)
+        fetchStatus()
+      })
+      .catch((e) => setIntradayRunError(String(e)))
+      .finally(() => setIntradayRunning(false))
   }
 
   useEffect(() => {
@@ -292,6 +315,83 @@ export const DataCollection: React.FC = () => {
             </div>
           </div>
         </div>
+
+        {intradayStatus && (
+          <div style={{ ...cardStyle, minWidth: 280 }}>
+            <h3 style={{ marginTop: 0, marginBottom: 4 }}>Intraday ingestion</h3>
+            <div style={{ fontSize: 14, marginBottom: 8 }}>
+              <div>
+                Feed: <strong>{intradayStatus.alpaca_feed}</strong>
+                {intradayStatus.free_plan_mode && (
+                  <span style={{ marginLeft: 8, color: '#6b7280' }}>
+                    (free plan, lag {intradayStatus.effective_data_lag_minutes}m)
+                  </span>
+                )}
+              </div>
+              <div>
+                Newest last_ts: <strong>{formatTime(intradayStatus.newest_last_ts) ?? '—'}</strong>
+              </div>
+              <div>
+                Oldest last_ts: <strong>{formatTime(intradayStatus.oldest_last_ts) ?? '—'}</strong>
+              </div>
+              {intradayStatus.latest_run && (
+                <div style={{ marginTop: 4 }}>
+                  Latest run: <strong>{intradayStatus.latest_run.bars_written ?? 0}</strong> bars,{' '}
+                  <strong>{intradayStatus.latest_run.errors_count ?? 0}</strong> errors
+                </div>
+              )}
+              {Object.keys(intradayStatus.counts_by_status ?? {}).length > 0 && (
+                <div style={{ marginTop: 4, fontSize: 12, color: '#6b7280' }}>
+                  {Object.entries(intradayStatus.counts_by_status).map(([k, v]) => (
+                    <span key={k} style={{ marginRight: 8 }}>
+                      {k}: {v}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={runIntradayOnce}
+              disabled={intradayRunning || intradayStatus.lock?.held}
+              style={{
+                padding: '6px 12px',
+                borderRadius: 6,
+                border: '1px solid #6366f1',
+                background: '#6366f1',
+                color: '#fff',
+                fontWeight: 500,
+                cursor: intradayRunning || intradayStatus.lock?.held ? 'not-allowed' : 'pointer',
+              }}
+            >
+              {intradayRunning
+                ? 'Running…'
+                : intradayStatus.lock?.held
+                  ? 'Running'
+                  : 'Run intraday ingestion once'}
+            </button>
+            {intradayRunResult && (
+              <div style={{ marginTop: 8, fontSize: 13, padding: 8, backgroundColor: '#f0fdf4', borderRadius: 6 }}>
+                Bars written: <strong>{intradayRunResult.bars_written}</strong>, symbols:{' '}
+                {intradayRunResult.symbols_processed}, errors: {intradayRunResult.errors_count}
+              </div>
+            )}
+            {intradayRunError && (
+              <div
+                style={{
+                  marginTop: 8,
+                  fontSize: 13,
+                  padding: 8,
+                  backgroundColor: '#fef2f2',
+                  color: '#b91c1c',
+                  borderRadius: 6,
+                }}
+              >
+                {intradayRunError}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <section aria-label="Job execution status">

@@ -41,11 +41,41 @@ def sample_stock(db_session):
     return stock
 
 
-def test_scheduler_service_initialization():
+@patch("backend.app.services.scheduler_service.YahooFinanceService")
+@patch("backend.app.services.scheduler_service.RedditService")
+def test_scheduler_service_initialization(mock_reddit, mock_yahoo):
     """Test that scheduler service initializes correctly."""
     scheduler = SchedulerService()
     assert scheduler._scheduler is not None
     assert scheduler._settings is not None
+
+
+@patch("backend.app.services.scheduler_service.get_settings")
+@patch("backend.app.services.scheduler_service.YahooFinanceService")
+def test_collect_reddit_data_skipped_when_credentials_missing(mock_yahoo, mock_get_settings, db_session):
+    """When Reddit credentials are empty, Reddit collection returns zero stats without calling API."""
+    from backend.app.services.job_metrics import (
+        REDDIT_POSTS_FETCHED,
+        REDDIT_POSTS_INSERTED,
+        REDDIT_SYMBOLS_MENTIONED,
+        REDDIT_STOCKS_CREATED,
+    )
+
+    mock_settings = MagicMock()
+    mock_settings.reddit_client_id = ""
+    mock_settings.reddit_client_secret = ""
+    mock_settings.reddit_subreddits = "wallstreetbets"
+    mock_get_settings.return_value = mock_settings
+
+    scheduler = SchedulerService()
+    assert scheduler._reddit_service is None
+
+    stats = scheduler._collect_reddit_data(db_session)
+
+    assert stats[REDDIT_POSTS_FETCHED] == 0
+    assert stats[REDDIT_POSTS_INSERTED] == 0
+    assert stats[REDDIT_SYMBOLS_MENTIONED] == 0
+    assert stats[REDDIT_STOCKS_CREATED] == 0
 
 
 def test_job_execution_repository_get_last_run_none(db_session):
@@ -157,7 +187,8 @@ def test_collect_reddit_data_with_tickers(mock_yahoo, mock_reddit_class, db_sess
 
 
 @patch("backend.app.services.scheduler_service.YahooFinanceService")
-def test_collect_price_data(mock_yahoo_class, db_session, sample_stock):
+@patch("backend.app.services.scheduler_service.RedditService")
+def test_collect_price_data(mock_yahoo_class, mock_reddit_class, db_session, sample_stock):
     """Test price data collection."""
     from backend.app.services.yahoo_service import PriceBar
 
@@ -204,7 +235,9 @@ def test_collect_price_data(mock_yahoo_class, db_session, sample_stock):
     assert len(prices) == 2
 
 
-def test_catch_up_runs_missed_jobs(db_session, sample_stock):
+@patch("backend.app.services.scheduler_service.YahooFinanceService")
+@patch("backend.app.services.scheduler_service.RedditService")
+def test_catch_up_runs_missed_jobs(mock_yahoo_class, mock_reddit_class, db_session, sample_stock):
     """Test that catch-up runs missed jobs."""
     scheduler = SchedulerService()
 
@@ -261,8 +294,12 @@ def test_catch_up_runs_missed_jobs(db_session, sample_stock):
         mock_notif.assert_not_called()
 
 
+@patch("backend.app.services.scheduler_service.YahooFinanceService")
+@patch("backend.app.services.scheduler_service.RedditService")
 @patch("backend.app.services.scheduler_service.SessionLocal")
-def test_collect_reddit_data_job_calls_record_run_with_metrics(mock_session_local, db_session):
+def test_collect_reddit_data_job_calls_record_run_with_metrics(
+    mock_session_local, mock_reddit_class, mock_yahoo_class, db_session
+):
     """Reddit collection job wrapper calls record_run with metrics including posts_inserted."""
     mock_session_local.return_value = db_session
 
@@ -291,7 +328,9 @@ def test_collect_reddit_data_job_calls_record_run_with_metrics(mock_session_loca
     assert parsed["symbols_mentioned"] == 88
 
 
-def test_scheduler_start_and_shutdown():
+@patch("backend.app.services.scheduler_service.YahooFinanceService")
+@patch("backend.app.services.scheduler_service.RedditService")
+def test_scheduler_start_and_shutdown(mock_yahoo_class, mock_reddit_class):
     """Test scheduler start and shutdown."""
     scheduler = SchedulerService()
 

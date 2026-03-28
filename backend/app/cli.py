@@ -5,15 +5,32 @@ Invoke with: python -m backend.app.cli build-dataset --start 2026-01-01 --end 20
 
 from __future__ import annotations
 
+import copy
 from datetime import date
-from typing import Literal
+from typing import Literal, cast
 
 import typer
 
 from backend.app.data.database import SessionLocal, init_db
 
-# Import all models so init_db can create all tables (FK dependencies)
+# Import all models so init_db can create all tables (FK dependencies, migrations)
 from backend.app.models import (  # noqa: F401
+    intraday_ingest_run,
+    intraday_ingest_state,
+    job_execution,
+    job_lock,
+    job_run_history,
+    leader_event,
+    leader_follower_candidate,
+    leader_follower_optimization_result,
+    leader_follower_optimization_run,
+    leader_follower_robustness_aggregate,
+    leader_follower_robustness_run,
+    leader_follower_robustness_split_result,
+    leader_follower_paper_run,
+    leader_follower_paper_trade,
+    leader_follower_signal,
+    notification,
     paper_trade,
     price_data,
     price_labels,
@@ -21,6 +38,8 @@ from backend.app.models import (  # noqa: F401
     reddit_post,
     reddit_symbol_mention,
     stock,
+    stock_group,
+    symbol_universe,
 )
 from backend.app.services.dataset_builder_service import build_training_dataset
 from backend.app.services.experiments.directionality import run_directionality
@@ -37,8 +56,23 @@ app = typer.Typer(
 build_dataset_app = typer.Typer(invoke_without_command=True)
 app.add_typer(build_dataset_app, name="build-dataset")
 
+seed_app = typer.Typer(help="Bootstrap and seed data.")
+app.add_typer(seed_app, name="seed")
+
 experiment_app = typer.Typer(help="Run causal research experiments.")
 app.add_typer(experiment_app, name="experiment")
+
+backfill_app = typer.Typer(help="Historical backfill for leader-follower signals.")
+app.add_typer(backfill_app, name="backfill")
+
+simulate_app = typer.Typer(help="Simulate leader-follower paper trading from signals + price data.")
+app.add_typer(simulate_app, name="simulate")
+
+optimize_app = typer.Typer(help="Walk-forward optimization over paper-trading parameters (research).")
+app.add_typer(optimize_app, name="optimize")
+
+robustness_app = typer.Typer(help="Rolling walk-forward robustness evaluation (research).")
+app.add_typer(robustness_app, name="robustness")
 
 
 def _parse_date(s: str) -> date:
@@ -87,6 +121,281 @@ def build_dataset(
         )
         typer.echo(f"Labels: {label_stats['rows_upserted']} rows (horizons 1/5/10)")
         typer.echo(f"Dataset: {ds_stats['rows_written']} rows written to {out}")
+    finally:
+        db.close()
+
+
+@seed_app.command("stocks")
+def seed_stocks() -> None:
+    """Seed stocks table with symbols from BOOTSTRAP_GROUPS. Idempotent; run before stock-groups."""
+    from backend.app.services.stock_seed_service import seed_stocks_for_bootstrap
+
+    init_db()
+    db = SessionLocal()
+    try:
+        result = seed_stocks_for_bootstrap(db)
+        db.commit()
+        typer.echo(f"Stocks seeded: {result['created']} created, {result['total'] - result['created']} already existed")
+    finally:
+        db.close()
+
+
+@seed_app.command("stock-groups")
+def seed_stock_groups() -> None:
+    """Seed stock_groups with curated bootstrap data. Idempotent; run 'seed stocks' first."""
+    from backend.app.services.stock_group_seed_service import run_bootstrap_seed
+
+    init_db()
+    db = SessionLocal()
+    try:
+        result = run_bootstrap_seed(db)
+        db.commit()
+        typer.echo(
+            f"Stock groups seeded: {result['groups_inserted']} inserted, "
+            f"{result['groups_skipped']} skipped (already existed)"
+        )
+        if result["stocks_created"] > 0:
+            typer.echo(f"Created {result['stocks_created']} missing stocks for FK integrity")
+        if result["symbols_skipped"]:
+            typer.echo("Skipped (with warnings):")
+            for s in result["symbols_skipped"]:
+                typer.echo(f"  - {s}")
+    finally:
+        db.close()
+
+
+@backfill_app.command("leader-follower")
+def backfill_leader_follower(
+    start: str = typer.Option(..., "--start", "-s", help="Start date (YYYY-MM-DD)"),
+    end: str = typer.Option(..., "--end", "-e", help="End date (YYYY-MM-DD)"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Compute metrics only; do not persist signals"),
+    replace_range: bool = typer.Option(
+        False, "--replace-range", help="Delete existing signals in [start,end] before replay"
+    ),
+) -> None:
+    """Replay leader-follower detection for a historical date range.
+
+    Uses Alpaca daily bars to backfill PriceData, then runs detection per date.
+    Requires: stock_groups seeded, Alpaca API keys configured.
+    """
+    from backend.app.utils.errors import ExternalAPIError
+
+    start_d = _parse_date(start)
+    end_d = _parse_date(end)
+    if start_d > end_d:
+        typer.echo("Error: start_date must be <= end_date", err=True)
+        raise typer.Exit(1)
+
+    init_db()
+    db = SessionLocal()
+    try:
+        from backend.app.services.leader_follower_replay_service import run_backfill
+
+        result = run_backfill(
+            db,
+            start_d,
+            end_d,
+            dry_run=dry_run,
+            persist=not dry_run,
+            replace_range=replace_range,
+        )
+        typer.echo(f"Backfill leader-follower: {start_d} to {end_d}")
+        typer.echo(f"Days processed: {result['days_processed']}")
+        typer.echo(f"Days skipped: {result['days_skipped']}")
+        typer.echo(f"Leaders detected: {result['leaders_detected']}")
+        typer.echo(f"Candidates found: {result['candidates_found']}")
+        typer.echo(f"Signals emitted: {result['signals_emitted']}")
+        typer.echo(f"Signals skipped (duplicate): {result['signals_skipped_duplicate']}")
+        if result.get("missing_data_warnings"):
+            typer.echo("Warnings: " + ", ".join(result["missing_data_warnings"]))
+        if result.get("errors"):
+            typer.echo("Errors: " + "; ".join(result["errors"][:5]))
+            if len(result["errors"]) > 5:
+                typer.echo(f"  ... and {len(result['errors']) - 5} more")
+            raise typer.Exit(2)
+    except ExternalAPIError as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(2)
+    finally:
+        db.close()
+
+
+@simulate_app.command("leader-follower")
+def simulate_leader_follower(
+    start: str = typer.Option(..., "--start", "-s", help="Start date (YYYY-MM-DD)"),
+    end: str = typer.Option(..., "--end", "-e", help="End date (YYYY-MM-DD)"),
+    entry: str = typer.Option("next_open", "--entry", help="next_open | same_close"),
+    exit_mode: str = typer.Option("fixed_days", "--exit", help="fixed_days | early_exit"),
+    holding_days: int = typer.Option(3, "--holding_days", help="Trading days to hold (fixed exit)"),
+    max_positions_per_event: int = typer.Option(2, "--max_positions_per_event"),
+    cost_pct: float = typer.Option(0.1, "--cost_pct", help="Round-trip cost in percentage points"),
+    min_pair_score: float | None = typer.Option(None, "--min_pair_score"),
+) -> None:
+    """Run paper-trading simulation; persists a run and trades for API inspection."""
+    from backend.app.services.leader_follower_paper_trading_service import (
+        EntryMode,
+        ExitMode,
+        PaperTradingConfig,
+        run_paper_trading_simulation,
+    )
+
+    if entry not in ("next_open", "same_close"):
+        typer.echo("Error: --entry must be next_open or same_close", err=True)
+        raise typer.Exit(1)
+    if exit_mode not in ("fixed_days", "early_exit"):
+        typer.echo("Error: --exit must be fixed_days or early_exit", err=True)
+        raise typer.Exit(1)
+
+    start_d = _parse_date(start)
+    end_d = _parse_date(end)
+    if start_d > end_d:
+        typer.echo("Error: start_date must be <= end_date", err=True)
+        raise typer.Exit(1)
+
+    cfg = PaperTradingConfig(
+        entry_mode=cast(EntryMode, entry),
+        exit_mode=cast(ExitMode, exit_mode),
+        holding_days=holding_days,
+        max_positions_per_event=max_positions_per_event,
+        min_pair_score=min_pair_score,
+        per_trade_cost_pct=cost_pct,
+    )
+
+    init_db()
+    db = SessionLocal()
+    try:
+        run = run_paper_trading_simulation(db, start_d, end_d, cfg)
+        typer.echo(f"Paper trading run id={run.id}")
+        typer.echo(f"  trades={run.total_trades} skipped={run.skipped_count}")
+        typer.echo(f"  cumulative_return_pct={run.cumulative_return_pct:.4f}")
+        typer.echo(f"  max_drawdown_pct={run.max_drawdown_pct:.4f}")
+        typer.echo(f"  win_rate={run.win_rate:.4f} avg_return_pct={run.avg_return_pct:.4f}")
+    finally:
+        db.close()
+
+
+@optimize_app.command("leader-follower")
+def optimize_leader_follower(
+    train_start: str = typer.Option(..., "--train-start", help="Train window start (YYYY-MM-DD)"),
+    train_end: str = typer.Option(..., "--train-end", help="Train window end (YYYY-MM-DD)"),
+    validate_start: str = typer.Option(..., "--validate-start"),
+    validate_end: str = typer.Option(..., "--validate-end"),
+    test_start: str | None = typer.Option(None, "--test-start"),
+    test_end: str | None = typer.Option(None, "--test-end"),
+    grid_file: str | None = typer.Option(
+        None,
+        "--grid-file",
+        help="JSON grid file (base_config, grid, ranking); default uses built-in small grid",
+    ),
+) -> None:
+    """Run walk-forward grid search; persists optimization run + ranked results."""
+    from backend.app.services.leader_follower_walk_forward_service import (
+        DEFAULT_GRID_FILE_PAYLOAD,
+        WalkForwardValidationError,
+        read_optimization_grid_file,
+        run_walk_forward_optimization,
+    )
+
+    train_s = _parse_date(train_start)
+    train_e = _parse_date(train_end)
+    val_s = _parse_date(validate_start)
+    val_e = _parse_date(validate_end)
+    test_s = _parse_date(test_start) if test_start else None
+    test_e = _parse_date(test_end) if test_end else None
+
+    grid_payload = copy.deepcopy(DEFAULT_GRID_FILE_PAYLOAD)
+    if grid_file:
+        try:
+            grid_payload = read_optimization_grid_file(grid_file)
+        except OSError as e:
+            typer.echo(f"Error reading grid file: {e}", err=True)
+            raise typer.Exit(1) from e
+
+    init_db()
+    db = SessionLocal()
+    try:
+        run = run_walk_forward_optimization(
+            db,
+            train_start=train_s,
+            train_end=train_e,
+            validate_start=val_s,
+            validate_end=val_e,
+            test_start=test_s,
+            test_end=test_e,
+            grid_payload=grid_payload,
+        )
+        typer.echo(f"Optimization run id={run.id} ranking={run.ranking_method}")
+    except WalkForwardValidationError as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(1) from e
+    finally:
+        db.close()
+
+
+@robustness_app.command("leader-follower")
+def robustness_leader_follower(
+    overall_start: str = typer.Option(..., "--overall-start", help="Overall range start (YYYY-MM-DD)"),
+    overall_end: str = typer.Option(..., "--overall-end", help="Overall range end (YYYY-MM-DD)"),
+    train_window_months: int = typer.Option(..., "--train-window-months", ge=1),
+    validate_window_months: int = typer.Option(..., "--validate-window-months", ge=1),
+    step_months: int = typer.Option(..., "--step-months", ge=1),
+    test_window_months: int | None = typer.Option(
+        None,
+        "--test-window-months",
+        help="Optional forward test window length in calendar months",
+    ),
+    grid_file: str | None = typer.Option(None, "--grid-file", help="JSON grid file (base_config, grid, ranking)"),
+    candidates_file: str | None = typer.Option(
+        None, "--candidates-file", help="JSON file with base_config + candidates list + ranking"
+    ),
+) -> None:
+    """Run rolling robustness across many splits; persists per-split rows and aggregate ranks."""
+    from backend.app.services.leader_follower_rolling_robustness_service import (
+        RollingRobustnessValidationError,
+        read_rolling_robustness_file,
+        run_rolling_robustness_evaluation,
+    )
+
+    if bool(grid_file) == bool(candidates_file):
+        typer.echo("Error: provide exactly one of --grid-file or --candidates-file", err=True)
+        raise typer.Exit(1)
+
+    path: str = grid_file if grid_file else (candidates_file or "")
+    if not path:
+        typer.echo("Error: missing grid or candidates file path", err=True)
+        raise typer.Exit(1)
+    try:
+        payload = read_rolling_robustness_file(path)
+    except OSError as e:
+        typer.echo(f"Error reading file: {e}", err=True)
+        raise typer.Exit(1) from e
+    except RollingRobustnessValidationError as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(1) from e
+
+    o_s = _parse_date(overall_start)
+    o_e = _parse_date(overall_end)
+    if o_s > o_e:
+        typer.echo("Error: overall_start must be <= overall_end", err=True)
+        raise typer.Exit(1)
+
+    init_db()
+    db = SessionLocal()
+    try:
+        run = run_rolling_robustness_evaluation(
+            db,
+            overall_start=o_s,
+            overall_end=o_e,
+            train_months=train_window_months,
+            validate_months=validate_window_months,
+            test_months=test_window_months,
+            step_months=step_months,
+            source_payload=payload,
+        )
+        typer.echo(f"Robustness run id={run.id} splits={run.split_count} ranking={run.ranking_method}")
+    except RollingRobustnessValidationError as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(1) from e
     finally:
         db.close()
 

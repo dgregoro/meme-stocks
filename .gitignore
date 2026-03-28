@@ -29,10 +29,14 @@ venv/
 
 # Env files (secrets - do not commit)
 .env
+deployment/.env
 
 # Data & logs
 /data/
 logs/
+
+# Local leader-follower evaluation dumps (repo root)
+lf_*.json
 
 # Node / frontend
 node_modules/

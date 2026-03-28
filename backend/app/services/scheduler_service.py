@@ -29,6 +29,7 @@ from backend.app.services.job_metrics import (
     REDDIT_SYMBOLS_MENTIONED,
 )
 from backend.app.services.notification_service import generate_notifications_for_stock
+from backend.app.services.leader_follower_service import run_detection
 from backend.app.services.reddit_daily_feature_service import compute_and_store_reddit_daily_features
 from backend.app.services.reddit_service import RedditService
 from backend.app.services.yahoo_service import YahooFinanceService
@@ -49,8 +50,22 @@ class SchedulerService:
     def __init__(self) -> None:
         self._scheduler = BackgroundScheduler()
         self._settings = get_settings()
-        self._reddit_service = RedditService()
+        self._reddit_service: RedditService | None
+        if self._reddit_configured():
+            self._reddit_service = RedditService()
+        else:
+            self._reddit_service = None
+            logger.info(
+                "Reddit credentials not configured (REDDIT_CLIENT_ID/CLIENT_SECRET); "
+                "Reddit collection will be skipped"
+            )
         self._yahoo_service = YahooFinanceService()
+
+    def _reddit_configured(self) -> bool:
+        """Return True if Reddit API credentials are present and non-empty."""
+        sid = self._settings.reddit_client_id
+        sec = self._settings.reddit_client_secret
+        return bool(sid and sec)
 
     def start(self) -> None:
         """Start the scheduler; run catch-up in background if enabled."""
@@ -321,6 +336,21 @@ class SchedulerService:
             misfire_grace_time=3600,
         )
 
+        # Leader-follower signal detection (when enabled; once per day)
+        if getattr(self._settings, "leader_follower_enabled", False):
+            self._scheduler.add_job(
+                self._leader_follower_detection_job,
+                trigger=CronTrigger(
+                    hour=getattr(self._settings, "leader_follower_job_hour", 17),
+                    minute=0,
+                ),
+                id="leader_follower_detection",
+                replace_existing=True,
+                max_instances=1,
+                coalesce=True,
+                misfire_grace_time=1800,
+            )
+
     def _collect_reddit_data_job(self) -> None:
         """Scheduled job wrapper for Reddit collection."""
         db = SessionLocal()
@@ -378,6 +408,10 @@ class SchedulerService:
             REDDIT_SYMBOLS_MENTIONED: 0,
             REDDIT_STOCKS_CREATED: 0,
         }
+
+        if self._reddit_service is None:
+            logger.debug("Skipping Reddit collection: credentials not configured")
+            return stats
 
         try:
             subreddits = [s.strip() for s in self._settings.reddit_subreddits.split(",")]
@@ -548,6 +582,9 @@ class SchedulerService:
                     )
                     price_repo.add(price_data)
                     saved_count += 1
+
+            # Commit after each stock to release DB lock (allows other jobs e.g. leader-follower to write)
+            db.commit()
 
         logger.info(f"Saved {saved_count} price data points")
         return {
@@ -732,6 +769,61 @@ class SchedulerService:
             duration = (finished_at - started_at).total_seconds()
             self._record_job_failure(
                 "reddit_daily_features",
+                exc,
+                started_at=started_at,
+                finished_at=finished_at,
+                duration_seconds=duration,
+            )
+        finally:
+            db.close()
+
+    def _leader_follower_detection_job(self) -> None:
+        """Scheduled job: detect leaders, select followers, create signals."""
+        db = SessionLocal()
+        started_at = datetime.now(timezone.utc)
+        job_repo = JobExecutionRepository(db)
+        run_id = job_repo.insert_run_start("leader_follower_detection", started_at=started_at)
+        db.commit()  # Persist run row so it survives rollback on failure
+        try:
+            # Warn if stock_groups empty; follower candidates will be zero
+            from backend.app.data.repositories.stock_group_repo import StockGroupRepository
+
+            sg_repo = StockGroupRepository(db)
+            if sg_repo.count_total() == 0:
+                logger.warning(
+                    "stock_groups is empty; leader detection may work but follower "
+                    "candidate generation will return zero. Run: python -m backend.app.cli seed stock-groups"
+                )
+            metrics = run_detection(db, run_id=run_id)
+            finished_at = datetime.now(timezone.utc)
+            duration = (finished_at - started_at).total_seconds()
+            leaders = metrics.get("leader_events_detected", 0)
+            signals = metrics.get("signals_emitted", 0)
+            summary = f"leader-follower: {leaders} leaders, {signals} signals"
+            job_repo.complete_run(
+                run_id,
+                success=True,
+                run_at=finished_at,
+                duration_seconds=duration,
+                summary=summary,
+                metrics=metrics,
+            )
+            db.commit()
+        except Exception as exc:
+            logger.error("Error in leader-follower detection job: %s", exc, exc_info=True)
+            db.rollback()
+            finished_at = datetime.now(timezone.utc)
+            duration = (finished_at - started_at).total_seconds()
+            job_repo.complete_run(
+                run_id,
+                success=False,
+                run_at=finished_at,
+                duration_seconds=duration,
+                error_message=str(exc)[:500],
+            )
+            db.commit()
+            self._record_job_failure(
+                "leader_follower_detection",
                 exc,
                 started_at=started_at,
                 finished_at=finished_at,

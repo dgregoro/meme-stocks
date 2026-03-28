@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -20,6 +21,17 @@ from .models import (  # noqa: F401
     job_execution,
     job_lock,
     job_run_history,
+    leader_debug_evaluation,
+    leader_event,
+    leader_follower_candidate,
+    leader_follower_optimization_result,
+    leader_follower_optimization_run,
+    leader_follower_robustness_aggregate,
+    leader_follower_robustness_run,
+    leader_follower_robustness_split_result,
+    leader_follower_paper_run,
+    leader_follower_paper_trade,
+    leader_follower_signal,
     notification,
     paper_trade,
     price_data,
@@ -28,6 +40,7 @@ from .models import (  # noqa: F401
     reddit_post,
     reddit_symbol_mention,
     stock,
+    stock_group,
     symbol_universe,
 )
 from .api import stocks as stocks_api
@@ -39,6 +52,12 @@ from .api import paper_trading as paper_trading_api
 from .api import jobs as jobs_api
 from .api import symbol_universe as symbol_universe_api
 from .api import intraday as intraday_api
+from .api import leader_follower as leader_follower_api
+from .api import leader_follower_optimization as leader_follower_optimization_api
+from .api import leader_follower_robustness as leader_follower_robustness_api
+from .api import leader_follower_paper_trading as leader_follower_paper_trading_api
+from .api import research as research_api
+from .api import stock_groups as stock_groups_api
 from .services.scheduler_service import SchedulerService
 
 
@@ -60,12 +79,10 @@ def _make_lifespan(
         try:
             from backend.app.data.repositories.job_lock_repo import JobLockRepository
 
-            repo = JobLockRepository(db)
-            n = repo.clear_lock_by_name(lock_name)
+            lock_repo = JobLockRepository(db)
+            n = lock_repo.clear_lock_by_name(lock_name)
             db.commit()
             if n:
-                import logging
-
                 logging.getLogger(__name__).info("Cleared stale job lock %s on startup (process restarted)", lock_name)
         finally:
             db.close()
@@ -79,6 +96,22 @@ def _make_lifespan(
         if scheduler is not None:
             jobs_api.set_scheduler(scheduler)
             app.state.scheduler = scheduler
+
+        # Warn if leader-follower enabled but stock_groups empty
+        settings = get_settings()
+        if getattr(settings, "leader_follower_enabled", False):
+            from backend.app.data.repositories.stock_group_repo import StockGroupRepository
+
+            db = SessionLocal()
+            try:
+                group_repo = StockGroupRepository(db)
+                if group_repo.count_total() == 0:
+                    logging.getLogger(__name__).warning(
+                        "stock_groups is empty; leader detection may work but follower "
+                        "candidate generation will return zero. Run: python -m backend.app.cli seed stock-groups"
+                    )
+            finally:
+                db.close()
 
         yield
 
@@ -142,6 +175,12 @@ def create_app(
     app.include_router(jobs_api.router)
     app.include_router(symbol_universe_api.router)
     app.include_router(intraday_api.router)
+    app.include_router(leader_follower_api.router)
+    app.include_router(leader_follower_paper_trading_api.router)
+    app.include_router(leader_follower_optimization_api.router)
+    app.include_router(leader_follower_robustness_api.router)
+    app.include_router(research_api.router)
+    app.include_router(stock_groups_api.router)
 
     # Serve frontend static files when running in container (SERVING_FRONTEND=true)
     if os.getenv("SERVING_FRONTEND", "").lower() in ("true", "1", "yes"):

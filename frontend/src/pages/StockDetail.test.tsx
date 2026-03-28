@@ -10,6 +10,7 @@ vi.mock('../services/api', () => ({
     getPrices: vi.fn(),
     getMentions: vi.fn(),
   },
+  fetchCausalEvidence: vi.fn(),
 }))
 
 const api = apiModule.api
@@ -66,5 +67,29 @@ describe('StockDetail', () => {
     renderStockDetail('XYZ')
     await waitFor(() => { expect(screen.getByText(/Error:/)).toBeInTheDocument() })
     expect(screen.getByRole('alert')).toHaveTextContent('Network error')
+  })
+
+  it('shows Causal tab and Run button when Causal tab selected', async () => {
+    vi.mocked(apiModule.fetchCausalEvidence).mockResolvedValue({
+      symbol: 'AAPL',
+      freq: '1h',
+      start_utc: '2026-01-01T00:00:00Z',
+      end_utc: '2026-02-01T00:00:00Z',
+      sample_size: 100,
+      mention_xcorr: [{ lag: 1, corr: 0.1, n: 100 }],
+      sentiment_xcorr: [{ lag: 2, corr: 0.05, n: 100 }],
+      predictive: [{ metric: 'r2_oos', value: 0.02 }],
+      placebo: [{ metric: 'r2_oos', value: 0.0 }],
+      notes: [],
+    })
+    render(
+      <MemoryRouter initialEntries={['/stocks/AAPL?tab=causal']}>
+        <Routes>
+          <Route path="/stocks/:symbol" element={<StockDetail />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+    await waitFor(() => { expect(screen.getByRole('button', { name: /run/i })).toBeInTheDocument() })
+    expect(screen.getByText(/Lead–lag evidence/)).toBeInTheDocument()
   })
 })

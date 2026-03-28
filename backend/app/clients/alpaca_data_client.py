@@ -80,6 +80,13 @@ def compute_safe_end_time(
     return now_utc
 
 
+def _feed_for_bars(feed: str) -> str:
+    """Normalize feed for historical bars endpoint. delayed_sip is invalid (400); use iex."""
+    if feed == "delayed_sip":
+        return "iex"
+    return feed
+
+
 class AlpacaDataClient:
     """Client for Alpaca minute-bar data. Uses compute_safe_end_time for all requests."""
 
@@ -96,7 +103,7 @@ class AlpacaDataClient:
     ) -> None:
         self._free_plan_mode = free_plan_mode
         self._end_time_safety_minutes = end_time_safety_minutes
-        self._feed = feed
+        self._feed = _feed_for_bars(feed)
         self._api_key_id = api_key_id
         self._api_secret_key = api_secret_key
         self._base_url = base_url.rstrip("/")
@@ -126,10 +133,8 @@ class AlpacaDataClient:
     ) -> list[dict]:
         """Fetch minute bars for symbol from start to end (both UTC).
 
-        Callers must pass end <= compute_safe_end_time(now) when free_plan_mode
-        is True; the ingestion service enforces this. This method does not
-        clamp end so that the single source of truth for safe end is
-        compute_safe_end_time.
+        When free_plan_mode is True, the request end time is clamped to the
+        client's safe end time inside fetch_bars_page().
 
         Returns a list of bar dicts (open, high, low, close, volume, timestamp).
         Implementation may be stubbed until Alpaca API integration is added.
@@ -161,7 +166,7 @@ class AlpacaDataClient:
         """
         from datetime import timezone
 
-        feed = feed or self._feed
+        feed = _feed_for_bars(feed or self._feed)
         now_utc = datetime.now(timezone.utc)
         end = self._effective_end(end, now_utc)
 
@@ -187,6 +192,7 @@ class AlpacaDataClient:
 
         last_exc: Exception | None = None
         resp: requests.Response | None = None
+        last_feed = feed
         for attempt in range(ALPACA_MAX_RETRIES):
             if self._min_interval > 0:
                 elapsed = time.time() - self._last_request_time
@@ -202,6 +208,16 @@ class AlpacaDataClient:
                     bars = data.get("bars", {})
                     next_token = data.get("next_page_token")
                     return bars, next_token if next_token else None
+                if resp.status_code == 400 and "invalid feed" in (resp.text or "").lower():
+                    if last_feed != "iex":
+                        logger.warning(
+                            "Alpaca bars invalid feed=%s (400); retrying with feed=iex",
+                            last_feed,
+                        )
+                        last_feed = "iex"
+                        params["feed"] = "iex"
+                        last_exc = ExternalAPIError(f"Alpaca invalid feed (400); body={resp.text[:500]}")
+                        continue
                 if resp.status_code == 429:
                     last_exc = ExternalAPIError(f"Alpaca rate limited (429); body={resp.text[:500]}")
                 elif 500 <= resp.status_code < 600:

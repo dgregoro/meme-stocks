@@ -22,14 +22,16 @@ def db_session():
 def test_create_stock() -> None:
     """Test creating a new stock."""
     Base.metadata.create_all(engine)
-    app = create_app()
+    app = create_app(omit_scheduler=True)
     client = TestClient(app)
 
+    # Unique symbol avoids 409 when other tests share the same DB file
+    sym = "TST1"
     response = client.post(
         "/api/stocks",
         json={
-            "symbol": "GME",
-            "name": "GameStop Corp.",
+            "symbol": sym,
+            "name": "Test Corp.",
             "sector": "Retail",
             "market_cap": 1000000000.0,
         },
@@ -37,14 +39,14 @@ def test_create_stock() -> None:
 
     assert response.status_code == 201
     data = response.json()
-    assert data["symbol"] == "GME"
-    assert data["name"] == "GameStop Corp."
+    assert data["symbol"] == sym
+    assert data["name"] == "Test Corp."
     assert data["sector"] == "Retail"
 
     # Verify it was saved
-    get_response = client.get("/api/stocks/GME")
+    get_response = client.get(f"/api/stocks/{sym}")
     assert get_response.status_code == 200
-    assert get_response.json()["symbol"] == "GME"
+    assert get_response.json()["symbol"] == sym
 
     Base.metadata.drop_all(engine)
 
@@ -52,7 +54,7 @@ def test_create_stock() -> None:
 def test_create_stock_duplicate() -> None:
     """Test creating a duplicate stock returns 409."""
     Base.metadata.create_all(engine)
-    app = create_app()
+    app = create_app(omit_scheduler=True)
     client = TestClient(app)
 
     # Create first stock
@@ -76,7 +78,7 @@ def test_create_stock_duplicate() -> None:
 def test_create_stock_symbol_uppercase() -> None:
     """Test that stock symbol is converted to uppercase."""
     Base.metadata.create_all(engine)
-    app = create_app()
+    app = create_app(omit_scheduler=True)
     client = TestClient(app)
 
     response = client.post(
