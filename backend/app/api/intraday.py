@@ -5,18 +5,17 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from backend.app.utils.datetime_utils import ensure_utc_aware
-
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from backend.app.config import get_settings
+from backend.app.utils.datetime_utils import ensure_utc_aware
 from backend.app.data.database import get_session
 from backend.app.data.repositories.intraday_ingest_repo import IntradayIngestRepository
 from backend.app.services.intraday_ingestion_service import run_intraday_ingestion
 from backend.app.utils.api_errors import error_detail
-from backend.app.utils.errors import IngestionAlreadyRunningError
+from backend.app.utils.errors import DataAccessError, IngestionAlreadyRunningError
 
 router = APIRouter(prefix="/api/intraday", tags=["intraday"])
 
@@ -132,6 +131,18 @@ def post_intraday_run_once(db: Session = Depends(get_session)) -> RunOnceRespons
             details={"owner": e.owner, "expires_at": e.expires_at} if (e.owner or e.expires_at) else None,
         )
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail) from e
+    except DataAccessError as e:
+        msg = str(e).lower()
+        if "database is locked" in msg or "failed to acquire job lock" in msg:
+            detail = error_detail(
+                "ServiceUnavailable",
+                "Database temporarily locked (scheduler may be running); retry in a few seconds",
+                details={"retry_after_seconds": 30},
+            )
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=detail) from e
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=error_detail("DataAccessError", str(e))
+        ) from e
     db.commit()
     return RunOnceResponse(
         symbols_processed=summary["symbols_processed"],

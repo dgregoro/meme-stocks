@@ -36,7 +36,7 @@ def test_run_intraday_ingestion_raises_when_lock_held() -> None:
             mock_settings.return_value.intraday_lock_ttl_seconds = 1800
             mock_settings.return_value.alpaca_free_plan_mode = True
             mock_settings.return_value.alpaca_end_time_safety_minutes = 20
-            mock_settings.return_value.alpaca_data_feed = "delayed_sip"
+            mock_settings.return_value.alpaca_data_feed = "iex"
             mock_settings.return_value.alpaca_api_key_id = None
             mock_settings.return_value.alpaca_api_secret_key = None
             mock_settings.return_value.alpaca_data_base_url = "https://data.alpaca.markets"
@@ -69,7 +69,7 @@ def test_run_intraday_ingestion_raises_when_lock_disabled_and_run_in_progress() 
             mock_settings.return_value.intraday_lock_enabled = False
             mock_settings.return_value.alpaca_free_plan_mode = True
             mock_settings.return_value.alpaca_end_time_safety_minutes = 20
-            mock_settings.return_value.alpaca_data_feed = "delayed_sip"
+            mock_settings.return_value.alpaca_data_feed = "iex"
             mock_settings.return_value.alpaca_api_key_id = None
             mock_settings.return_value.alpaca_api_secret_key = None
             mock_settings.return_value.alpaca_data_base_url = "https://data.alpaca.markets"

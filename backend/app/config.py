@@ -83,7 +83,7 @@ class Settings(BaseSettings):
 
     # Alpaca market data (intraday minute bars)
     # Historical bars endpoint rejects delayed_sip (400 invalid feed); use iex for bars.
-    # alpaca_data_feed kept for future latest/streaming use; bars use alpaca_bars_feed.
+    # alpaca_data_feed names logical/streaming feed; historical bars use alpaca_bars_feed.
     alpaca_data_feed: str = "delayed_sip"
     alpaca_bars_feed: str = "iex"  # Feed for historical bars; iex works on free plan
     alpaca_free_plan_mode: bool = True
@@ -92,9 +92,12 @@ class Settings(BaseSettings):
     alpaca_api_key_id: str | None = None
     alpaca_api_secret_key: str | None = None
     alpaca_data_base_url: str = "https://data.alpaca.markets"
+    # 200 req/min = 1 req per 0.3s; 0.35s keeps us under. 0 = no throttle.
+    alpaca_min_request_interval_seconds: float = 0.35
     # Intraday ingestion
     intraday_ingestion_enabled: bool = False
     intraday_symbols_batch_size: int = 200
+    intraday_max_symbols_per_run: int = 500  # Cap per run; 0 = unlimited. Prevents hammering API when config is wrong.
     intraday_lookback_days: int = 30
     intraday_universe_mode: str = "tracked"  # tracked | top_liquidity | all_active (future)
     intraday_feature_store_root: str = "data/intraday"

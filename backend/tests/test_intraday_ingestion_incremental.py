@@ -28,7 +28,7 @@ def test_intraday_ingestion_incremental_last_ts_advances() -> None:
             mock_settings.return_value = MagicMock(
                 alpaca_free_plan_mode=True,
                 alpaca_end_time_safety_minutes=20,
-                alpaca_data_feed="delayed_sip",
+                alpaca_data_feed="iex",
                 intraday_universe_mode="tracked",
                 intraday_feature_store_root="/tmp/test_intraday_inc",
                 intraday_symbols_batch_size=200,

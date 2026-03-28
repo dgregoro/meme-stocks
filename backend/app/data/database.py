@@ -34,6 +34,7 @@ _db_url = _build_engine_url()
 _ensure_sqlite_path_exists(_db_url)
 _connect_args: dict[str, object] = {}
 if "sqlite" in _db_url.lower():
+    # SQLite defaults to busy_timeout=0 (fail immediately on lock).
     _connect_args["timeout"] = 30  # Wait up to 30s when DB locked (scheduler + API concurrency)
 engine = create_engine(_db_url, future=True, connect_args=_connect_args)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine, class_=Session)
@@ -337,6 +338,32 @@ def _migrate_drop_reddit_posts_stock_symbol() -> None:
         )
 
 
+def _migrate_create_job_locks_if_missing() -> None:
+    """Create job_locks table if missing (e.g. DB created before job_lock model existed)."""
+    if ":memory:" in _db_url or "sqlite" not in _db_url.lower():
+        return
+    path = _db_url.replace("sqlite:///", "", 1).split("?")[0].strip()
+    if not path or path == ":memory:":
+        return
+    path = os.path.abspath(path)
+    if not os.path.exists(path):
+        return
+    try:
+        with engine.begin() as c:
+            c.execute(
+                text(
+                    "CREATE TABLE IF NOT EXISTS job_locks ("
+                    "name VARCHAR(128) NOT NULL PRIMARY KEY, "
+                    "owner TEXT NOT NULL, "
+                    "acquired_at DATETIME NOT NULL, "
+                    "expires_at DATETIME NOT NULL, "
+                    "heartbeat_at DATETIME NOT NULL)"
+                )
+            )
+    except Exception as exc:
+        logger.warning("Migration create job_locks failed: %s", exc)
+
+
 def _migrate_leader_follower_paper_sector_fields() -> None:
     """Add sector confirmation columns to paper runs and paper trades (013)."""
     import sqlite3
@@ -429,6 +456,7 @@ def _migrate_leader_follower_paper_regime_fields() -> None:
 def init_db() -> None:
     """Initialize database schema if missing (development convenience)."""
     Base.metadata.create_all(bind=engine)
+    _migrate_create_job_locks_if_missing()
     _migrate_job_run_history_add_success_columns()
     _migrate_job_run_history_add_metrics_and_summary()
     _migrate_drop_reddit_posts_stock_symbol()
