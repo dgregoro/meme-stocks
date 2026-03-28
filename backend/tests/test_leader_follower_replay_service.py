@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date
+from typing import cast
 from unittest.mock import patch
 
 import pytest
@@ -19,6 +20,7 @@ from backend.app.models.stock_group import StockGroup
 from backend.app.services.leader_follower_replay_service import (
     _parse_bar_date,
     _trading_days,
+    expand_backfill_symbols_with_regime_benchmarks,
     run_backfill,
 )
 
@@ -35,6 +37,15 @@ def test_parse_bar_date_missing() -> None:
     """Missing 't' returns None."""
     assert _parse_bar_date({}) is None
     assert _parse_bar_date({"t": None}) is None
+
+
+@pytest.mark.unit
+def test_expand_backfill_includes_configured_benchmarks() -> None:
+    out = expand_backfill_symbols_with_regime_benchmarks(["AAPL", "MSFT"], "SPY, spy ,QQQ")
+    assert out[:2] == ["AAPL", "MSFT"]
+    assert "SPY" in out
+    assert "QQQ" in out
+    assert out.count("SPY") == 1
 
 
 @pytest.mark.unit
@@ -109,11 +120,19 @@ def test_run_backfill_dry_run_with_mock_alpaca() -> None:
                     db.add(PriceData(stock_symbol=sym, date=d, open=100, high=101, low=99, close=100, volume=1_000_000))
         db.commit()
 
+        captured: dict[str, object] = {}
+
+        def _capture_backfill(_db, symbols, start, end):
+            captured["symbols"] = symbols
+            return {"rows_inserted": 0, "symbols_fetched": len(symbols), "errors": []}
+
         with patch(
             "backend.app.services.leader_follower_replay_service.backfill_price_data_from_alpaca",
-            return_value={"rows_inserted": 0, "symbols_fetched": 2, "errors": []},
+            side_effect=_capture_backfill,
         ):
             result = run_backfill(db, date(2024, 6, 3), date(2024, 6, 5), dry_run=True)
+        syms = cast(list[str], captured.get("symbols", []))
+        assert "AAPL" in syms and "MSFT" in syms and "SPY" in syms
         assert "days_processed" in result
         assert "leaders_detected" in result
         assert "signals_emitted" in result
@@ -148,6 +167,7 @@ def test_run_backfill_alpaca_keys_missing() -> None:
             mock_settings.return_value.alpaca_end_time_safety_minutes = 20
             mock_settings.return_value.alpaca_bars_feed = "iex"
             mock_settings.return_value.alpaca_data_base_url = "https://data.alpaca.markets"
+            mock_settings.return_value.leader_follower_regime_backfill_symbols = "SPY"
             with pytest.raises(ExternalAPIError):
                 run_backfill(db, date(2024, 6, 1), date(2024, 6, 7), dry_run=True)
     finally:

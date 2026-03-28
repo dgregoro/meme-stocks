@@ -6,7 +6,7 @@ import json
 from dataclasses import asdict, dataclass
 from datetime import date, datetime, time, timezone
 from itertools import groupby
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from sqlalchemy.orm import Session
 
@@ -17,6 +17,12 @@ from backend.app.data.repositories.price_data_repo import PriceDataRepository
 from backend.app.models.leader_follower_paper_run import LeaderFollowerPaperRun
 from backend.app.models.leader_follower_paper_trade import LeaderFollowerPaperTrade
 from backend.app.models.leader_follower_signal import LeaderFollowerSignal
+from backend.app.services.regime_filter_service import RegimeFilterParams, evaluate_regime_filter
+from backend.app.services.sector_confirmation_service import (
+    SectorConfirmationParams,
+    SectorTrendMethod,
+    evaluate_sector_confirmation,
+)
 
 EntryMode = Literal["next_open", "same_close"]
 ExitMode = Literal["fixed_days", "early_exit"]
@@ -32,13 +38,70 @@ class PaperTradingConfig:
     max_positions_per_event: int = 2
     min_pair_score: float | None = None
     per_trade_cost_pct: float = 0.1
+    sector_confirmation_enabled: bool = False
+    sector_trend_method: SectorTrendMethod = "ma_above"
+    sector_trend_window: int = 10
+    minimum_sector_return_pct: float = 0.0
+    require_positive_trend: bool = True
+    sector_etf_symbol: str | None = None
+    regime_filter_enabled: bool = False
+    regime_benchmark_symbol: str = "SPY"
+    market_trend_window: int = 20
+    require_market_uptrend: bool = True
+    volatility_window: int = 10
+    volatility_threshold: float = 0.02
+    require_low_volatility: bool = False
+    regime_sector_strength_required: bool = False
 
     def to_json_dict(self) -> dict[str, Any]:
         d = asdict(self)
         return d
 
+    def sector_confirmation_params(self) -> SectorConfirmationParams:
+        return SectorConfirmationParams(
+            enabled=self.sector_confirmation_enabled,
+            sector_etf_symbol=self.sector_etf_symbol,
+            sector_trend_method=self.sector_trend_method,
+            sector_trend_window=self.sector_trend_window,
+            minimum_sector_return_pct=self.minimum_sector_return_pct,
+            require_positive_trend=self.require_positive_trend,
+        )
+
+    def regime_filter_params(self) -> RegimeFilterParams:
+        return RegimeFilterParams(
+            enabled=self.regime_filter_enabled,
+            regime_benchmark_symbol=self.regime_benchmark_symbol,
+            market_trend_window=self.market_trend_window,
+            require_market_uptrend=self.require_market_uptrend,
+            volatility_window=self.volatility_window,
+            volatility_threshold=self.volatility_threshold,
+            require_low_volatility=self.require_low_volatility,
+            regime_sector_strength_required=self.regime_sector_strength_required,
+        )
+
     @staticmethod
     def from_json_dict(d: dict[str, Any]) -> PaperTradingConfig:
+        raw_method = d.get("sector_trend_method", "ma_above")
+        if raw_method not in ("ma_above", "rolling_return", "combined"):
+            raise ValueError(f"Invalid sector_trend_method: {raw_method!r}")
+        etf_override = d.get("sector_etf_symbol")
+        if etf_override is not None and not isinstance(etf_override, str):
+            raise ValueError("sector_etf_symbol must be a string or null")
+        regime_sector = bool(d.get("regime_sector_strength_required", False))
+        sector_on = bool(d.get("sector_confirmation_enabled", False))
+        if regime_sector and not sector_on:
+            raise ValueError("regime_sector_strength_requires_sector_confirmation_enabled")
+        bench = d.get("regime_benchmark_symbol", "SPY")
+        if not isinstance(bench, str) or not bench.strip():
+            raise ValueError("regime_benchmark_symbol must be a non-empty string")
+        req_up = bool(d.get("require_market_uptrend", True))
+        mtw = int(d.get("market_trend_window", 20))
+        if req_up and mtw < 1:
+            raise ValueError("market_trend_window must be >= 1 when require_market_uptrend")
+        req_lv = bool(d.get("require_low_volatility", False))
+        vw = int(d.get("volatility_window", 10))
+        if req_lv and vw < 2:
+            raise ValueError("volatility_window must be >= 2 when require_low_volatility")
         return PaperTradingConfig(
             entry_mode=d.get("entry_mode", "next_open"),
             exit_mode=d.get("exit_mode", "fixed_days"),
@@ -46,6 +109,20 @@ class PaperTradingConfig:
             max_positions_per_event=int(d.get("max_positions_per_event", 2)),
             min_pair_score=d.get("min_pair_score"),
             per_trade_cost_pct=float(d.get("per_trade_cost_pct", 0.1)),
+            sector_confirmation_enabled=bool(d.get("sector_confirmation_enabled", False)),
+            sector_trend_method=cast(SectorTrendMethod, raw_method),
+            sector_trend_window=int(d.get("sector_trend_window", 10)),
+            minimum_sector_return_pct=float(d.get("minimum_sector_return_pct", 0.0)),
+            require_positive_trend=bool(d.get("require_positive_trend", True)),
+            sector_etf_symbol=etf_override,
+            regime_filter_enabled=bool(d.get("regime_filter_enabled", False)),
+            regime_benchmark_symbol=bench.strip().upper(),
+            market_trend_window=mtw,
+            require_market_uptrend=req_up,
+            volatility_window=vw,
+            volatility_threshold=float(d.get("volatility_threshold", 0.02)),
+            require_low_volatility=req_lv,
+            regime_sector_strength_required=regime_sector,
         )
 
 
@@ -86,6 +163,21 @@ def _index_of(dates: list[date], d: date) -> int | None:
         return dates.index(d)
     except ValueError:
         return None
+
+
+def _resolve_entry_date(
+    signal: LeaderFollowerSignal,
+    dates: list[date],
+    cfg: PaperTradingConfig,
+) -> date | None:
+    """First calendar day of follower entry (same as ``_resolve_trade`` entry side)."""
+    if not dates:
+        return None
+    if cfg.entry_mode == "same_close":
+        ei = _index_of(dates, signal.signal_date)
+        return dates[ei] if ei is not None else None
+    ei = _first_trading_day_after(dates, signal.signal_date)
+    return dates[ei] if ei is not None else None
 
 
 def _select_signals_per_event(
@@ -184,6 +276,8 @@ class PaperSimulationMetrics:
 
     total_trades: int
     skipped_count: int
+    skipped_sector_confirmation_count: int
+    skipped_regime_filter_count: int
     win_rate: float
     avg_return_pct: float
     cumulative_return_pct: float
@@ -193,6 +287,8 @@ class PaperSimulationMetrics:
         return {
             "total_trades": self.total_trades,
             "skipped_count": self.skipped_count,
+            "skipped_sector_confirmation_count": self.skipped_sector_confirmation_count,
+            "skipped_regime_filter_count": self.skipped_regime_filter_count,
             "cumulative_return_pct": self.cumulative_return_pct,
             "avg_return_pct": self.avg_return_pct,
             "win_rate": self.win_rate,
@@ -224,20 +320,67 @@ def run_paper_trading_core(
     selected = _select_signals_per_event(signals, cfg.max_positions_per_event)
 
     skipped = 0
+    skipped_sector = 0
+    skipped_regime = 0
     trades_payload: list[dict[str, Any]] = []
 
     cal_cache: dict[str, list[date]] = {}
+    sect_params = cfg.sector_confirmation_params()
+    regime_params = cfg.regime_filter_params()
 
     for sig in sorted(selected, key=lambda s: (s.signal_date, s.leader_symbol, s.follower_symbol)):
         follower = sig.follower_symbol
         if follower not in cal_cache:
             cal_cache[follower] = price_repo.list_dates_for_symbol(follower)
         dates = cal_cache[follower]
+        entry_date = _resolve_entry_date(sig, dates, cfg)
+        if entry_date is None:
+            skipped += 1
+            continue
+        allow, sector_snap = evaluate_sector_confirmation(
+            price_repo,
+            sig.leader_symbol,
+            entry_date,
+            sect_params,
+        )
+        if not allow:
+            skipped += 1
+            skipped_sector += 1
+            continue
+
+        sect_pass = sector_snap.get("sector_confirmation_passed") if sector_snap else None
+        regime_allow, regime_snap = evaluate_regime_filter(
+            price_repo,
+            entry_date,
+            regime_params,
+            sector_confirmation_passed=bool(sect_pass) if sect_pass is not None else None,
+        )
+        if not regime_allow:
+            skipped += 1
+            skipped_regime += 1
+            continue
+
         row = _resolve_trade(sig, dates, price_repo, cfg)
         if row is None:
             skipped += 1
             continue
         row["signal"] = sig
+        if sector_snap:
+            row["sector_etf_symbol"] = sector_snap.get("sector_etf_symbol")
+            row["sector_close"] = sector_snap.get("sector_close")
+            row["sector_ma"] = sector_snap.get("sector_ma")
+            row["sector_rolling_return_pct"] = sector_snap.get("sector_rolling_return_pct")
+            row["sector_confirmation_passed"] = sector_snap.get("sector_confirmation_passed")
+        if regime_snap:
+            row["regime_benchmark_symbol"] = regime_snap.get("regime_benchmark_symbol")
+            row["regime_decision_date"] = regime_snap.get("regime_decision_date")
+            row["regime_benchmark_close"] = regime_snap.get("regime_benchmark_close")
+            row["regime_benchmark_ma"] = regime_snap.get("regime_benchmark_ma")
+            row["regime_market_uptrend_passed"] = regime_snap.get("regime_market_uptrend_passed")
+            row["regime_volatility"] = regime_snap.get("regime_volatility")
+            row["regime_low_volatility_passed"] = regime_snap.get("regime_low_volatility_passed")
+            row["regime_sector_strength_passed"] = regime_snap.get("regime_sector_strength_passed")
+            row["regime_filter_passed"] = regime_snap.get("regime_filter_passed")
         trades_payload.append(row)
 
     equities: list[float] = [1.0]
@@ -255,6 +398,8 @@ def run_paper_trading_core(
     metrics = PaperSimulationMetrics(
         total_trades=n,
         skipped_count=skipped,
+        skipped_sector_confirmation_count=skipped_sector,
+        skipped_regime_filter_count=skipped_regime,
         win_rate=win_rate,
         avg_return_pct=avg_ret,
         cumulative_return_pct=cum_pct,
@@ -292,6 +437,8 @@ def run_paper_trading_simulation(
         end_date=end_date,
         total_trades=metrics.total_trades,
         skipped_count=metrics.skipped_count,
+        skipped_sector_confirmation_count=metrics.skipped_sector_confirmation_count,
+        skipped_regime_filter_count=metrics.skipped_regime_filter_count,
         win_rate=metrics.win_rate,
         avg_return_pct=metrics.avg_return_pct,
         cumulative_return_pct=metrics.cumulative_return_pct,
@@ -315,6 +462,20 @@ def run_paper_trading_simulation(
             holding_period_days=t["holding_period_days"],
             gross_return_pct=t["gross_return_pct"],
             net_return_pct=t["net_return_pct"],
+            sector_etf_symbol=t.get("sector_etf_symbol"),
+            sector_close=t.get("sector_close"),
+            sector_ma=t.get("sector_ma"),
+            sector_rolling_return_pct=t.get("sector_rolling_return_pct"),
+            sector_confirmation_passed=t.get("sector_confirmation_passed"),
+            regime_benchmark_symbol=t.get("regime_benchmark_symbol"),
+            regime_decision_date=t.get("regime_decision_date"),
+            regime_benchmark_close=t.get("regime_benchmark_close"),
+            regime_benchmark_ma=t.get("regime_benchmark_ma"),
+            regime_market_uptrend_passed=t.get("regime_market_uptrend_passed"),
+            regime_volatility=t.get("regime_volatility"),
+            regime_low_volatility_passed=t.get("regime_low_volatility_passed"),
+            regime_sector_strength_passed=t.get("regime_sector_strength_passed"),
+            regime_filter_passed=t.get("regime_filter_passed"),
         )
         trade_repo.add(tr)
 

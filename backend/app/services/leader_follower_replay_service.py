@@ -27,6 +27,12 @@ logger = logging.getLogger(__name__)
 LOOKBACK_DAYS = 10  # Ensure enough bars for MIN_BARS_FOR_LEADER + buffer
 
 
+def expand_backfill_symbols_with_regime_benchmarks(group_symbols: list[str], extra_symbols_csv: str) -> list[str]:
+    """Append regime benchmark tickers (014) so replay backfill fetches SPY (etc.) alongside the group universe."""
+    extra = [s.strip().upper() for s in extra_symbols_csv.split(",") if s.strip()]
+    return list(dict.fromkeys(list(group_symbols) + extra))
+
+
 def _parse_bar_date(bar: dict) -> date | None:
     """Extract date from Alpaca bar 't' field."""
     t = bar.get("t")
@@ -160,8 +166,8 @@ def run_backfill(
     Returns ReplaySummary.
     """
     stock_group_repo = StockGroupRepository(db)
-    symbols = stock_group_repo.get_all_symbols()
-    if not symbols:
+    group_symbols = stock_group_repo.get_all_symbols()
+    if not group_symbols:
         return {
             "days_processed": 0,
             "days_skipped": 0,
@@ -172,6 +178,11 @@ def run_backfill(
             "missing_data_warnings": ["stock_groups is empty"],
             "errors": [],
         }
+
+    symbols = expand_backfill_symbols_with_regime_benchmarks(
+        group_symbols,
+        get_settings().leader_follower_regime_backfill_symbols,
+    )
 
     if replace_range and persist:
         stmt = delete(LeaderFollowerSignal).where(

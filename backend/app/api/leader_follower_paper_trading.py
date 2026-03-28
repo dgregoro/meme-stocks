@@ -34,6 +34,20 @@ class PaperTradeOut(BaseModel):
     holding_period_days: int
     gross_return_pct: float
     net_return_pct: float
+    sector_etf_symbol: str | None = None
+    sector_close: float | None = None
+    sector_ma: float | None = None
+    sector_rolling_return_pct: float | None = None
+    sector_confirmation_passed: bool | None = None
+    regime_benchmark_symbol: str | None = None
+    regime_decision_date: str | None = None
+    regime_benchmark_close: float | None = None
+    regime_benchmark_ma: float | None = None
+    regime_market_uptrend_passed: bool | None = None
+    regime_volatility: float | None = None
+    regime_low_volatility_passed: bool | None = None
+    regime_sector_strength_passed: bool | None = None
+    regime_filter_passed: bool | None = None
 
 
 class PaperRunSummaryOut(BaseModel):
@@ -43,6 +57,8 @@ class PaperRunSummaryOut(BaseModel):
     end_date: str
     total_trades: int
     skipped_count: int
+    skipped_sector_confirmation_count: int = 0
+    skipped_regime_filter_count: int = 0
     cumulative_return_pct: float
     max_drawdown_pct: float
 
@@ -59,6 +75,8 @@ class PaperRunDetailResponse(BaseModel):
     end_date: str
     total_trades: int
     skipped_count: int
+    skipped_sector_confirmation_count: int = 0
+    skipped_regime_filter_count: int = 0
     win_rate: float
     avg_return_pct: float
     cumulative_return_pct: float
@@ -109,6 +127,8 @@ def list_runs(
             end_date=r.end_date.isoformat(),
             total_trades=r.total_trades,
             skipped_count=r.skipped_count,
+            skipped_sector_confirmation_count=r.skipped_sector_confirmation_count,
+            skipped_regime_filter_count=r.skipped_regime_filter_count,
             cumulative_return_pct=r.cumulative_return_pct,
             max_drawdown_pct=r.max_drawdown_pct,
         )
@@ -149,6 +169,20 @@ def get_run(
             holding_period_days=t.holding_period_days,
             gross_return_pct=t.gross_return_pct,
             net_return_pct=t.net_return_pct,
+            sector_etf_symbol=t.sector_etf_symbol,
+            sector_close=t.sector_close,
+            sector_ma=t.sector_ma,
+            sector_rolling_return_pct=t.sector_rolling_return_pct,
+            sector_confirmation_passed=t.sector_confirmation_passed,
+            regime_benchmark_symbol=t.regime_benchmark_symbol,
+            regime_decision_date=t.regime_decision_date.isoformat() if t.regime_decision_date else None,
+            regime_benchmark_close=t.regime_benchmark_close,
+            regime_benchmark_ma=t.regime_benchmark_ma,
+            regime_market_uptrend_passed=t.regime_market_uptrend_passed,
+            regime_volatility=t.regime_volatility,
+            regime_low_volatility_passed=t.regime_low_volatility_passed,
+            regime_sector_strength_passed=t.regime_sector_strength_passed,
+            regime_filter_passed=t.regime_filter_passed,
         )
         for t in trades
     ]
@@ -161,6 +195,8 @@ def get_run(
         end_date=run.end_date.isoformat(),
         total_trades=run.total_trades,
         skipped_count=run.skipped_count,
+        skipped_sector_confirmation_count=run.skipped_sector_confirmation_count,
+        skipped_regime_filter_count=run.skipped_regime_filter_count,
         win_rate=run.win_rate,
         avg_return_pct=run.avg_return_pct,
         cumulative_return_pct=run.cumulative_return_pct,

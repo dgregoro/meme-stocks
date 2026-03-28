@@ -58,17 +58,17 @@ def test_expand_grid_rejects_too_many() -> None:
 
 @pytest.mark.unit
 def test_robustness_penalizes_low_validate_trades() -> None:
-    tr = PaperSimulationMetrics(10, 0, 0.5, 1.0, 5.0, 2.0)
-    va = PaperSimulationMetrics(2, 0, 0.5, 1.0, 10.0, 1.0)
+    tr = PaperSimulationMetrics(10, 0, 0, 0, 0.5, 1.0, 5.0, 2.0)
+    va = PaperSimulationMetrics(2, 0, 0, 0, 0.5, 1.0, 10.0, 1.0)
     s = robustness_walk_forward_v1(tr, va, min_trades_validate=5, w_deg=0.5, w_dd=0.25)
     assert s < -9000
 
 
 @pytest.mark.unit
 def test_robustness_validation_first() -> None:
-    tr = PaperSimulationMetrics(10, 0, 0.5, 1.0, 20.0, 1.0)
-    va_good = PaperSimulationMetrics(10, 0, 0.5, 1.0, 10.0, 2.0)
-    va_bad = PaperSimulationMetrics(10, 0, 0.5, 1.0, 5.0, 2.0)
+    tr = PaperSimulationMetrics(10, 0, 0, 0, 0.5, 1.0, 20.0, 1.0)
+    va_good = PaperSimulationMetrics(10, 0, 0, 0, 0.5, 1.0, 10.0, 2.0)
+    va_bad = PaperSimulationMetrics(10, 0, 0, 0, 0.5, 1.0, 5.0, 2.0)
     s_good = robustness_walk_forward_v1(tr, va_good, min_trades_validate=5, w_deg=0.5, w_dd=0.25)
     s_bad = robustness_walk_forward_v1(tr, va_bad, min_trades_validate=5, w_deg=0.5, w_dd=0.25)
     assert s_good > s_bad

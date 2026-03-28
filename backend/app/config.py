@@ -152,6 +152,9 @@ class Settings(BaseSettings):
     # Rolling robustness (012): cap splits × candidates (research CLI)
     leader_follower_robustness_max_evaluations: int = 5000
 
+    # Leader-follower regime gate (014): benchmarks merged into Alpaca replay backfill so SPY bars exist for gating
+    leader_follower_regime_backfill_symbols: str = "SPY"
+
     # Research API: dataset output and allowed paths for experiments
     research_dataset_dir: str = (
         "data/research"  # Output dir for build-dataset; experiments accept only paths under this

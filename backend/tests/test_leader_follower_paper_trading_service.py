@@ -157,3 +157,135 @@ def test_max_positions_per_event_keeps_stronger_signal(session: Session) -> None
     assert run.total_trades == 1
     tr = LeaderFollowerPaperTradeRepository(session).list_all_for_run_ordered(run.id)[0]
     assert tr.follower_symbol == "BB"
+
+
+@pytest.mark.unit
+def test_sector_confirmation_skips_trade_when_ma_fails(session: Session) -> None:
+    """NVDA→SMH mapping; weak SMH vs MA skips follower trade."""
+    from datetime import timedelta
+
+    session.add(Stock(symbol="NVDA", name="N", sector=None, market_cap=None))
+    session.add(Stock(symbol="AMC", name="A", sector=None, market_cap=None))
+    session.add(Stock(symbol="SMH", name="Semi", sector=None, market_cap=None))
+    session.commit()
+
+    d0 = date(2026, 3, 2)
+    days_amc = [d0 + timedelta(days=i) for i in range(-2, 6)]
+    for i, d in enumerate(days_amc):
+        if i < 2:
+            _add_bar(session, "AMC", d, 100.0, 100.0)
+        else:
+            rel = i - 2
+            prices = [100.0, 100.0, 101.0, 100.0, 100.0, 110.0]
+            c = prices[rel]
+            o = c
+            _add_bar(session, "AMC", d, o, c)
+    for i, d in enumerate(days_amc):
+        if i < 3:
+            c = 100.0
+        else:
+            c = 99.0
+        _add_bar(session, "SMH", d, 100.0, c)
+    session.commit()
+
+    session.add(
+        LeaderFollowerSignal(
+            leader_symbol="NVDA",
+            follower_symbol="AMC",
+            group_id="test",
+            signal_date=d0,
+            strength_score=0.9,
+            leader_return_pct=5.0,
+            leader_volume_ratio=2.0,
+        )
+    )
+    session.commit()
+
+    cfg_on = PaperTradingConfig(
+        entry_mode="next_open",
+        exit_mode="fixed_days",
+        holding_days=3,
+        max_positions_per_event=2,
+        sector_confirmation_enabled=True,
+        sector_trend_method="ma_above",
+        sector_trend_window=2,
+        require_positive_trend=True,
+    )
+    end = days_amc[-1]
+    run_off = run_paper_trading_simulation(session, d0, end, PaperTradingConfig())
+    run_on = run_paper_trading_simulation(session, d0, end, cfg_on)
+    assert run_off.total_trades == 1
+    assert run_on.total_trades == 0
+    assert run_on.skipped_sector_confirmation_count >= 1
+
+
+@pytest.mark.unit
+def test_regime_filter_skips_when_benchmark_below_ma(session: Session) -> None:
+    """SPY below short MA on entry day blocks trade when regime filter on."""
+    from datetime import timedelta
+
+    session.add(Stock(symbol="GME", name="G", sector=None, market_cap=None))
+    session.add(Stock(symbol="AMC", name="A", sector=None, market_cap=None))
+    session.add(Stock(symbol="SPY", name="S", sector=None, market_cap=None))
+    session.commit()
+
+    d0 = date(2026, 1, 6)
+    d1 = date(2026, 1, 7)
+    d2 = date(2026, 1, 8)
+    d3 = date(2026, 1, 9)
+    d4 = date(2026, 1, 10)
+    d_m2 = d0 - timedelta(days=2)
+    d_m1 = d0 - timedelta(days=1)
+    for d, o, c in [
+        (d0, 100.0, 100.0),
+        (d1, 100.0, 101.0),
+        (d2, 100.0, 100.0),
+        (d3, 100.0, 100.0),
+        (d4, 100.0, 110.0),
+    ]:
+        _add_bar(session, "AMC", d, o, c)
+    _add_bar(session, "SPY", d_m2, 100.0, 100.0)
+    _add_bar(session, "SPY", d_m1, 100.0, 100.0)
+    _add_bar(session, "SPY", d0, 100.0, 100.0)
+    _add_bar(session, "SPY", d1, 100.0, 95.0)
+    _add_bar(session, "SPY", d2, 100.0, 100.0)
+    _add_bar(session, "SPY", d3, 100.0, 100.0)
+    _add_bar(session, "SPY", d4, 100.0, 100.0)
+    session.commit()
+
+    session.add(
+        LeaderFollowerSignal(
+            leader_symbol="GME",
+            follower_symbol="AMC",
+            group_id="meme",
+            signal_date=d0,
+            strength_score=0.9,
+            leader_return_pct=5.0,
+            leader_volume_ratio=2.0,
+        )
+    )
+    session.commit()
+
+    cfg = PaperTradingConfig(
+        entry_mode="next_open",
+        holding_days=3,
+        regime_filter_enabled=True,
+        regime_benchmark_symbol="SPY",
+        market_trend_window=2,
+        require_market_uptrend=True,
+        require_low_volatility=False,
+    )
+    run = run_paper_trading_simulation(session, d0, d4, cfg)
+    assert run.total_trades == 0
+    assert run.skipped_regime_filter_count >= 1
+
+
+@pytest.mark.unit
+def test_regime_sector_strength_requires_sector_enabled() -> None:
+    with pytest.raises(ValueError, match="regime_sector_strength_requires"):
+        PaperTradingConfig.from_json_dict(
+            {
+                "sector_confirmation_enabled": False,
+                "regime_sector_strength_required": True,
+            }
+        )

@@ -200,6 +200,8 @@ if alignment_score > COMBINED_SIGNAL_THRESHOLD and confidence > 0.7:
 | 3.8 | Leader-follower paper trading simulation | specs/011 | ✅ Implemented |
 | 3.9 | Leader-follower walk-forward optimization (research) | specs/010-leader-follower-walk-forward-optimization | ✅ Implemented |
 | 3.10 | Leader-follower rolling walk-forward robustness (research) | specs/012-leader-follower-rolling-walk-forward-robustness | ✅ Implemented |
+| 3.11 | Leader-follower sector ETF confirmation (gating) | specs/013-leader-follower-sector-etf-confirmation | 📋 Spec drafted |
+| 3.12 | Leader-follower regime filtering (market gating) | specs/014-leader-follower-regime-filtering | ✅ Implemented |
 
 ### 3.7 Leader-Follower Signal Detection ✅
 
@@ -244,6 +246,22 @@ if alignment_score > COMBINED_SIGNAL_THRESHOLD and confidence > 0.7:
 **CLI**: `python -m backend.app.cli robustness leader-follower --overall-start ... --overall-end ... --train-window-months ... --validate-window-months ... --step-months ... [--test-window-months N] (--grid-file path.json | --candidates-file path.json)`
 
 **Config**: `leader_follower_robustness_max_evaluations` (cap `splits × candidates`); grid/candidate list size still bounded by `leader_follower_optimization_max_grid_points`.
+
+### 3.11 Leader-Follower Sector ETF Confirmation 📋
+
+**Purpose**: Optional **execution gate**: take paper trades only when a mapped **sector ETF** passes simple daily trend/return rules; reduces noise, aligns with optimization/robustness `PaperTradingConfig` grids.
+
+**Spec**: `specs/013-leader-follower-sector-etf-confirmation/spec.md`
+
+**Status**: Specification only; implementation not started.
+
+### 3.12 Leader-Follower Regime Filtering 📋
+
+**Purpose**: Optional **execution gate** using **daily** benchmark (default SPY) trend and optional volatility threshold—**and optionally** 013 sector strength—so paper trades run only in configured “favorable” conditions. Targets **split stability**, not return prediction.
+
+**Spec**: `specs/014-leader-follower-regime-filtering/spec.md`
+
+**Status**: Implemented (benchmark MA + optional vol + optional sector-strength AND; grid keys; API/CLI). See `specs/014-leader-follower-regime-filtering/tasks.md`.
 
 ### 3.0 Lead-Lag Evidence Endpoint ✅
 

@@ -25,6 +25,8 @@ class LeaderFollowerPaperRun(Base):
     end_date: Mapped[dt.date] = mapped_column(Date, nullable=False)
     total_trades: Mapped[int] = mapped_column(Integer, nullable=False)
     skipped_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    skipped_sector_confirmation_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    skipped_regime_filter_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     win_rate: Mapped[float] = mapped_column(Float, nullable=False)
     avg_return_pct: Mapped[float] = mapped_column(Float, nullable=False)
     cumulative_return_pct: Mapped[float] = mapped_column(Float, nullable=False)
