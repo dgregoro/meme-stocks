@@ -102,6 +102,15 @@ class JobLockRepository:
         except SQLAlchemyError as exc:
             raise DataAccessError("Failed to heartbeat job lock") from exc
 
+    def clear_lock_by_name(self, name: str) -> int:
+        """Remove lock row by name (ignores owner). For startup recovery after restart."""
+        stmt = delete(JobLock).where(JobLock.name == name)
+        try:
+            result = cast(CursorResult[object], self._session.execute(stmt))
+            return result.rowcount or 0
+        except SQLAlchemyError as exc:
+            raise DataAccessError(f"Failed to clear lock {name}") from exc
+
     def release_lock(self, name: str, owner: str) -> bool:
         """Release the lock only if owner matches (delete row)."""
         stmt = delete(JobLock).where(JobLock.name == name, JobLock.owner == owner)

@@ -97,6 +97,28 @@ def test_job_lock_acquire_succeeds_when_expired() -> None:
 
 
 @pytest.mark.integration
+def test_job_lock_clear_by_name_removes_regardless_of_owner() -> None:
+    """clear_lock_by_name removes lock by name (for startup recovery)."""
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(bind=engine)
+    Session = sessionmaker(bind=engine)
+    db = Session()
+    try:
+        repo = JobLockRepository(db)
+        now = datetime(2026, 3, 1, 12, 0, 0, tzinfo=timezone.utc)
+        repo.try_acquire_lock("intraday_ingestion", "scheduler", ttl_seconds=1800, now=now)
+        db.commit()
+        assert repo.get_lock("intraday_ingestion") is not None
+
+        n = repo.clear_lock_by_name("intraday_ingestion")
+        assert n == 1
+        db.commit()
+        assert repo.get_lock("intraday_ingestion") is None
+    finally:
+        db.close()
+
+
+@pytest.mark.integration
 def test_job_lock_release_only_works_for_owner() -> None:
     """Release deletes only when owner matches; returns False otherwise."""
     engine = create_engine("sqlite:///:memory:")

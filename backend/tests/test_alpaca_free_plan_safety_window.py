@@ -98,7 +98,7 @@ def test_alpaca_client_compute_safe_end_time_delegates() -> None:
     client = AlpacaDataClient(
         free_plan_mode=True,
         end_time_safety_minutes=20,
-        feed="delayed_sip",
+        feed="iex",
     )
     now = datetime(2026, 3, 1, 12, 0, 0, tzinfo=timezone.utc)
     end = client.compute_safe_end_time(now)

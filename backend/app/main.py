@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from .config import get_settings
-from .data.database import init_db, SessionLocal
+from .data.database import SessionLocal, init_db
 from .utils.logging_config import configure_logging
 
 # Import all models so SQLAlchemy knows about them for schema creation
@@ -72,6 +72,20 @@ def _make_lifespan(
         # Startup
         configure_logging()  # Redirect yfinance/pandas noise to log file, not terminal
         init_db()
+        # Clear stale job locks: after restart, no process holds them; DB row may still exist
+        settings = get_settings()
+        lock_name = getattr(settings, "intraday_lock_name", "intraday_ingestion")
+        db = SessionLocal()
+        try:
+            from backend.app.data.repositories.job_lock_repo import JobLockRepository
+
+            lock_repo = JobLockRepository(db)
+            n = lock_repo.clear_lock_by_name(lock_name)
+            db.commit()
+            if n:
+                logging.getLogger(__name__).info("Cleared stale job lock %s on startup (process restarted)", lock_name)
+        finally:
+            db.close()
         if omit_scheduler:
             scheduler = None
         elif scheduler_for_testing is not None:
@@ -90,8 +104,8 @@ def _make_lifespan(
 
             db = SessionLocal()
             try:
-                repo = StockGroupRepository(db)
-                if repo.count_total() == 0:
+                group_repo = StockGroupRepository(db)
+                if group_repo.count_total() == 0:
                     logging.getLogger(__name__).warning(
                         "stock_groups is empty; leader detection may work but follower "
                         "candidate generation will return zero. Run: python -m backend.app.cli seed stock-groups"
