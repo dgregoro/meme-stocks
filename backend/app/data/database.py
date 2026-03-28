@@ -337,6 +337,95 @@ def _migrate_drop_reddit_posts_stock_symbol() -> None:
         )
 
 
+def _migrate_leader_follower_paper_sector_fields() -> None:
+    """Add sector confirmation columns to paper runs and paper trades (013)."""
+    import sqlite3
+
+    if ":memory:" in _db_url or "sqlite" not in _db_url.lower():
+        return
+    path = _db_url.replace("sqlite:///", "", 1).split("?")[0].strip()
+    if not path or path == ":memory:":
+        return
+    path = os.path.abspath(path)
+    try:
+        conn = sqlite3.connect(path)
+        cur = conn.execute("PRAGMA table_info(leader_follower_paper_runs)")
+        run_cols = {row[1] for row in cur.fetchall()}
+        cur = conn.execute("PRAGMA table_info(leader_follower_paper_trades)")
+        trade_cols = {row[1] for row in cur.fetchall()}
+        conn.close()
+        with engine.begin() as c:
+            if "skipped_sector_confirmation_count" not in run_cols:
+                c.execute(
+                    text(
+                        "ALTER TABLE leader_follower_paper_runs "
+                        "ADD COLUMN skipped_sector_confirmation_count INTEGER NOT NULL DEFAULT 0"
+                    )
+                )
+            if "sector_etf_symbol" not in trade_cols:
+                c.execute(text("ALTER TABLE leader_follower_paper_trades ADD COLUMN sector_etf_symbol VARCHAR(16)"))
+            if "sector_close" not in trade_cols:
+                c.execute(text("ALTER TABLE leader_follower_paper_trades ADD COLUMN sector_close FLOAT"))
+            if "sector_ma" not in trade_cols:
+                c.execute(text("ALTER TABLE leader_follower_paper_trades ADD COLUMN sector_ma FLOAT"))
+            if "sector_rolling_return_pct" not in trade_cols:
+                c.execute(text("ALTER TABLE leader_follower_paper_trades ADD COLUMN sector_rolling_return_pct FLOAT"))
+            if "sector_confirmation_passed" not in trade_cols:
+                c.execute(
+                    text("ALTER TABLE leader_follower_paper_trades ADD COLUMN sector_confirmation_passed BOOLEAN")
+                )
+    except Exception as exc:
+        logger.warning(
+            "Migration leader_follower_paper_sector_fields failed: %s",
+            exc,
+        )
+
+
+def _migrate_leader_follower_paper_regime_fields() -> None:
+    """Add regime filter columns to paper runs and paper trades (014)."""
+    import sqlite3
+
+    if ":memory:" in _db_url or "sqlite" not in _db_url.lower():
+        return
+    path = _db_url.replace("sqlite:///", "", 1).split("?")[0].strip()
+    if not path or path == ":memory:":
+        return
+    path = os.path.abspath(path)
+    try:
+        conn = sqlite3.connect(path)
+        cur = conn.execute("PRAGMA table_info(leader_follower_paper_runs)")
+        run_cols = {row[1] for row in cur.fetchall()}
+        cur = conn.execute("PRAGMA table_info(leader_follower_paper_trades)")
+        trade_cols = {row[1] for row in cur.fetchall()}
+        conn.close()
+        with engine.begin() as c:
+            if "skipped_regime_filter_count" not in run_cols:
+                c.execute(
+                    text(
+                        "ALTER TABLE leader_follower_paper_runs "
+                        "ADD COLUMN skipped_regime_filter_count INTEGER NOT NULL DEFAULT 0"
+                    )
+                )
+            for col, ddl in [
+                ("regime_benchmark_symbol", "VARCHAR(16)"),
+                ("regime_decision_date", "DATE"),
+                ("regime_benchmark_close", "FLOAT"),
+                ("regime_benchmark_ma", "FLOAT"),
+                ("regime_market_uptrend_passed", "BOOLEAN"),
+                ("regime_volatility", "FLOAT"),
+                ("regime_low_volatility_passed", "BOOLEAN"),
+                ("regime_sector_strength_passed", "BOOLEAN"),
+                ("regime_filter_passed", "BOOLEAN"),
+            ]:
+                if col not in trade_cols:
+                    c.execute(text(f"ALTER TABLE leader_follower_paper_trades ADD COLUMN {col} {ddl}"))
+    except Exception as exc:
+        logger.warning(
+            "Migration leader_follower_paper_regime_fields failed: %s",
+            exc,
+        )
+
+
 def init_db() -> None:
     """Initialize database schema if missing (development convenience)."""
     Base.metadata.create_all(bind=engine)
@@ -348,3 +437,5 @@ def init_db() -> None:
     _migrate_leader_events_add_job_run_id()
     _migrate_create_leader_follower_candidates()
     _migrate_create_leader_debug_evaluations()
+    _migrate_leader_follower_paper_sector_fields()
+    _migrate_leader_follower_paper_regime_fields()

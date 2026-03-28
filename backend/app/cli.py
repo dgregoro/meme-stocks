@@ -230,6 +230,49 @@ def simulate_leader_follower(
     max_positions_per_event: int = typer.Option(2, "--max_positions_per_event"),
     cost_pct: float = typer.Option(0.1, "--cost_pct", help="Round-trip cost in percentage points"),
     min_pair_score: float | None = typer.Option(None, "--min_pair_score"),
+    sector_confirmation: bool = typer.Option(
+        False,
+        "--sector-confirmation/--no-sector-confirmation",
+        help="Gate entries on sector ETF trend (013); default off",
+    ),
+    sector_trend_window: int = typer.Option(
+        10,
+        "--sector-trend-window",
+        help="MA/window length for sector trend when confirmation is on",
+    ),
+    minimum_sector_return_pct: float = typer.Option(
+        0.0,
+        "--minimum-sector-return-pct",
+        help="Extra sector return threshold (combined / rolling_return modes)",
+    ),
+    regime_filter: bool = typer.Option(
+        False,
+        "--regime-filter/--no-regime-filter",
+        help="Gate entries on benchmark trend/vol (014); default off",
+    ),
+    regime_benchmark: str = typer.Option("SPY", "--regime-benchmark", help="Benchmark symbol for regime gate"),
+    market_trend_window: int = typer.Option(20, "--market-trend-window", help="Days for benchmark MA"),
+    require_market_uptrend: bool = typer.Option(
+        True,
+        "--require-market-uptrend/--no-require-market-uptrend",
+        help="Require benchmark close > MA when regime filter on",
+    ),
+    volatility_window: int = typer.Option(10, "--volatility-window", help="Days for rolling return std"),
+    volatility_threshold: float = typer.Option(
+        0.02,
+        "--volatility-threshold",
+        help="Max allowed daily return std (decimal) when low-vol required",
+    ),
+    require_low_volatility: bool = typer.Option(
+        False,
+        "--require-low-volatility/--no-require-low-volatility",
+        help="Require rolling vol <= threshold",
+    ),
+    regime_sector_strength: bool = typer.Option(
+        False,
+        "--regime-sector-strength/--no-regime-sector-strength",
+        help="Also require sector confirmation pass (implies sector gate on)",
+    ),
 ) -> None:
     """Run paper-trading simulation; persists a run and trades for API inspection."""
     from backend.app.services.leader_follower_paper_trading_service import (
@@ -259,6 +302,17 @@ def simulate_leader_follower(
         max_positions_per_event=max_positions_per_event,
         min_pair_score=min_pair_score,
         per_trade_cost_pct=cost_pct,
+        sector_confirmation_enabled=sector_confirmation,
+        sector_trend_window=sector_trend_window,
+        minimum_sector_return_pct=minimum_sector_return_pct,
+        regime_filter_enabled=regime_filter,
+        regime_benchmark_symbol=regime_benchmark.strip().upper(),
+        market_trend_window=market_trend_window,
+        require_market_uptrend=require_market_uptrend,
+        volatility_window=volatility_window,
+        volatility_threshold=volatility_threshold,
+        require_low_volatility=require_low_volatility,
+        regime_sector_strength_required=regime_sector_strength,
     )
 
     init_db()
@@ -267,6 +321,8 @@ def simulate_leader_follower(
         run = run_paper_trading_simulation(db, start_d, end_d, cfg)
         typer.echo(f"Paper trading run id={run.id}")
         typer.echo(f"  trades={run.total_trades} skipped={run.skipped_count}")
+        typer.echo(f"  skipped_sector_confirmation_count={run.skipped_sector_confirmation_count}")
+        typer.echo(f"  skipped_regime_filter_count={run.skipped_regime_filter_count}")
         typer.echo(f"  cumulative_return_pct={run.cumulative_return_pct:.4f}")
         typer.echo(f"  max_drawdown_pct={run.max_drawdown_pct:.4f}")
         typer.echo(f"  win_rate={run.win_rate:.4f} avg_return_pct={run.avg_return_pct:.4f}")
@@ -336,9 +392,9 @@ def optimize_leader_follower(
 def robustness_leader_follower(
     overall_start: str = typer.Option(..., "--overall-start", help="Overall range start (YYYY-MM-DD)"),
     overall_end: str = typer.Option(..., "--overall-end", help="Overall range end (YYYY-MM-DD)"),
-    train_window_months: int = typer.Option(..., "--train-window-months", ge=1),
-    validate_window_months: int = typer.Option(..., "--validate-window-months", ge=1),
-    step_months: int = typer.Option(..., "--step-months", ge=1),
+    train_window_months: int = typer.Option(..., "--train-window-months"),
+    validate_window_months: int = typer.Option(..., "--validate-window-months"),
+    step_months: int = typer.Option(..., "--step-months"),
     test_window_months: int | None = typer.Option(
         None,
         "--test-window-months",
@@ -377,6 +433,12 @@ def robustness_leader_follower(
     o_e = _parse_date(overall_end)
     if o_s > o_e:
         typer.echo("Error: overall_start must be <= overall_end", err=True)
+        raise typer.Exit(1)
+    if train_window_months < 1 or validate_window_months < 1 or step_months < 1:
+        typer.echo("Error: train/validate/step window months must be >= 1", err=True)
+        raise typer.Exit(1)
+    if test_window_months is not None and test_window_months < 1:
+        typer.echo("Error: test_window_months must be >= 1 when set", err=True)
         raise typer.Exit(1)
 
     init_db()

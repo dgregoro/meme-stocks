@@ -35,6 +35,20 @@ ALLOWED_GRID_KEYS = frozenset(
         "entry_mode",
         "exit_mode",
         "per_trade_cost_pct",
+        "sector_confirmation_enabled",
+        "sector_trend_method",
+        "sector_trend_window",
+        "minimum_sector_return_pct",
+        "require_positive_trend",
+        "sector_etf_symbol",
+        "regime_filter_enabled",
+        "regime_benchmark_symbol",
+        "market_trend_window",
+        "require_market_uptrend",
+        "volatility_window",
+        "volatility_threshold",
+        "require_low_volatility",
+        "regime_sector_strength_required",
     }
 )
 

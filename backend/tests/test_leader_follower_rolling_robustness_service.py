@@ -38,6 +38,8 @@ def _fake_metrics(ret: float, trades: int = 10) -> PaperSimulationMetrics:
     return PaperSimulationMetrics(
         total_trades=trades,
         skipped_count=0,
+        skipped_sector_confirmation_count=0,
+        skipped_regime_filter_count=0,
         win_rate=0.5,
         avg_return_pct=ret / max(trades, 1),
         cumulative_return_pct=ret,

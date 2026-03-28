@@ -53,6 +53,8 @@ def test_paper_trading_runs_list_and_detail() -> None:
         end_date=date(2026, 1, 31),
         total_trades=1,
         skipped_count=0,
+        skipped_sector_confirmation_count=0,
+        skipped_regime_filter_count=0,
         win_rate=1.0,
         avg_return_pct=0.5,
         cumulative_return_pct=0.5,
@@ -75,6 +77,15 @@ def test_paper_trading_runs_list_and_detail() -> None:
             holding_period_days=3,
             gross_return_pct=1.0,
             net_return_pct=0.9,
+            regime_benchmark_symbol="SPY",
+            regime_decision_date=date(2026, 1, 15),
+            regime_benchmark_close=450.0,
+            regime_benchmark_ma=440.0,
+            regime_market_uptrend_passed=True,
+            regime_volatility=0.012,
+            regime_low_volatility_passed=True,
+            regime_sector_strength_passed=None,
+            regime_filter_passed=True,
         )
     )
     db.commit()
@@ -83,12 +94,24 @@ def test_paper_trading_runs_list_and_detail() -> None:
     assert r.status_code == 200
     data = r.json()
     assert len(data["runs"]) == 1
+    assert data["runs"][0]["skipped_regime_filter_count"] == 0
 
     r2 = client.get(f"/api/leader-follower/paper-trading/{run.id}")
     assert r2.status_code == 200
     d2 = r2.json()
     assert d2["total_trades"] == 1
+    assert d2["skipped_regime_filter_count"] == 0
     assert len(d2["trades"]) == 1
+    tr = d2["trades"][0]
+    assert tr["regime_benchmark_symbol"] == "SPY"
+    assert tr["regime_decision_date"] == "2026-01-15"
+    assert tr["regime_benchmark_close"] == 450.0
+    assert tr["regime_benchmark_ma"] == 440.0
+    assert tr["regime_market_uptrend_passed"] is True
+    assert tr["regime_volatility"] == 0.012
+    assert tr["regime_low_volatility_passed"] is True
+    assert tr["regime_sector_strength_passed"] is None
+    assert tr["regime_filter_passed"] is True
 
     r3 = client.get(f"/api/leader-follower/paper-trading/{run.id}/equity-curve")
     assert r3.status_code == 200

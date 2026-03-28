@@ -5,7 +5,7 @@ from __future__ import annotations
 import datetime as dt
 from datetime import datetime
 
-from sqlalchemy import Date, DateTime, Float, ForeignKey, Integer, String
+from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.app.data.database import Base
@@ -33,5 +33,19 @@ class LeaderFollowerPaperTrade(Base):
     holding_period_days: Mapped[int] = mapped_column(Integer, nullable=False)
     gross_return_pct: Mapped[float] = mapped_column(Float, nullable=False)
     net_return_pct: Mapped[float] = mapped_column(Float, nullable=False)
+    sector_etf_symbol: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    sector_close: Mapped[float | None] = mapped_column(Float, nullable=True)
+    sector_ma: Mapped[float | None] = mapped_column(Float, nullable=True)
+    sector_rolling_return_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    sector_confirmation_passed: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    regime_benchmark_symbol: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    regime_decision_date: Mapped[dt.date | None] = mapped_column(Date, nullable=True)
+    regime_benchmark_close: Mapped[float | None] = mapped_column(Float, nullable=True)
+    regime_benchmark_ma: Mapped[float | None] = mapped_column(Float, nullable=True)
+    regime_market_uptrend_passed: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    regime_volatility: Mapped[float | None] = mapped_column(Float, nullable=True)
+    regime_low_volatility_passed: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    regime_sector_strength_passed: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    regime_filter_passed: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
 
     run = relationship("LeaderFollowerPaperRun", back_populates="trades")
