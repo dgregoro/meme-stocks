@@ -27,6 +27,8 @@ services:
       # Persist SQLite database and data
       - meme-stocks-data:/app/data
     command: ["uvicorn", "backend.app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    # If you change deployment/.env, recreate so variables are picked up:
+    #   podman compose up -d --force-recreate backend
     env_file:
       - deployment/.env
     environment:
