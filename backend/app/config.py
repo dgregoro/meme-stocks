@@ -160,6 +160,21 @@ class Settings(BaseSettings):
     volume_spike_research_min_close: float = 0.0  # 0 = disabled
     volume_spike_research_min_baseline_volume: float = 0.0  # 0 = disabled
 
+    # Daily-frequency strategy research (STRATEGY_EXPLORATION S1/S2); see docs/STRATEGY_TESTING_PLAN.md
+    daily_strategy_realized_vol_window: int = 10
+    daily_strategy_volume_z_window: int = 20
+    daily_strategy_regime_lookback_days: int = 252
+    daily_strategy_regime_min_prior_days: int = 60
+    daily_strategy_gap_ma_window: int = 20
+    daily_strategy_horizons: str = "1,5,10"
+    # Automated merit report (evaluate daily-strategy s1-merit); align with SIGNAL_EVALUATION_CHECKLIST
+    daily_strategy_merit_min_events_per_regime: int = 50
+    daily_strategy_merit_concentration_top5_max_pct: float = 0.65
+    # Optional auto-fetch for evaluate daily-strategy --ensure-data (019 preflight)
+    daily_strategy_ensure_data_prior_calendar_days: int = 580
+    daily_strategy_ensure_data_end_buffer_calendar_days: int = 45
+    daily_strategy_ensure_data_max_symbols: int = 64
+
     # Extreme move research (016): large daily close-to-close return; mean-reversion hypothesis
     extreme_move_up_threshold_pct: float = 5.0
     extreme_move_down_threshold_pct: float = 5.0
@@ -173,6 +188,8 @@ class Settings(BaseSettings):
     research_dataset_dir: str = (
         "data/research"  # Output dir for build-dataset; experiments accept only paths under this
     )
+    # S&P Composite 1500 cap-filter CLI: default CSV path (repo-relative); see data/research/universes/README.md
+    research_sp1500_constituents_csv: str = "data/research/universes/sp_composite_1500_constituents.csv"
 
     # Market clock (intraday ingestion, status dashboards)
     market_timezone: str = "America/New_York"

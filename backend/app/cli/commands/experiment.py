@@ -20,16 +20,8 @@ def register_experiment(app: typer.Typer) -> None:
         """Directionality sanity check: mentions lead returns vs returns lead mentions."""
         result = run_directionality(dataset_path=dataset, k=k, h=h)
         typer.echo("Directionality results:")
-        m_str = (
-            f"{result.mentions_lead_returns_corr:.4f}"
-            if result.mentions_lead_returns_corr is not None
-            else "N/A"
-        )
-        r_str = (
-            f"{result.returns_lead_mentions_corr:.4f}"
-            if result.returns_lead_mentions_corr is not None
-            else "N/A"
-        )
+        m_str = f"{result.mentions_lead_returns_corr:.4f}" if result.mentions_lead_returns_corr is not None else "N/A"
+        r_str = f"{result.returns_lead_mentions_corr:.4f}" if result.returns_lead_mentions_corr is not None else "N/A"
         typer.echo(f"  mentions → returns: corr={m_str} (n={result.mentions_lead_returns_n})")
         typer.echo(f"  returns → mentions: corr={r_str} (n={result.returns_lead_mentions_n})")
 

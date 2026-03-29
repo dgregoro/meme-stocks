@@ -20,8 +20,7 @@ def register_seed(app: typer.Typer) -> None:
             result = seed_stocks_for_bootstrap(db)
             db.commit()
             typer.echo(
-                f"Stocks seeded: {result['created']} created, "
-                f"{result['total'] - result['created']} already existed"
+                f"Stocks seeded: {result['created']} created, " f"{result['total'] - result['created']} already existed"
             )
         finally:
             db.close()

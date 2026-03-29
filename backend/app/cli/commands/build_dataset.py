@@ -21,9 +21,7 @@ def register_build_dataset(app: typer.Typer) -> None:
         horizon: int = typer.Option(5, "--horizon", help="Forward-return horizon in days"),
         out: str = typer.Option(..., "--out", "-o", help="Output file path (CSV or .parquet)"),
         format: str = typer.Option("csv", "--format", "-f", help="Output format: csv or parquet"),
-        symbols: str | None = typer.Option(
-            None, "--symbols", help="Comma-separated symbols to include (default: all)"
-        ),
+        symbols: str | None = typer.Option(None, "--symbols", help="Comma-separated symbols to include (default: all)"),
     ) -> None:
         """Build training dataset: compute forward-return labels and join with Reddit daily features."""
         start_d = parse_cli_date(start)

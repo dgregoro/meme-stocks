@@ -76,9 +76,7 @@ def register_robustness(app: typer.Typer) -> None:
                 step_months=step_months,
                 source_payload=payload,
             )
-            typer.echo(
-                f"Robustness run id={run.id} splits={run.split_count} ranking={run.ranking_method}"
-            )
+            typer.echo(f"Robustness run id={run.id} splits={run.split_count} ranking={run.ranking_method}")
         except RollingRobustnessValidationError as e:
             typer.echo(f"Error: {e}", err=True)
             raise typer.Exit(1) from e

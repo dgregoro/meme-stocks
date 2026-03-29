@@ -136,7 +136,9 @@ def register_backfill(app: typer.Typer) -> None:
     def backfill_extreme_move(
         start: str = typer.Option(..., "--start", "-s", help="Start date (YYYY-MM-DD)"),
         end: str = typer.Option(..., "--end", "-e", help="End date (YYYY-MM-DD)"),
-        symbols: str | None = typer.Option(None, "--symbols", help="Comma-separated tickers (default: all stocks in DB)"),
+        symbols: str | None = typer.Option(
+            None, "--symbols", help="Comma-separated tickers (default: all stocks in DB)"
+        ),
         replace_range: bool = typer.Option(
             False,
             "--replace-range",

@@ -30,3 +30,21 @@ def seed_stocks_for_bootstrap(db: Session) -> dict[str, int]:
             created += 1
 
     return {"created": created, "total": len(all_symbols)}
+
+
+def ensure_stock_rows_for_symbols(db: Session, symbols: list[str]) -> dict[str, int]:
+    """Create minimal Stock rows for any ``symbols`` not already present (idempotent).
+
+    Used by strategy eval preflight so requested tickers can be backfilled without
+    running full bootstrap seed.
+    """
+    repo = StockRepository(db)
+    created = 0
+    for raw in symbols:
+        sym = raw.strip().upper()
+        if not sym:
+            continue
+        if repo.get(sym) is None:
+            repo.add(Stock(symbol=sym, name=sym, sector=None, market_cap=None))
+            created += 1
+    return {"created": created}

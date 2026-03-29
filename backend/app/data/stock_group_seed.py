@@ -89,4 +89,8 @@ BOOTSTRAP_GROUPS: dict[str, list[str]] = {
         "KOSS",
         "BYND",
     ],
+    # Liquid benchmarks for regime research and daily-strategy evaluation (e.g. SPY).
+    "benchmarks": [
+        "SPY",
+    ],
 }

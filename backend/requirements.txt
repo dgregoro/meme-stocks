@@ -5,6 +5,7 @@ pydantic-settings
 sqlalchemy
 
 yfinance
+lxml
 pandas
 numpy
 requests
