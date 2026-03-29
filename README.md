@@ -2,6 +2,8 @@
 
 A web application for analyzing meme stocks using social sentiment (Reddit) and price patterns. The app supports manual trading decisions with end-of-day analysis and real-time notifications for unusual activity. Includes paper trading/modeling capabilities.
 
+**North star:** Personal, data-driven trading research: **hypothesis → measurable edge (or kill) → disciplined execution**; AI for engineering and selective modeling, not instead of validation. Full wording: **[docs/PURPOSE.md](docs/PURPOSE.md)**.
+
 ## Research Track: Reddit Mentions → Future Price Movement (Causation/Predictiveness)
 
 In addition to the existing decision-support features, this repo is tracking a research direction:

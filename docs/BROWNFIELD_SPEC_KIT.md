@@ -24,6 +24,7 @@ Meme-stocks is a **decision-support tool** for retail investors analyzing meme s
 
 | Doc                  | Purpose                                  |
 |----------------------|------------------------------------------|
+| `docs/PURPOSE.md`    | North star: research → edge or kill → execution |
 | `docs/ROADMAP.md`    | Phases, tasks, agent instructions        |
 | `docs/PRD.md`        | Requirements, reliability (§5.0), errors (App. C) |
 | `docs/ARCHITECTURE.md`| Patterns, how to add features           |

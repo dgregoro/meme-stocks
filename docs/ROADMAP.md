@@ -2,7 +2,9 @@
 
 This roadmap organizes future development work into prioritized phases.
 
-**Last Updated**: March 26, 2026
+**North star (operator intent):** See **[docs/PURPOSE.md](PURPOSE.md)** — personal, data-driven research → measurable edge or kill → disciplined execution; AI for engineering and selective modeling, not instead of validation.
+
+**Last Updated**: March 29, 2026
 
 ---
 
@@ -203,6 +205,9 @@ if alignment_score > COMBINED_SIGNAL_THRESHOLD and confidence > 0.7:
 | 3.11 | Leader-follower sector ETF confirmation (gating) | specs/013-leader-follower-sector-etf-confirmation | 📋 Spec drafted |
 | 3.12 | Leader-follower regime filtering (market gating) | specs/014-leader-follower-regime-filtering | ✅ Implemented |
 | 3.13 | Volume spike vs baseline signal research (read-only) | specs/015-volume-spike-vs-baseline-signal-research | ✅ Implemented |
+| 3.14 | Mean reversion after extreme daily moves (read-only) | specs/016-mean-reversion-after-extreme-moves | ✅ Implemented |
+| 3.15 | Mean reversion with context filters (magnitude × volume, read-only) | specs/017-mean-reversion-context-filters | ✅ Implemented |
+| 3.16 | Hypothesis research recipe runner (YAML orchestration of CLI steps) | specs/018-hypothesis-research-recipe | ✅ Implemented |
 
 ### 3.7 Leader-Follower Signal Detection ✅
 

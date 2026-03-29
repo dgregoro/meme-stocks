@@ -31,6 +31,8 @@ Auto-generated from all feature plans. Last updated: 2026-03-28
 - SQLite; additive columns on `leader_follower_paper_trades`, `leader_follower_paper_runs`; `_migrate_*` in `database.py` (014-leader-follower-regime-filtering)
 - Python 3.11 + FastAPI, SQLAlchemy, Pydantic, Typer (existing backend stack) (015-volume-spike-vs-baseline-signal-research)
 - SQLite; new table `volume_spike_events` via SQLAlchemy `Base.metadata.create_all` (015-volume-spike-vs-baseline-signal-research)
+- SQLite; `extreme_move_events` + context columns via migration (016, 017-mean-reversion-context-filters)
+- Python 3.11 + Typer + PyYAML; `python -m backend.app.cli research recipe run|validate` (018-hypothesis-research-recipe); no new DB tables
 
 - Python 3.11 + FastAPI, SQLAlchemy, existing services (activity_detector, pattern_analyzer, sentiment_analyzer) (002-combined-signal-alerts)
 
@@ -50,9 +52,11 @@ cd src [ONLY COMMANDS FOR ACTIVE TECHNOLOGIES][ONLY COMMANDS FOR ACTIVE TECHNOLO
 Python 3.11: Follow standard conventions
 
 ## Recent Changes
+- 016-mean-reversion-after-extreme-moves: Added Python 3.11 + FastAPI, SQLAlchemy, Pydantic, Typer
+- 017-mean-reversion-context-filters: magnitude/volume buckets on extreme_move_events; evaluation by-magnitude/by-volume/by-magnitude-volume
+- 018-hypothesis-research-recipe: YAML recipes orchestrate chained `backend.app.cli` steps
 - 015-volume-spike-vs-baseline-signal-research: Added Python 3.11 + FastAPI, SQLAlchemy, Pydantic, Typer (existing backend stack)
 - 014-leader-follower-regime-filtering: Added Python 3.11
-- 013-leader-follower-sector-etf-confirmation: Added Python 3.11
 
 <!-- MANUAL ADDITIONS START -->
 <!-- MANUAL ADDITIONS END -->

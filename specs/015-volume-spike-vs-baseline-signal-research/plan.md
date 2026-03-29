@@ -10,14 +10,14 @@ Add a **research-only** pipeline: detect daily volume spikes vs a rolling baseli
 
 ## Technical Context
 
-**Language/Version**: Python 3.11  
-**Primary Dependencies**: FastAPI, SQLAlchemy, Pydantic, Typer (existing backend stack)  
-**Storage**: SQLite; new table `volume_spike_events` via SQLAlchemy `Base.metadata.create_all`  
-**Testing**: pytest; `@pytest.mark.unit` for pure math; `@pytest.mark.integration` for API + DB  
-**Target Platform**: Linux (Fedora-friendly dev), existing uvicorn deployment  
-**Project Type**: Brownfield web API + CLI (`backend/app`)  
-**Performance Goals**: Batch backfill acceptable for research (no strict SLA); reuse indexed `price_data` queries  
-**Constraints**: No look-ahead (baseline strictly before event day); structured API errors (PRD Appendix C); additive schema only  
+**Language/Version**: Python 3.11
+**Primary Dependencies**: FastAPI, SQLAlchemy, Pydantic, Typer (existing backend stack)
+**Storage**: SQLite; new table `volume_spike_events` via SQLAlchemy `Base.metadata.create_all`
+**Testing**: pytest; `@pytest.mark.unit` for pure math; `@pytest.mark.integration` for API + DB
+**Target Platform**: Linux (Fedora-friendly dev), existing uvicorn deployment
+**Project Type**: Brownfield web API + CLI (`backend/app`)
+**Performance Goals**: Batch backfill acceptable for research (no strict SLA); reuse indexed `price_data` queries
+**Constraints**: No look-ahead (baseline strictly before event day); structured API errors (PRD Appendix C); additive schema only
 **Scale/Scope**: Single new event family; mirror leader-follower evaluation patterns; no ML or paper trading
 
 ## Constitution Check

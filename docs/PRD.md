@@ -13,6 +13,8 @@ The Meme Stocks Trading Application is a web-based tool designed for retail inve
 
 This is a decision-support tool for manual trading—it does not execute trades automatically or integrate with brokers. It is intended as a single-user application for personal use (for now). A command-line interface (CLI) provides full parity with the web UI for terminal users and scripting.
 
+**Operator north star** (strategic intent, not a requirement to ship): personal, data-driven research—hypothesis → measurable edge (or kill) → disciplined execution; AI for engineering and selective modeling, not instead of validation. See **`docs/PURPOSE.md`**.
+
 ### 1.1 Spec-driven development
 
 Before making functional changes to the application, update the spec to clarify the desired behavior. Then implement and test against the spec.

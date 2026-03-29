@@ -7,6 +7,8 @@ Ratification: 2026-03-19
 
 ## 1. Purpose
 
+**North star (operator intent):** `docs/PURPOSE.md` — hypothesis → measurable edge (or kill) → disciplined execution; AI assists engineering/modeling, not validation.
+
 ### What the Application Does Today
 
 Meme-stocks is a **decision-support tool** for retail investors analyzing meme stocks. It:

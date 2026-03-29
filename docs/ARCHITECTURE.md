@@ -10,6 +10,7 @@ This document defines the patterns an agent should follow when implementing feat
 
 **When you add or modify a feature, update the project documentation as well.** Keep these in sync:
 
+- **PURPOSE.md** — North star and operator intent; update when strategic goals change materially.
 - **PRD.md** — Update requirement status (e.g. FR-x.x from ❌ Future to ✅ Complete), add or adjust acceptance criteria.
 - **README.md** — Update feature lists and API examples if endpoints or capabilities change.
 - **PLAN.md** — Update milestones, checklists, and implementation notes.

@@ -148,6 +148,10 @@ The application runs automated background jobs on a schedule:
 
 **Stock groups bootstrap**: Leader-follower detection needs `stock_groups` populated to produce follower candidates. If empty, the job detects leaders but emits zero candidates. See [Stock Groups Bootstrap](STOCK_GROUPS_BOOTSTRAP.md) for how to seed: `python -m backend.app.cli seed stock-groups`.
 
+### Research recipes (YAML)
+
+You can orchestrate repeated CLI sequences (e.g. backfill then evaluate) with **`python -m backend.app.cli research recipe run <file.yaml>`**. See **[specs/018-hypothesis-research-recipe/quickstart.md](../specs/018-hypothesis-research-recipe/quickstart.md)**.
+
 ---
 
 ## Configuration Reference
