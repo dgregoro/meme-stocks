@@ -31,8 +31,11 @@ venv/
 .env
 deployment/.env
 
-# Data & logs
-/data/
+# Data & logs — ignore root data/ tree except versioned research/universe inputs
+/data/*
+!/data/research/
+# Generated cap-filter / merit snapshots (re-run CLI to reproduce)
+/data/research/universes/*.json
 logs/
 # Local deployment SQLite (populated by backfill; do not commit)
 deployment/data/
