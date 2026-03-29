@@ -121,9 +121,7 @@ def test_preflight_check_mode_no_network(monkeypatch: pytest.MonkeyPatch) -> Non
         _add_daily_bars(db, "CCC", date(2024, 1, 2), n_days=40)
         db.commit()
 
-        with patch(
-            "backend.app.services.leader_follower_replay_service.backfill_price_data_from_alpaca"
-        ) as mock_bf:
+        with patch("backend.app.services.leader_follower_replay_service.backfill_price_data_from_alpaca") as mock_bf:
             r = run_strategy_eval_data_preflight(
                 db,
                 ["CCC"],

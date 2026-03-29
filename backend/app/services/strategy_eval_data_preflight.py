@@ -81,9 +81,7 @@ def _assess_all(
     eval_start: date | None,
     eval_end: date | None,
 ) -> list[DailyStrategySymbolDataAssessment]:
-    return [
-        assess_daily_strategy_symbol_data(db, sym, strategy, eval_start, eval_end) for sym in symbols
-    ]
+    return [assess_daily_strategy_symbol_data(db, sym, strategy, eval_start, eval_end) for sym in symbols]
 
 
 def run_strategy_eval_data_preflight(
