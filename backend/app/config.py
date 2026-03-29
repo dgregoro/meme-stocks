@@ -155,6 +155,15 @@ class Settings(BaseSettings):
     # Leader-follower regime gate (014): benchmarks merged into Alpaca replay backfill so SPY bars exist for gating
     leader_follower_regime_backfill_symbols: str = "SPY"
 
+    # Volume spike research (015): daily volume vs rolling baseline; distinct from analysis volume_spike_threshold
+    volume_spike_research_baseline_window_days: int = 20
+    volume_spike_research_baseline_statistic: str = "median"  # median | mean
+    volume_spike_research_ratio_threshold: float = 3.0
+    volume_spike_research_flat_band_pct: float = 0.5  # spike_up if return >= band; spike_down if <= -band
+    volume_spike_research_horizons: str = "1,3,5"
+    volume_spike_research_min_close: float = 0.0  # 0 = disabled
+    volume_spike_research_min_baseline_volume: float = 0.0  # 0 = disabled
+
     # Research API: dataset output and allowed paths for experiments
     research_dataset_dir: str = (
         "data/research"  # Output dir for build-dataset; experiments accept only paths under this

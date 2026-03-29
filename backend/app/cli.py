@@ -6,6 +6,7 @@ Invoke with: python -m backend.app.cli build-dataset --start 2026-01-01 --end 20
 from __future__ import annotations
 
 import copy
+import json
 from datetime import date
 from typing import Literal, cast
 
@@ -40,6 +41,7 @@ from backend.app.models import (  # noqa: F401
     stock,
     stock_group,
     symbol_universe,
+    volume_spike_event,
 )
 from backend.app.services.dataset_builder_service import build_training_dataset
 from backend.app.services.experiments.directionality import run_directionality
@@ -73,6 +75,9 @@ app.add_typer(optimize_app, name="optimize")
 
 robustness_app = typer.Typer(help="Rolling walk-forward robustness evaluation (research).")
 app.add_typer(robustness_app, name="robustness")
+
+evaluate_app = typer.Typer(help="On-demand research evaluation summaries (read-only).")
+app.add_typer(evaluate_app, name="evaluate")
 
 
 def _parse_date(s: str) -> date:
@@ -216,6 +221,71 @@ def backfill_leader_follower(
     except ExternalAPIError as e:
         typer.echo(f"Error: {e}", err=True)
         raise typer.Exit(2)
+    finally:
+        db.close()
+
+
+@backfill_app.command("volume-spike")
+def backfill_volume_spike(
+    start: str = typer.Option(..., "--start", "-s", help="Start date (YYYY-MM-DD)"),
+    end: str = typer.Option(..., "--end", "-e", help="End date (YYYY-MM-DD)"),
+    symbols: str | None = typer.Option(None, "--symbols", help="Comma-separated tickers (default: all stocks in DB)"),
+    replace_range: bool = typer.Option(
+        False,
+        "--replace-range",
+        help="Delete existing volume_spike_events in [start,end] before insert",
+    ),
+) -> None:
+    """Detect and persist volume spike events from daily price_data (research, 015)."""
+    from backend.app.services.volume_spike_service import backfill_volume_spikes
+
+    start_d = _parse_date(start)
+    end_d = _parse_date(end)
+    if start_d > end_d:
+        typer.echo("Error: start_date must be <= end_date", err=True)
+        raise typer.Exit(1)
+    sym_list = [s.strip().upper() for s in symbols.split(",")] if symbols else None
+
+    init_db()
+    db = SessionLocal()
+    try:
+        result = backfill_volume_spikes(db, start_d, end_d, symbols=sym_list, replace_range=replace_range)
+        typer.echo(f"Backfill volume-spike: {start_d} to {end_d}")
+        typer.echo(json.dumps(result, indent=2))
+    finally:
+        db.close()
+
+
+@evaluate_app.command("volume-spike")
+def evaluate_volume_spike(
+    start: str | None = typer.Option(None, "--start", "-s", help="Filter event_date >= (YYYY-MM-DD)"),
+    end: str | None = typer.Option(None, "--end", "-e", help="Filter event_date <= (YYYY-MM-DD)"),
+    symbol: str | None = typer.Option(None, "--symbol", help="Single symbol filter"),
+    limit: int = typer.Option(
+        500,
+        "--limit",
+        help="Max events to evaluate (cap 2000; raise for long windows)",
+        min=1,
+        max=2000,
+    ),
+) -> None:
+    """Print JSON evaluation summary (forward returns by horizon and event_type)."""
+    from backend.app.services.volume_spike_evaluation_service import (
+        aggregate_volume_spike_summary,
+        run_volume_spike_evaluation,
+    )
+
+    start_d = _parse_date(start) if start else None
+    end_d = _parse_date(end) if end else None
+
+    init_db()
+    db = SessionLocal()
+    try:
+        events, price_by_symbol, horizons = run_volume_spike_evaluation(
+            db, since_date=start_d, until_date=end_d, symbol=symbol, limit=limit
+        )
+        summary = aggregate_volume_spike_summary(events, price_by_symbol, horizons)
+        typer.echo(json.dumps(summary, indent=2, default=str))
     finally:
         db.close()
 

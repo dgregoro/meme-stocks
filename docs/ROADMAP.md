@@ -202,6 +202,7 @@ if alignment_score > COMBINED_SIGNAL_THRESHOLD and confidence > 0.7:
 | 3.10 | Leader-follower rolling walk-forward robustness (research) | specs/012-leader-follower-rolling-walk-forward-robustness | ✅ Implemented |
 | 3.11 | Leader-follower sector ETF confirmation (gating) | specs/013-leader-follower-sector-etf-confirmation | 📋 Spec drafted |
 | 3.12 | Leader-follower regime filtering (market gating) | specs/014-leader-follower-regime-filtering | ✅ Implemented |
+| 3.13 | Volume spike vs baseline signal research (read-only) | specs/015-volume-spike-vs-baseline-signal-research | ✅ Implemented |
 
 ### 3.7 Leader-Follower Signal Detection ✅
 

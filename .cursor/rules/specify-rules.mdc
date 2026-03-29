@@ -6,7 +6,7 @@ alwaysApply: true
 
 # meme-stocks Development Guidelines
 
-Auto-generated from all feature plans. Last updated: 2026-03-27
+Auto-generated from all feature plans. Last updated: 2026-03-28
 
 ## Active Technologies
 - Python 3.11 + FastAPI, SQLAlchemy, existing PriceDataRepository, StockRepository, JobExecutionRepository (003-leader-follower-signal-detection)
@@ -29,6 +29,8 @@ Auto-generated from all feature plans. Last updated: 2026-03-27
 - SQLite; new tables `leader_follower_robustness_runs`, `leader_follower_robustness_split_results`, `leader_follower_robustness_aggregates` (012-leader-follower-rolling-walk-forward-robustness)
 - SQLite; additive columns on `leader_follower_paper_trades` + `_migrate_*` in `database.py` (013-leader-follower-sector-etf-confirmation)
 - SQLite; additive columns on `leader_follower_paper_trades`, `leader_follower_paper_runs`; `_migrate_*` in `database.py` (014-leader-follower-regime-filtering)
+- Python 3.11 + FastAPI, SQLAlchemy, Pydantic, Typer (existing backend stack) (015-volume-spike-vs-baseline-signal-research)
+- SQLite; new table `volume_spike_events` via SQLAlchemy `Base.metadata.create_all` (015-volume-spike-vs-baseline-signal-research)
 
 - Python 3.11 + FastAPI, SQLAlchemy, existing services (activity_detector, pattern_analyzer, sentiment_analyzer) (002-combined-signal-alerts)
 
@@ -48,9 +50,9 @@ cd src [ONLY COMMANDS FOR ACTIVE TECHNOLOGIES][ONLY COMMANDS FOR ACTIVE TECHNOLO
 Python 3.11: Follow standard conventions
 
 ## Recent Changes
+- 015-volume-spike-vs-baseline-signal-research: Added Python 3.11 + FastAPI, SQLAlchemy, Pydantic, Typer (existing backend stack)
 - 014-leader-follower-regime-filtering: Added Python 3.11
 - 013-leader-follower-sector-etf-confirmation: Added Python 3.11
-- 012-leader-follower-rolling-walk-forward-robustness: Added Python 3.11 + FastAPI, SQLAlchemy, Pydantic, Typer (existing stack)
 
 <!-- MANUAL ADDITIONS START -->
 <!-- MANUAL ADDITIONS END -->
