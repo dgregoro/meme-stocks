@@ -27,6 +27,12 @@ def test_get_settings_uses_defaults_when_env_not_set(
     assert "buy" in settings.sentiment_positive_keywords
     assert "sell" in settings.sentiment_negative_keywords
     assert settings.volume_spike_threshold == 2.0
+    assert settings.extreme_move_up_threshold_pct == 5.0
+    assert settings.extreme_move_down_threshold_pct == 5.0
+    assert settings.extreme_move_research_horizons == "1,3,5"
+    assert settings.extreme_move_research_min_close == 0.0
+    assert settings.extreme_move_context_volume_high_ratio == 1.5
+    assert settings.extreme_move_context_volume_extreme_ratio == 3.0
     assert settings.price_movement_threshold_pct == 5.0
     assert settings.sentiment_shift_threshold == 0.3
 

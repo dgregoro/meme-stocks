@@ -164,6 +164,15 @@ class Settings(BaseSettings):
     volume_spike_research_min_close: float = 0.0  # 0 = disabled
     volume_spike_research_min_baseline_volume: float = 0.0  # 0 = disabled
 
+    # Extreme move research (016): large daily close-to-close return; mean-reversion hypothesis
+    extreme_move_up_threshold_pct: float = 5.0
+    extreme_move_down_threshold_pct: float = 5.0
+    extreme_move_research_horizons: str = "1,3,5"
+    extreme_move_research_min_close: float = 0.0  # 0 = disabled
+    # 017: volume context uses same rolling baseline window/stat as volume_spike_research_*
+    extreme_move_context_volume_high_ratio: float = 1.5
+    extreme_move_context_volume_extreme_ratio: float = 3.0
+
     # Research API: dataset output and allowed paths for experiments
     research_dataset_dir: str = (
         "data/research"  # Output dir for build-dataset; experiments accept only paths under this

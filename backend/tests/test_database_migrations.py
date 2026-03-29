@@ -63,3 +63,49 @@ def test_migrate_metrics_summary_adds_columns_when_file_exists() -> None:
         conn.close()
         assert "metrics_json" in columns
         assert "summary" in columns
+
+
+def test_migrate_extreme_move_context_adds_columns() -> None:
+    """Old extreme_move_events table without context columns gets ALTERs."""
+    import sqlite3
+
+    from sqlalchemy import create_engine
+
+    from backend.app.data import database
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        path = os.path.join(tmpdir, "emigrate.db")
+        url = f"sqlite:///{path}"
+        conn = sqlite3.connect(path)
+        conn.execute(
+            """
+            CREATE TABLE extreme_move_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                symbol VARCHAR(16) NOT NULL,
+                event_date DATE NOT NULL,
+                return_pct FLOAT NOT NULL,
+                event_type VARCHAR(32) NOT NULL,
+                created_at DATETIME NOT NULL
+            )
+            """
+        )
+        conn.commit()
+        conn.close()
+        test_engine = create_engine(url, future=True)
+        orig_url = database._db_url
+        orig_engine = database.engine
+        database._db_url = url
+        database.engine = test_engine
+        try:
+            database._migrate_extreme_move_context_fields()
+        finally:
+            database._db_url = orig_url
+            database.engine = orig_engine
+
+        conn = sqlite3.connect(path)
+        cur = conn.execute("PRAGMA table_info(extreme_move_events)")
+        cols = {row[1] for row in cur.fetchall()}
+        conn.close()
+        assert "magnitude_bucket" in cols
+        assert "volume_ratio" in cols
+        assert "volume_bucket" in cols

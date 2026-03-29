@@ -16,6 +16,7 @@ pytest-cov
 pytest-asyncio
 httpx
 typer
+PyYAML
 # Transitive via rich/pytest; PyPI 2.19.2 is affected by CVE-2026-4539 (ReDoS in archetype lexer).
 # This tarball is post-#3064 (commit 24b8aa76). Replace with pygments>=2.19.3 when PyPI publishes it.
 pygments @ https://github.com/pygments/pygments/archive/24b8aa76c6cd6d70f39c6dd605cce319c98e2ccc.tar.gz

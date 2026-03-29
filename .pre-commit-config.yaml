@@ -26,6 +26,7 @@ repos:
         additional_dependencies:
           - pydantic
           - pydantic-settings
+          - types-PyYAML
           - types-requests
         args: ["--config-file", "pyproject.toml", "-p", "backend.app", "-p", "backend.tests"]
         pass_filenames: false

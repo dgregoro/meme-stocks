@@ -453,6 +453,36 @@ def _migrate_leader_follower_paper_regime_fields() -> None:
         )
 
 
+def _migrate_extreme_move_context_fields() -> None:
+    """Add magnitude/volume context columns to extreme_move_events (017)."""
+    import sqlite3
+
+    if ":memory:" in _db_url or "sqlite" not in _db_url.lower():
+        return
+    path = _db_url.replace("sqlite:///", "", 1).split("?")[0].strip()
+    if not path or path == ":memory:":
+        return
+    path = os.path.abspath(path)
+    try:
+        conn = sqlite3.connect(path)
+        cur = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='extreme_move_events'")
+        if cur.fetchone() is None:
+            conn.close()
+            return
+        cur = conn.execute("PRAGMA table_info(extreme_move_events)")
+        cols = {row[1] for row in cur.fetchall()}
+        conn.close()
+        with engine.begin() as c:
+            if "magnitude_bucket" not in cols:
+                c.execute(text("ALTER TABLE extreme_move_events ADD COLUMN magnitude_bucket VARCHAR(16)"))
+            if "volume_ratio" not in cols:
+                c.execute(text("ALTER TABLE extreme_move_events ADD COLUMN volume_ratio FLOAT"))
+            if "volume_bucket" not in cols:
+                c.execute(text("ALTER TABLE extreme_move_events ADD COLUMN volume_bucket VARCHAR(16)"))
+    except Exception as exc:
+        logger.warning("Migration extreme_move_context_fields failed: %s", exc)
+
+
 def init_db() -> None:
     """Initialize database schema if missing (development convenience)."""
     Base.metadata.create_all(bind=engine)
@@ -467,3 +497,4 @@ def init_db() -> None:
     _migrate_create_leader_debug_evaluations()
     _migrate_leader_follower_paper_sector_fields()
     _migrate_leader_follower_paper_regime_fields()
+    _migrate_extreme_move_context_fields()

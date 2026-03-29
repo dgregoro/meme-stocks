@@ -8,6 +8,8 @@ from __future__ import annotations
 import copy
 import json
 from datetime import date
+from pathlib import Path
+from subprocess import CalledProcessError  # nosec B404
 from typing import Literal, cast
 
 import typer
@@ -42,6 +44,7 @@ from backend.app.models import (  # noqa: F401
     stock_group,
     symbol_universe,
     volume_spike_event,
+    extreme_move_event,
 )
 from backend.app.services.dataset_builder_service import build_training_dataset
 from backend.app.services.experiments.directionality import run_directionality
@@ -78,6 +81,14 @@ app.add_typer(robustness_app, name="robustness")
 
 evaluate_app = typer.Typer(help="On-demand research evaluation summaries (read-only).")
 app.add_typer(evaluate_app, name="evaluate")
+
+research_app = typer.Typer(
+    help="Orchestrate multi-step research pipelines from trusted YAML recipes (spec 018).",
+)
+app.add_typer(research_app, name="research")
+
+recipe_app = typer.Typer(help="Load and run declarative research recipes.")
+research_app.add_typer(recipe_app, name="recipe")
 
 
 def _parse_date(s: str) -> date:
@@ -225,6 +236,48 @@ def backfill_leader_follower(
         db.close()
 
 
+@backfill_app.command("daily-prices")
+def backfill_daily_prices(
+    start: str = typer.Option(..., "--start", "-s", help="Start date (YYYY-MM-DD)"),
+    end: str = typer.Option(..., "--end", "-e", help="End date (YYYY-MM-DD)"),
+    symbols: str | None = typer.Option(
+        None,
+        "--symbols",
+        help="Comma-separated tickers (default: all symbols in stocks table; run seed stocks first)",
+    ),
+) -> None:
+    """Fetch Alpaca daily bars into price_data only (no leader-follower detection).
+
+    Use this to populate the container DB before volume-spike / extreme-move backfills.
+    Requires ALPACA_API_KEY_ID and ALPACA_API_SECRET_KEY.
+    """
+    from backend.app.services.leader_follower_replay_service import run_daily_price_backfill
+    from backend.app.utils.errors import ExternalAPIError
+
+    start_d = _parse_date(start)
+    end_d = _parse_date(end)
+    if start_d > end_d:
+        typer.echo("Error: start_date must be <= end_date", err=True)
+        raise typer.Exit(1)
+    sym_list = [s.strip().upper() for s in symbols.split(",")] if symbols else None
+
+    init_db()
+    db = SessionLocal()
+    try:
+        result = run_daily_price_backfill(db, start_d, end_d, symbols=sym_list)
+        typer.echo(f"Backfill daily-prices: {start_d} to {end_d}")
+        typer.echo(json.dumps(result, indent=2))
+        if result.get("errors"):
+            if any("no symbols" in err for err in result["errors"]):
+                raise typer.Exit(1)
+            raise typer.Exit(2)
+    except ExternalAPIError as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(2)
+    finally:
+        db.close()
+
+
 @backfill_app.command("volume-spike")
 def backfill_volume_spike(
     start: str = typer.Option(..., "--start", "-s", help="Start date (YYYY-MM-DD)"),
@@ -286,6 +339,109 @@ def evaluate_volume_spike(
         )
         summary = aggregate_volume_spike_summary(events, price_by_symbol, horizons)
         typer.echo(json.dumps(summary, indent=2, default=str))
+    finally:
+        db.close()
+
+
+@backfill_app.command("extreme-move")
+def backfill_extreme_move(
+    start: str = typer.Option(..., "--start", "-s", help="Start date (YYYY-MM-DD)"),
+    end: str = typer.Option(..., "--end", "-e", help="End date (YYYY-MM-DD)"),
+    symbols: str | None = typer.Option(None, "--symbols", help="Comma-separated tickers (default: all stocks in DB)"),
+    replace_range: bool = typer.Option(
+        False,
+        "--replace-range",
+        help="Delete existing extreme_move_events in [start,end] before insert",
+    ),
+) -> None:
+    """Detect and persist extreme daily return events from price_data (research, 016)."""
+    from backend.app.services.extreme_move_service import backfill_extreme_moves
+
+    start_d = _parse_date(start)
+    end_d = _parse_date(end)
+    if start_d > end_d:
+        typer.echo("Error: start_date must be <= end_date", err=True)
+        raise typer.Exit(1)
+    sym_list = [s.strip().upper() for s in symbols.split(",")] if symbols else None
+
+    init_db()
+    db = SessionLocal()
+    try:
+        result = backfill_extreme_moves(db, start_d, end_d, symbols=sym_list, replace_range=replace_range)
+        typer.echo(f"Backfill extreme-move: {start_d} to {end_d}")
+        typer.echo(json.dumps(result, indent=2))
+    finally:
+        db.close()
+
+
+@evaluate_app.command("extreme-move")
+def evaluate_extreme_move(
+    start: str | None = typer.Option(None, "--start", "-s", help="Filter event_date >= (YYYY-MM-DD)"),
+    end: str | None = typer.Option(None, "--end", "-e", help="Filter event_date <= (YYYY-MM-DD)"),
+    symbol: str | None = typer.Option(None, "--symbol", help="Single symbol filter"),
+    limit: int = typer.Option(
+        500,
+        "--limit",
+        help="Max events to evaluate (cap 2000; raise for long windows)",
+        min=1,
+        max=2000,
+    ),
+    group_by: str | None = typer.Option(
+        None,
+        "--group-by",
+        help="Optional: magnitude | volume | magnitude_volume (017 context buckets)",
+    ),
+) -> None:
+    """Print JSON evaluation summary (forward returns by horizon and event_type)."""
+    from backend.app.services.extreme_move_evaluation_service import (
+        aggregate_evaluation_by_magnitude,
+        aggregate_evaluation_by_magnitude_volume,
+        aggregate_evaluation_by_volume,
+        aggregate_extreme_move_summary,
+        run_extreme_move_evaluation,
+    )
+
+    allowed = ("magnitude", "volume", "magnitude_volume")
+    if group_by is not None and group_by not in allowed:
+        typer.echo(f"Error: --group-by must be one of {list(allowed)}", err=True)
+        raise typer.Exit(1)
+
+    start_d = _parse_date(start) if start else None
+    end_d = _parse_date(end) if end else None
+
+    init_db()
+    db = SessionLocal()
+    try:
+        events, price_by_symbol, horizons = run_extreme_move_evaluation(
+            db, since_date=start_d, until_date=end_d, symbol=symbol, limit=limit
+        )
+        if group_by is None:
+            summary = aggregate_extreme_move_summary(events, price_by_symbol, horizons)
+            typer.echo(json.dumps(summary, indent=2, default=str))
+        elif group_by == "magnitude":
+            typer.echo(
+                json.dumps(
+                    aggregate_evaluation_by_magnitude(events, price_by_symbol, horizons),
+                    indent=2,
+                    default=str,
+                )
+            )
+        elif group_by == "volume":
+            typer.echo(
+                json.dumps(
+                    aggregate_evaluation_by_volume(events, price_by_symbol, horizons),
+                    indent=2,
+                    default=str,
+                )
+            )
+        else:
+            typer.echo(
+                json.dumps(
+                    aggregate_evaluation_by_magnitude_volume(events, price_by_symbol, horizons),
+                    indent=2,
+                    default=str,
+                )
+            )
     finally:
         db.close()
 
@@ -568,6 +724,48 @@ def experiment_event_study(
     typer.echo(f"  spike days:     mean_fwd_return={sm} (n={result.spike_n})")
     typer.echo(f"  non-spike days: mean_fwd_return={nm} (n={result.non_spike_n})")
     typer.echo(f"  spread (spike - non): {sp}")
+
+
+@recipe_app.command("run")
+def research_recipe_run(
+    recipe_path: str = typer.Argument(..., help="Path to recipe YAML file"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Print steps only; do not execute subprocesses"),
+    cwd: str | None = typer.Option(
+        None,
+        "--cwd",
+        help="Working directory for each step (default: current directory)",
+    ),
+) -> None:
+    """Run a research recipe: each step invokes `python -m backend.app.cli <argv...>`."""
+    from backend.app.services.research_recipe_runner import run_recipe_file
+
+    path = Path(recipe_path)
+    work = Path(cwd) if cwd else None
+    try:
+        summary = run_recipe_file(path, dry_run=dry_run, cwd=work)
+    except ValueError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(1)
+    except CalledProcessError as e:
+        typer.echo(f"Recipe step failed with exit {e.returncode}", err=True)
+        typer.echo(f"Command: {' '.join(str(x) for x in e.cmd)}", err=True)
+        raise typer.Exit(2)
+    typer.echo(json.dumps(summary, indent=2, default=str))
+
+
+@recipe_app.command("validate")
+def research_recipe_validate(
+    recipe_path: str = typer.Argument(..., help="Path to recipe YAML file"),
+) -> None:
+    """Parse and print the recipe as JSON (no subprocesses)."""
+    from backend.app.services.research_recipe_runner import load_recipe_file, recipe_to_jsonable
+
+    try:
+        recipe = load_recipe_file(Path(recipe_path))
+    except ValueError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(1)
+    typer.echo(json.dumps(recipe_to_jsonable(recipe), indent=2, default=str))
 
 
 @experiment_app.command("predictiveness")

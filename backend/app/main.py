@@ -43,6 +43,7 @@ from .models import (  # noqa: F401
     stock_group,
     symbol_universe,
     volume_spike_event,
+    extreme_move_event,
 )
 from .api import stocks as stocks_api
 from .api import sentiment_price as sentiment_price_api
@@ -60,6 +61,7 @@ from .api import leader_follower_paper_trading as leader_follower_paper_trading_
 from .api import research as research_api
 from .api import stock_groups as stock_groups_api
 from .api import volume_spike as volume_spike_api
+from .api import extreme_move as extreme_move_api
 from .services.scheduler_service import SchedulerService
 
 
@@ -184,6 +186,7 @@ def create_app(
     app.include_router(research_api.router)
     app.include_router(stock_groups_api.router)
     app.include_router(volume_spike_api.router)
+    app.include_router(extreme_move_api.router)
 
     # Serve frontend static files when running in container (SERVING_FRONTEND=true)
     if os.getenv("SERVING_FRONTEND", "").lower() in ("true", "1", "yes"):

@@ -17,6 +17,7 @@ from backend.app.clients.alpaca_data_client import AlpacaDataClient
 from backend.app.config import get_settings
 from backend.app.data.repositories.price_data_repo import PriceDataRepository
 from backend.app.data.repositories.stock_group_repo import StockGroupRepository
+from backend.app.data.repositories.stock_repo import StockRepository
 from backend.app.models.leader_follower_signal import LeaderFollowerSignal
 from backend.app.models.price_data import PriceData
 from backend.app.services.leader_follower_service import run_detection_for_date
@@ -150,6 +151,44 @@ def backfill_price_data_from_alpaca(
         "symbols_fetched": len(symbols),
         "errors": errors,
     }
+
+
+def run_daily_price_backfill(
+    db: Session,
+    start_date: date,
+    end_date: date,
+    *,
+    symbols: list[str] | None = None,
+) -> dict[str, Any]:
+    """Fetch Alpaca daily bars and persist to ``price_data`` without leader-follower replay.
+
+    For research CLIs (volume spike, extreme move) that need ``price_data`` populated.
+
+    If ``symbols`` is None, uses every row in ``stocks`` (run ``seed stocks`` first).
+
+    The Alpaca window starts ``LOOKBACK_DAYS`` calendar days before ``start_date`` so
+    the first in-range trading day typically has a prior close for return features.
+    """
+    if start_date > end_date:
+        raise ValueError("start_date must be <= end_date")
+
+    if symbols is not None:
+        sym_list = [s.strip().upper() for s in symbols if s.strip()]
+    else:
+        sym_list = [s.symbol for s in StockRepository(db).list()]
+
+    if not sym_list:
+        return {
+            "rows_inserted": 0,
+            "symbols_fetched": 0,
+            "errors": [
+                "no symbols: run `python -m backend.app.cli seed stocks` "
+                "(optional: `seed stock-groups` then `backfill leader-follower`)"
+            ],
+        }
+
+    lookback_start = start_date - timedelta(days=LOOKBACK_DAYS)
+    return backfill_price_data_from_alpaca(db, sym_list, lookback_start, end_date)
 
 
 def run_backfill(

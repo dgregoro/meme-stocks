@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from typing import cast
 from unittest.mock import patch
 
@@ -18,10 +18,12 @@ from backend.app.models.price_data import PriceData
 from backend.app.models.stock import Stock
 from backend.app.models.stock_group import StockGroup
 from backend.app.services.leader_follower_replay_service import (
+    LOOKBACK_DAYS,
     _parse_bar_date,
     _trading_days,
     expand_backfill_symbols_with_regime_benchmarks,
     run_backfill,
+    run_daily_price_backfill,
 )
 
 
@@ -57,6 +59,67 @@ def test_trading_days_skips_weekends() -> None:
     assert date(2024, 6, 2) not in days  # Sunday
     assert date(2024, 6, 3) in days
     assert date(2024, 6, 7) in days  # Friday
+
+
+@pytest.mark.unit
+def test_run_daily_price_backfill_empty_stocks() -> None:
+    """Daily price backfill returns explicit error when stocks table is empty."""
+    engine = create_engine(
+        "sqlite:///:memory:",
+        future=True,
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(bind=engine)
+    SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    db = SessionLocal()
+    try:
+        result = run_daily_price_backfill(db, date(2024, 6, 1), date(2024, 6, 7))
+        assert result["rows_inserted"] == 0
+        assert result["symbols_fetched"] == 0
+        assert result["errors"] and "seed stocks" in result["errors"][0]
+    finally:
+        db.close()
+
+
+@pytest.mark.integration
+def test_run_daily_price_backfill_delegates_to_alpaca_helper() -> None:
+    """Resolves symbols from stocks and calls backfill_price_data_from_alpaca with lookback."""
+    engine = create_engine(
+        "sqlite:///:memory:",
+        future=True,
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.drop_all(bind=engine)
+    Base.metadata.create_all(bind=engine)
+    SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    db = SessionLocal()
+    try:
+        db.add(Stock(symbol="AAPL", name="Apple", sector="Tech", market_cap=None))
+        db.commit()
+
+        captured: dict[str, object] = {}
+
+        def _stub(_db, symbols, start, end):
+            captured["symbols"] = symbols
+            captured["start"] = start
+            captured["end"] = end
+            return {"rows_inserted": 3, "symbols_fetched": 1, "errors": []}
+
+        start_d = date(2024, 6, 3)
+        end_d = date(2024, 6, 5)
+        with patch(
+            "backend.app.services.leader_follower_replay_service.backfill_price_data_from_alpaca",
+            side_effect=_stub,
+        ):
+            result = run_daily_price_backfill(db, start_d, end_d)
+        assert result["rows_inserted"] == 3
+        assert captured["symbols"] == ["AAPL"]
+        assert captured["end"] == end_d
+        assert captured["start"] == start_d - timedelta(days=LOOKBACK_DAYS)
+    finally:
+        db.close()
 
 
 @pytest.mark.integration
