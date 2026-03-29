@@ -6,6 +6,7 @@ This document details the trading strategies, scoring algorithms, and business l
 - `PRD.md` - Product requirements and feature status
 - `ARCHITECTURE.md` - Implementation patterns
 - `ROADMAP.md` - Future development work
+- `STRATEGY_EXPLORATION.md` - Daily-frequency research ideas and result log (no Reddit / no intraday)
 - `README.md` - Quick start guide
 
 ---
