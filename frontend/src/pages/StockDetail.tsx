@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { useParams, Link, useSearchParams } from 'react-router-dom'
-import { api, type Sentiment, type PricePoint, type RedditMention } from '../services/api'
+import { api, type Sentiment, type PricePoint, type AnalysisRow } from '../services/api'
 import { LoadingSpinner } from '../components/LoadingSpinner'
 import { PriceChart } from '../components/PriceChart'
 import { CausalPanel } from '../components/symbols/CausalPanel'
@@ -9,10 +9,21 @@ import { spacing } from '../theme'
 
 type StockDetailTab = 'overview' | 'causal'
 
-function redditUrl(url: string): string {
-  if (!url) return '#'
-  if (url.startsWith('http')) return url
-  return `https://www.reddit.com${url.startsWith('/') ? '' : '/'}${url}`
+function classificationFromScore(score: number | null): string {
+  if (score == null) return 'no_data'
+  if (score >= 0.3) return 'positive'
+  if (score <= -0.2) return 'negative'
+  return 'neutral'
+}
+
+function rowToSentiment(row: AnalysisRow): Sentiment {
+  return {
+    stock_symbol: row.symbol,
+    score: row.sentiment_score,
+    mention_count: row.mention_count,
+    window_hours: 24,
+    classification: classificationFromScore(row.sentiment_score),
+  }
 }
 
 export const StockDetail: React.FC = () => {
@@ -21,7 +32,6 @@ export const StockDetail: React.FC = () => {
   const tab = (searchParams.get('tab') as StockDetailTab) ?? 'overview'
   const [sentiment, setSentiment] = useState<Sentiment | null>(null)
   const [prices, setPrices] = useState<PricePoint[]>([])
-  const [mentions, setMentions] = useState<RedditMention[]>([])
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -35,9 +45,15 @@ export const StockDetail: React.FC = () => {
     }
     const id = requestAnimationFrame(tick)
     Promise.all([
-      api.getSentiment(symbol).then(setSentiment).catch((e) => setError(String(e))),
+      api
+        .analysisDaily()
+        .then((rows) => {
+          const row = rows.find((r) => r.symbol === symbol)
+          if (!row) throw new Error(`No daily analysis row for ${symbol}`)
+          setSentiment(rowToSentiment(row))
+        })
+        .catch((e) => setError(String(e))),
       api.getPrices(symbol).then(setPrices).catch(() => setPrices([])),
-      api.getMentions(symbol).then(setMentions).catch(() => setMentions([])),
     ]).finally(() => {
       if (!cancelled) {
         completedRef.current = true
@@ -119,8 +135,11 @@ export const StockDetail: React.FC = () => {
 
           {sentiment && (
             <section style={{ marginBottom: 24 }}>
-              <h3 style={{ marginBottom: 8 }}>Sentiment</h3>
-              <p style={{ margin: 0 }}>
+              <h3 style={{ marginBottom: 8 }}>Daily analysis (sentiment slot)</h3>
+              <p style={{ margin: 0, fontSize: 14, color: '#6b7280' }}>
+                Keyword sentiment from a social feed is not available. Scores reflect the same daily analysis row as the dashboard (mention count stays zero).
+              </p>
+              <p style={{ margin: '12px 0 0 0' }}>
                 <strong>{sentiment.classification}</strong>
                 {sentiment.score != null && (
                   <span
@@ -138,32 +157,10 @@ export const StockDetail: React.FC = () => {
                     {sentiment.score.toFixed(2)}
                   </span>
                 )}
-                {' '}({sentiment.mention_count} mentions, {sentiment.window_hours}h window)
+                {' '}(mentions: {sentiment.mention_count}, {sentiment.window_hours}h window)
               </p>
             </section>
           )}
-
-          <section>
-            <h3 style={{ marginBottom: 8 }}>Recent Reddit mentions</h3>
-            {mentions.length === 0 ? (
-              <p style={{ color: '#6b7280' }}>No recent mentions.</p>
-            ) : (
-              <ul style={{ listStyle: 'none', paddingLeft: 0 }}>
-                {mentions.map((m) => (
-                  <li key={m.id} style={{ marginBottom: 12, padding: 12, border: '1px solid #e5e7eb', borderRadius: 8 }}>
-                    <span style={{ fontWeight: 600 }}>r/{m.subreddit}</span>
-                    {' — '}
-                    <a href={redditUrl(m.url)} target="_blank" rel="noopener noreferrer">
-                      {m.title.length > 80 ? `${m.title.slice(0, 80)}…` : m.title}
-                    </a>
-                    <span style={{ color: '#6b7280', fontSize: 14, display: 'block', marginTop: 4 }}>
-                      {m.upvotes} ↑ · {m.comments} comments
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
         </>
       )}
     </div>

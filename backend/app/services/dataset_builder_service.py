@@ -1,4 +1,8 @@
-"""Build training dataset by joining reddit_daily_features and price_labels."""
+"""Build research dataset by joining price_labels with same-day OHLCV.
+
+Legacy datasets included Reddit daily features; those columns are kept as zeros
+so downstream experiment CLIs and CSV schemas stay compatible.
+"""
 
 from __future__ import annotations
 
@@ -11,12 +15,11 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
-from sqlalchemy import and_, select
+from sqlalchemy import Integer, Float, and_, cast, literal, select
 from sqlalchemy.orm import Session
 
 from backend.app.models.price_data import PriceData
 from backend.app.models.price_labels import PriceLabel
-from backend.app.models.reddit_daily_feature import RedditDailyFeature
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -57,64 +60,51 @@ def build_training_dataset(
     format: Literal["csv", "parquet"] = "csv",
     dataset_version: str | None = None,
 ) -> dict[str, int | str]:
-    """Join reddit_daily_features and price_labels; write deterministic snapshot.
+    """Join price_labels and PriceData; write deterministic snapshot.
 
-    INNER JOIN on (symbol, trading_day): only rows with both features and label.
-    Features use data as-of end of day D; label uses close[D+h]/close[D]-1 (no look-ahead).
+    INNER JOIN path: labels for (symbol, trading_day, horizon_days) with optional
+    same-day PriceData for close/volume. Reddit aggregate columns are zeros.
 
-    Output columns: symbol, trading_day, mention_count, unique_authors, total_upvotes,
-    total_comments, upvote_weighted_mentions, close, volume, y_fwd_return_{horizon_days}
-
-    Sorted by trading_day asc, symbol asc.
-    Writes metadata sidecar JSON with start_day, end_day, horizon_days, symbols filter,
-    git sha, generation timestamp.
+    Output columns unchanged from the Reddit era for experiment compatibility.
     """
     if dataset_version is None:
         git_sha = _get_git_sha()
         today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         dataset_version = f"{git_sha or 'nogit'}_{today}"
-    # Build join: RedditDailyFeature INNER JOIN PriceLabel ON (symbol, trading_day) AND horizon_days
-    # Optional LEFT JOIN PriceData for same-day close, volume
+
+    label_attr = f"y_fwd_return_{horizon_days}"
     stmt = (
         select(
-            RedditDailyFeature.symbol,
-            RedditDailyFeature.trading_day,
-            RedditDailyFeature.mention_count,
-            RedditDailyFeature.unique_authors,
-            RedditDailyFeature.total_upvotes,
-            RedditDailyFeature.total_comments,
-            RedditDailyFeature.upvote_weighted_mentions,
+            PriceLabel.symbol,
+            PriceLabel.trading_day,
+            cast(literal(0), Integer).label("mention_count"),
+            cast(literal(0), Integer).label("unique_authors"),
+            cast(literal(0), Integer).label("total_upvotes"),
+            cast(literal(0), Integer).label("total_comments"),
+            cast(literal(0.0), Float).label("upvote_weighted_mentions"),
             PriceData.close,
             PriceData.volume,
-            PriceLabel.fwd_return.label(f"y_fwd_return_{horizon_days}"),
-        )
-        .join(
-            PriceLabel,
-            and_(
-                RedditDailyFeature.symbol == PriceLabel.symbol,
-                RedditDailyFeature.trading_day == PriceLabel.trading_day,
-                PriceLabel.horizon_days == horizon_days,
-            ),
+            PriceLabel.fwd_return.label(label_attr),
         )
         .outerjoin(
             PriceData,
             and_(
-                RedditDailyFeature.symbol == PriceData.stock_symbol,
-                RedditDailyFeature.trading_day == PriceData.date,
+                PriceLabel.symbol == PriceData.stock_symbol,
+                PriceLabel.trading_day == PriceData.date,
             ),
         )
         .where(
-            RedditDailyFeature.trading_day >= start_day,
-            RedditDailyFeature.trading_day <= end_day,
+            PriceLabel.trading_day >= start_day,
+            PriceLabel.trading_day <= end_day,
+            PriceLabel.horizon_days == horizon_days,
         )
-        .order_by(RedditDailyFeature.trading_day.asc(), RedditDailyFeature.symbol.asc())
+        .order_by(PriceLabel.trading_day.asc(), PriceLabel.symbol.asc())
     )
     if symbols:
-        stmt = stmt.where(RedditDailyFeature.symbol.in_(symbols))
+        stmt = stmt.where(PriceLabel.symbol.in_(symbols))
 
     rows = list(db.execute(stmt).all())
 
-    label_col = f"y_fwd_return_{horizon_days}"
     headers = [
         "symbol",
         "trading_day",
@@ -125,13 +115,12 @@ def build_training_dataset(
         "upvote_weighted_mentions",
         "close",
         "volume",
-        label_col,
+        label_attr,
     ]
 
     out = Path(output_path)
     out.parent.mkdir(parents=True, exist_ok=True)
 
-    # Write metadata sidecar JSON
     metadata = {
         "start_day": str(start_day),
         "end_day": str(end_day),
@@ -140,15 +129,16 @@ def build_training_dataset(
         "git_sha": _get_git_sha(),
         "generation_timestamp_utc": datetime.now(timezone.utc).isoformat(),
         "dataset_version": dataset_version,
+        "source": "price_labels_only",
     }
     metadata_path = out.with_suffix(out.suffix + ".meta.json")
     with open(metadata_path, "w", encoding="utf-8") as f:
         json.dump(metadata, f, indent=2)
 
     if format.lower() == "parquet":
-        _write_parquet(headers, rows, label_col, str(out))
+        _write_parquet(headers, rows, label_attr, str(out))
     else:
-        _write_csv(headers, rows, label_col, str(out))
+        _write_csv(headers, rows, label_attr, str(out))
 
     logger.info(
         "Dataset built: start=%s end=%s horizon=%s rows=%s path=%s",

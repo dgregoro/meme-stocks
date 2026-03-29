@@ -48,7 +48,7 @@ describe('Dashboard', () => {
       { id: 2, read: true, stock_symbol: 'AMC', type: 'price', message: 'Move', severity: 'medium', created_at: '' },
     ])
     vi.mocked(api.getJobRuns).mockResolvedValue([
-      { id: 1, job_name: 'reddit_collection', run_at: '2026-02-28T11:30:00.000Z' },
+      { id: 1, job_name: 'price_collection', run_at: '2026-02-28T11:30:00.000Z' },
     ])
     vi.mocked(api.getPrices).mockResolvedValue([])
   })
@@ -71,7 +71,7 @@ describe('Dashboard', () => {
     expect(screen.getByText('3')).toBeInTheDocument()
     expect(screen.getByText('Unread notifications')).toBeInTheDocument()
     expect(screen.getByText('1')).toBeInTheDocument()
-    expect(screen.getByText('Last Reddit run')).toBeInTheDocument()
+    expect(screen.getByText('Last price collection')).toBeInTheDocument()
     await waitFor(() => {
       expect(screen.getByTitle('2026-02-28T11:30:00.000Z')).toBeInTheDocument()
     })
@@ -127,5 +127,6 @@ describe('Dashboard', () => {
       expect(screen.getByText('No analysis yet')).toBeInTheDocument()
     })
     expect(screen.getByText(/Daily analysis ranks stocks/)).toBeInTheDocument()
+    expect(screen.getByText(/no social feed/)).toBeInTheDocument()
   })
 })

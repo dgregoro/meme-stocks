@@ -10,14 +10,14 @@ Add a **research-only** pipeline: detect **close-to-close daily returns** exceed
 
 ## Technical Context
 
-**Language/Version**: Python 3.11  
-**Primary Dependencies**: FastAPI, SQLAlchemy, Pydantic, Typer  
-**Storage**: SQLite; new table `extreme_move_events` via SQLAlchemy `Base.metadata.create_all`  
-**Testing**: pytest; `@pytest.mark.unit` / `@pytest.mark.integration`  
-**Target Platform**: Linux; existing uvicorn / Podman deployment  
-**Project Type**: Brownfield `backend/app` API + CLI  
-**Performance Goals**: Batch backfill acceptable for research  
-**Constraints**: No look-ahead; structured API errors (PRD Appendix C); additive schema  
+**Language/Version**: Python 3.11
+**Primary Dependencies**: FastAPI, SQLAlchemy, Pydantic, Typer
+**Storage**: SQLite; new table `extreme_move_events` via SQLAlchemy `Base.metadata.create_all`
+**Testing**: pytest; `@pytest.mark.unit` / `@pytest.mark.integration`
+**Target Platform**: Linux; existing uvicorn / Podman deployment
+**Project Type**: Brownfield `backend/app` API + CLI
+**Performance Goals**: Batch backfill acceptable for research
+**Constraints**: No look-ahead; structured API errors (PRD Appendix C); additive schema
 **Scale/Scope**: One event family; mirror **015 volume-spike** module layout
 
 ## Constitution Check

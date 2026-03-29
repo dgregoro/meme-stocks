@@ -2,6 +2,8 @@
 
 This document details the trading strategies, scoring algorithms, and business logic used by the application.
 
+**Scope note (March 2026):** The app **originally** paired **Reddit-derived sentiment and mentions** with price data. **Reddit ingestion has been removed.** Sections below that refer to collecting Reddit features or “mentions lead returns” describe **historical design** or **research ideas**; live behavior is **price- and indicator-driven** unless you attach another text source later.
+
 **Related Documentation:**
 - `PRD.md` - Product requirements and feature status
 - `ARCHITECTURE.md` - Implementation patterns
@@ -13,16 +15,14 @@ This document details the trading strategies, scoring algorithms, and business l
 
 ## Two Tracks: Decision Support vs. Causal Research
 
-This repo currently implements **decision-support heuristics** (alerts, rankings, paper trading) and
-also tracks a **research direction** focused on whether Reddit mention activity precedes and predicts
-future price movement.
+This repo implements **decision-support heuristics** (alerts, rankings, paper trading) and **research tooling** that was **initially** motivated by Reddit-vs-price questions.
 
 ### A) Decision-Support Track (Current)
 
 This is the implemented “product” behavior:
 
-- Collect Reddit + price data
-- Compute features (sentiment, SMA-based patterns, RSI)
+- Collect **price** data (Yahoo Finance; optional intraday via Alpaca when enabled)
+- Compute features (SMA-based patterns, RSI, optional volume confirmation; keyword sentiment where applicable—**no Reddit posts ingested**)
 - Generate alerts + end-of-day ranked analysis
 - Support paper trading and portfolio tracking
 
@@ -30,15 +30,15 @@ This track can be heuristic-driven and does not require formal training pipeline
 
 ### B) Causal / Predictive Research Track (Implemented)
 
-Goal: build leakage-safe datasets and run time-series experiments that answer:
+Goal: build leakage-safe datasets and run time-series experiments. **Originally** framed around Reddit mentions vs returns; **today** mention columns in exported datasets are often **zeros** (legacy schema).
 
-- Do Reddit mentions lead price (predictive relationship)?
+- Do mention-like features lead price (predictive relationship)? *(Moot without a feed; columns retained for experiments.)*
 - Is the relationship robust after controls (market/sector/volatility/volume)?
 - Is the directionality reversed (price → mentions)?
 
-Implemented:
+Implemented (evolving):
 
-- **Daily aggregated Reddit features per symbol** — `RedditDailyFeature`, `reddit_daily_feature_service`
+- **Legacy daily “Reddit” feature columns** — removed as live pipeline; dataset builder may emit **zeros** under the same column names for CSV compatibility
 - **Forward-return labels** — `PriceLabel`, horizons 1/5/10, `label_service`
 - **Deterministic dataset builder** — `dataset_builder_service`, metadata sidecar, CLI `build-dataset`
 - **Experiment runners** — directionality, event-study, predictiveness (CLI `experiment`)
@@ -58,12 +58,13 @@ All milestones (M0-M7) are complete. See `PRD.md` Section 13 for detailed milest
 The application will identify trading opportunities using three primary strategies:
 
 #### 1. Sentiment Momentum Strategy
-**Objective**: Identify stocks gaining traction in social media before price movement
+**Objective**: Identify stocks gaining traction in social media before price movement *(**historical framing**; live stack uses **keyword/text helpers** on titles or empty feeds—not Reddit aggregation)*
 
 **Business Logic**:
 - **Sentiment Score Calculation**:
-  - Aggregate sentiment from Reddit posts mentioning the stock
-  - Weight by engagement: `weight = log(upvotes + comments + 1)`
+  - **Originally**: Aggregate sentiment from Reddit posts mentioning the stock
+  - **Today**: Keyword-based scoring and daily-analysis fields; **no Reddit post store**
+  - Weight by engagement *(Reddit-era)*: `weight = log(upvotes + comments + 1)`
   - Score range: -1 (very negative) to +1 (very positive)
   - Formula: `sentiment_score = weighted_average(post_sentiments)`
 
@@ -361,7 +362,7 @@ def detect_price_pattern(price_data):
 4. Strong combined signal (alignment > 0.6, confidence > 0.7)
 
 **When to Include in Daily Analysis**:
-1. Has sufficient data (min 10 Reddit mentions OR price data available)
+1. Has sufficient data (e.g. **price data available**; legacy “min Reddit mentions” rule **no longer applies** without ingestion)
 2. Meets minimum activity threshold (volume > 100k shares)
 3. Not excluded by user filters
 

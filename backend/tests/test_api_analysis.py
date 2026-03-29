@@ -15,13 +15,10 @@ from sqlalchemy.pool import StaticPool
 from backend.app.main import create_app
 from backend.app.data.database import Base, get_session
 from backend.app.models.price_data import PriceData
-from backend.app.models.reddit_post import RedditPost
-from backend.app.models.reddit_symbol_mention import RedditSymbolMention
 from backend.app.models.stock import Stock
 
 
 def create_test_engine_and_sessionmaker():
-    # Use StaticPool to share the in-memory database across connections
     engine = create_engine(
         "sqlite:///:memory:",
         future=True,
@@ -55,46 +52,10 @@ def build_test_app_with_db() -> tuple[TestClient, Session]:
 def test_daily_analysis_ranks_stocks_by_composite_score() -> None:
     client, db = build_test_app_with_db()
 
-    now = datetime.now(timezone.utc)
-
-    # Two stocks with different sentiment and trends
     gme = Stock(symbol="GME", name="GameStop", sector="Retail", market_cap=None)
     amc = Stock(symbol="AMC", name="AMC", sector="Entertainment", market_cap=None)
     db.add_all([gme, amc])
 
-    # GME: strongly positive post
-    gme_post = RedditPost(
-        id="gme1",
-        subreddit="wallstreetbets",
-        title="GME to the moon buy buy",
-        author="user",
-        upvotes=200,
-        comments=20,
-        url="https://reddit.com/gme1",
-        posted_at=now,
-        collected_at=now,
-    )
-    # AMC: negative/neutral post
-    amc_post = RedditPost(
-        id="amc1",
-        subreddit="wallstreetbets",
-        title="AMC is a scam sell",
-        author="user",
-        upvotes=50,
-        comments=5,
-        url="https://reddit.com/amc1",
-        posted_at=now,
-        collected_at=now,
-    )
-    db.add_all([gme_post, amc_post])
-    db.add_all(
-        [
-            RedditSymbolMention(post_id="gme1", symbol="GME"),
-            RedditSymbolMention(post_id="amc1", symbol="AMC"),
-        ]
-    )
-
-    # GME price trending up, AMC trending down
     for i in range(60):
         db.add(
             PriceData(
@@ -125,11 +86,12 @@ def test_daily_analysis_ranks_stocks_by_composite_score() -> None:
     assert resp.status_code == 200
     data = resp.json()
 
-    # We expect two entries, with GME ranked above AMC
     assert len(data) == 2
     assert data[0]["symbol"] == "GME"
     assert data[1]["symbol"] == "AMC"
     assert data[0]["composite_score"] >= data[1]["composite_score"]
+    assert data[0]["mention_count"] == 0
+    assert data[1]["mention_count"] == 0
 
 
 @pytest.mark.integration
@@ -177,23 +139,9 @@ def test_causal_endpoint_success() -> None:
     tmp_path = Path("/tmp/pytest_causal_api")
 
     stock = Stock(symbol="AAPL", name="Apple", sector="Tech", market_cap=None)
-    post = RedditPost(
-        id="aapl1",
-        subreddit="wallstreetbets",
-        title="AAPL buy moon",
-        author="user",
-        upvotes=100,
-        comments=10,
-        url="https://reddit.com/aapl1",
-        posted_at=datetime.now(timezone.utc),
-        collected_at=datetime.now(timezone.utc),
-    )
     db.add(stock)
-    db.add(post)
-    db.add(RedditSymbolMention(post_id="aapl1", symbol="AAPL"))
     db.commit()
 
-    # Write parquet bars (30 hourly buckets)
     base = tmp_path / "bars" / "symbol=AAPL" / "date=2026-01-15"
     base.mkdir(parents=True, exist_ok=True)
     rows = [
@@ -227,7 +175,6 @@ def test_causal_endpoint_success() -> None:
             resp = client.get("/api/analysis/causal/AAPL?days=30&freq=1h&max_lag=3")
             assert resp.status_code == 200
             data = resp.json()
-            # May be insufficient or success depending on resampled bucket count
             if "reason" in data:
                 assert data["symbol"] == "AAPL"
             else:

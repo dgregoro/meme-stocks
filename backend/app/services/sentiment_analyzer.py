@@ -8,12 +8,8 @@ from typing import Iterable, Protocol
 from backend.app.config import get_settings
 
 
-class HasRedditFields(Protocol):
-    """Protocol for objects that can be analyzed for sentiment.
-
-    This matches both DB models (RedditPost) and normalized dataclasses
-    (RedditPostData) without creating a hard dependency.
-    """
+class HasPostTextFields(Protocol):
+    """Minimal shape for keyword sentiment scoring (title + engagement)."""
 
     title: str
     upvotes: int
@@ -68,7 +64,7 @@ class SentimentSummary:
 
 def calculate_weighted_sentiment(
     stock_symbol: str,
-    posts: Iterable[HasRedditFields],
+    posts: Iterable[HasPostTextFields],
     *,
     window: timedelta = timedelta(hours=24),
     now: datetime | None = None,
@@ -83,7 +79,7 @@ def calculate_weighted_sentiment(
         # comparisons may fail and should be normalized at the persistence layer.
         now = datetime.now(timezone.utc)
 
-    relevant_posts: list[HasRedditFields] = []
+    relevant_posts: list[HasPostTextFields] = []
     cutoff = now - window
     for post in posts:
         collected_at = post.collected_at
@@ -105,7 +101,7 @@ def calculate_weighted_sentiment(
     total_weight = 0.0
 
     for post in relevant_posts:
-        post_sentiment = analyze_post_sentiment(post.title)
+        post_sentiment = analyze_post_sentiment(post.title or "")
         engagement_weight = log10(post.upvotes + post.comments + 1)
         collected_at = post.collected_at
         if collected_at.tzinfo is None:

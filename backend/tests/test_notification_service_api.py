@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
-from unittest.mock import patch
+from datetime import date
+from unittest.mock import MagicMock, patch
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -11,10 +11,21 @@ from sqlalchemy.pool import StaticPool
 from backend.app.main import create_app
 from backend.app.data.database import Base, get_session
 from backend.app.models.price_data import PriceData
-from backend.app.models.reddit_post import RedditPost
-from backend.app.models.reddit_symbol_mention import RedditSymbolMention
 from backend.app.models.stock import Stock
 from backend.app.services.notification_service import generate_notifications_for_stock
+
+
+def _combined_settings_mock():
+    """Settings fragment for combined-signal tests (price + volume without sentiment)."""
+    m = MagicMock()
+    m.combined_signal_threshold = 3.0
+    m.combined_signal_alerts_only = False
+    m.combined_signal_weight_sentiment = 2.0
+    m.combined_signal_weight_price = 2.0
+    m.combined_signal_weight_volume = 1.0
+    m.combined_signal_weight_rsi = 1.0
+    m.sentiment_window_hours = 24
+    return m
 
 
 def create_test_engine_and_sessionmaker():
@@ -51,7 +62,6 @@ def build_test_app_with_db() -> tuple[TestClient, Session]:
 
 def seed_stock_with_activity(db: Session) -> str:
     symbol = "GME"
-    now = datetime.now(timezone.utc)
 
     stock = Stock(symbol=symbol, name="GameStop", sector="Retail", market_cap=None)
     db.add(stock)
@@ -79,21 +89,6 @@ def seed_stock_with_activity(db: Session) -> str:
             volume=2_000_000,
         )
     )
-
-    # One strongly positive reddit post with symbol mention
-    post = RedditPost(
-        id="post1",
-        subreddit="wallstreetbets",
-        title="GME moon buy buy",
-        author="user",
-        upvotes=300,
-        comments=30,
-        url="https://reddit.com/post1",
-        posted_at=now,
-        collected_at=now,
-    )
-    db.add(post)
-    db.add(RedditSymbolMention(post_id="post1", symbol=symbol))
 
     db.commit()
     return symbol
@@ -167,9 +162,8 @@ def test_one_signal_no_combined_alert() -> None:
 
 
 def seed_stock_multiple_signals_above_threshold(db: Session) -> str:
-    """Seed with volume + price + sentiment to exceed combined threshold."""
+    """Seed with volume + price spikes (threshold lowered in tests via patch)."""
     symbol = "MOON"
-    now = datetime.now(timezone.utc)
     stock = Stock(symbol=symbol, name="MoonStock", sector="Tech", market_cap=None)
     db.add(stock)
     db.add(
@@ -194,19 +188,6 @@ def seed_stock_multiple_signals_above_threshold(db: Session) -> str:
             volume=800_000,  # 4x avg
         )
     )
-    post = RedditPost(
-        id="moon1",
-        subreddit="wallstreetbets",
-        title="MOON buy buy bullish",
-        author="user",
-        upvotes=500,
-        comments=50,
-        url="https://reddit.com/moon1",
-        posted_at=now,
-        collected_at=now,
-    )
-    db.add(post)
-    db.add(RedditSymbolMention(post_id="moon1", symbol=symbol))
     db.commit()
     return symbol
 
@@ -215,7 +196,12 @@ def test_multiple_signals_above_threshold_creates_combined_alert() -> None:
     """Two+ signals, score >= threshold => combined alert created."""
     client, db = build_test_app_with_db()
     symbol = seed_stock_multiple_signals_above_threshold(db)
-    notifs = generate_notifications_for_stock(db, symbol)
+    sm = _combined_settings_mock()
+    with (
+        patch("backend.app.services.notification_service.get_settings", return_value=sm),
+        patch("backend.app.services.combined_signal_service.get_settings", return_value=sm),
+    ):
+        notifs = generate_notifications_for_stock(db, symbol)
     db.commit()
     combined = [n for n in notifs if n.type == "combined_signal"]
     assert len(combined) >= 1
@@ -226,14 +212,12 @@ def test_combined_signal_alerts_only_false_coexist() -> None:
     """combined_signal_alerts_only=False => individual + combined coexist."""
     client, db = build_test_app_with_db()
     symbol = seed_stock_multiple_signals_above_threshold(db)
-    with patch("backend.app.services.notification_service.get_settings") as mock:
-        mock.return_value.combined_signal_alerts_only = False
-        mock.return_value.combined_signal_weight_sentiment = 2.0
-        mock.return_value.combined_signal_weight_price = 2.0
-        mock.return_value.combined_signal_weight_volume = 1.0
-        mock.return_value.combined_signal_weight_rsi = 1.0
-        mock.return_value.combined_signal_threshold = 4.0
-        mock.return_value.sentiment_window_hours = 24
+    sm = _combined_settings_mock()
+    sm.combined_signal_alerts_only = False
+    with (
+        patch("backend.app.services.notification_service.get_settings", return_value=sm),
+        patch("backend.app.services.combined_signal_service.get_settings", return_value=sm),
+    ):
         notifs = generate_notifications_for_stock(db, symbol)
     db.commit()
     combined = [n for n in notifs if n.type == "combined_signal"]
@@ -246,14 +230,12 @@ def test_combined_signal_alerts_only_true_suppress_individual() -> None:
     """combined_signal_alerts_only=True => only combined, no individual."""
     client, db = build_test_app_with_db()
     symbol = seed_stock_multiple_signals_above_threshold(db)
-    with patch("backend.app.services.notification_service.get_settings") as mock:
-        mock.return_value.combined_signal_alerts_only = True
-        mock.return_value.combined_signal_weight_sentiment = 2.0
-        mock.return_value.combined_signal_weight_price = 2.0
-        mock.return_value.combined_signal_weight_volume = 1.0
-        mock.return_value.combined_signal_weight_rsi = 1.0
-        mock.return_value.combined_signal_threshold = 4.0
-        mock.return_value.sentiment_window_hours = 24
+    sm = _combined_settings_mock()
+    sm.combined_signal_alerts_only = True
+    with (
+        patch("backend.app.services.notification_service.get_settings", return_value=sm),
+        patch("backend.app.services.combined_signal_service.get_settings", return_value=sm),
+    ):
         notifs = generate_notifications_for_stock(db, symbol)
     db.commit()
     combined = [n for n in notifs if n.type == "combined_signal"]
@@ -266,7 +248,12 @@ def test_notification_api_returns_signal_metadata_for_combined_type() -> None:
     """GET /api/notifications returns signal_metadata for combined_signal; shape matches contract."""
     client, db = build_test_app_with_db()
     symbol = seed_stock_multiple_signals_above_threshold(db)
-    generate_notifications_for_stock(db, symbol)
+    sm = _combined_settings_mock()
+    with (
+        patch("backend.app.services.notification_service.get_settings", return_value=sm),
+        patch("backend.app.services.combined_signal_service.get_settings", return_value=sm),
+    ):
+        generate_notifications_for_stock(db, symbol)
     db.commit()
 
     resp = client.get("/api/notifications")

@@ -29,18 +29,6 @@ export type Sentiment = {
   classification: string
 }
 
-export type RedditMention = {
-  id: string
-  subreddit: string
-  title: string
-  url: string
-  author: string
-  upvotes: number
-  comments: number
-  posted_at: string
-  collected_at: string
-}
-
 export type PricePoint = {
   date: string
   open: number
@@ -127,46 +115,24 @@ export type JobStatus = {
   last_success_summary?: string | null
 }
 
-export type RedditCollectionStatus = {
-  posts_last_1h: number
-  posts_last_24h: number
-  mentions_last_1h: number
-  mentions_last_24h: number
-  newest_post_posted_at_utc: string | null
-  newest_post_collected_at_utc: string | null
-  oldest_post_collected_at_utc: string | null
-}
-
 export type PriceCollectionStatus = {
   newest_price_date: string | null
   price_rows_last_7d: number
   price_rows_last_30d: number
 }
 
-export type DailyFeatureStatus = {
-  newest_trading_day: string | null
-  rows_last_7d: number
-  rows_last_30d: number
-}
-
 export type CollectionHealth = {
-  reddit: 'ok' | 'stale' | 'empty'
   prices: 'ok' | 'stale' | 'empty'
-  daily_features: 'ok' | 'stale' | 'empty'
   jobs: 'ok' | 'warning'
 }
 
 export type CollectionThresholds = {
-  reddit_stale_after_minutes: number
   prices_stale_after_days: number
-  features_stale_after_days: number
 }
 
 export type StaleSymbolStatus = {
   symbol: string
-  last_reddit_collected_at_utc: string | null
   last_price_date: string | null
-  last_daily_feature_day: string | null
   stale_reasons: string[]
 }
 
@@ -174,9 +140,7 @@ export type CollectionStatus = {
   server_time_utc: string
   market_time_local: string
   jobs: JobStatus[]
-  reddit: RedditCollectionStatus
   prices: PriceCollectionStatus
-  daily_features: DailyFeatureStatus
   health: CollectionHealth
   thresholds: CollectionThresholds
 }
@@ -384,10 +348,6 @@ export const api = {
   analysisDaily: () => handle(client.get<AnalysisRow[]>('/api/analysis/daily')),
   listStocks: () => handle(client.get<Stock[]>('/api/stocks')),
   getStock: (symbol: string) => handle(client.get<Stock>(`/api/stocks/${symbol}`)),
-  getSentiment: (symbol: string) =>
-    handle(client.get<Sentiment>(`/api/stocks/${symbol}/sentiment`)),
-  getMentions: (symbol: string, limit = 20) =>
-    handle(client.get<RedditMention[]>(`/api/stocks/${symbol}/mentions`, { params: { limit } })),
   getPrices: (symbol: string) =>
     handle(client.get<PricePoint[]>(`/api/stocks/${symbol}/prices`)),
   listNotifications: () => handle(client.get<NotificationItem[]>('/api/notifications')),

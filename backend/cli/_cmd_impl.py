@@ -63,12 +63,17 @@ def notifications_cmd(*, base_url: str, output_fmt: str) -> None:
 
 
 def sentiment_cmd(*, symbol: str, base_url: str, output_fmt: str) -> None:
-    resp = client.get(f"/api/stocks/{symbol}/sentiment", base_url=base_url)
+    """Daily analysis row for symbol (no live social feed; scores are price-driven)."""
+    resp = client.get("/api/analysis/daily", base_url=base_url)
     data = resp.json()
+    row = next((r for r in data if r.get("symbol") == symbol), None)
+    if row is None:
+        print(f"No analysis row for {symbol!r} (symbol missing from daily analysis).", file=sys.stderr)
+        sys.exit(client.EXIT_CLIENT_ERROR)
     if output_fmt == "json":
-        output.print_json(data)
+        output.print_json(row)
         return
-    for k, v in data.items():
+    for k, v in row.items():
         print(f"  {k}: {v}")
 
 
@@ -244,17 +249,6 @@ def symbols_stats_cmd(*, base_url: str, output_fmt: str) -> None:
         print(f"  {k}: {v}")
 
 
-def jobs_reddit_cmd(*, base_url: str, output_fmt: str) -> None:
-    resp = client.post("/api/jobs/reddit-collection", base_url=base_url)
-    data = resp.json()
-    if output_fmt == "json":
-        output.print_json(data)
-        return
-    print(f"Reddit collection: {data.get('status', 'done')}")
-    if data.get("stats"):
-        print(f"  Stats: {data['stats']}")
-
-
 def jobs_prices_cmd(*, base_url: str, output_fmt: str) -> None:
     resp = client.post("/api/jobs/price-collection", base_url=base_url)
     data = resp.json()
@@ -271,27 +265,3 @@ def jobs_notifications_cmd(*, base_url: str, output_fmt: str) -> None:
         output.print_json(data)
         return
     print(f"Notification check: {data.get('status', 'done')}")
-
-
-def jobs_recent_posts_cmd(*, limit: int, base_url: str, output_fmt: str) -> None:
-    resp = client.get("/api/jobs/reddit-collection/recent", params={"limit": limit}, base_url=base_url)
-    data = resp.json()
-    if output_fmt == "json":
-        output.print_json(data)
-        return
-    if not data:
-        print("No recent posts.")
-        return
-    headers = ["id", "symbol", "subreddit", "title", "url", "upvotes"]
-    rows = [
-        [
-            p["id"],
-            p.get("stock_symbol", "") or "-",
-            p["subreddit"],
-            (p["title"] or "")[:36],
-            (p.get("url") or "")[:44],
-            p["upvotes"],
-        ]
-        for p in data
-    ]
-    output.print_table(headers, rows)

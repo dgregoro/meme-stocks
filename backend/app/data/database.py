@@ -309,33 +309,24 @@ def _migrate_create_leader_debug_evaluations() -> None:
         )
 
 
-def _migrate_drop_reddit_posts_stock_symbol() -> None:
-    """Drop legacy stock_symbol column from reddit_posts if it exists.
-
-    The model now uses RedditSymbolMention junction table; old schemas may
-    have a NOT NULL stock_symbol column that causes insert failures.
-    """
-    import sqlite3
-
+def _migrate_drop_legacy_reddit_tables() -> None:
+    """Remove Reddit tables from existing SQLite DBs (Reddit integration removed)."""
     if ":memory:" in _db_url or "sqlite" not in _db_url.lower():
         return
     path = _db_url.replace("sqlite:///", "", 1).split("?")[0].strip()
     if not path or path == ":memory:":
         return
     path = os.path.abspath(path)
+    if not os.path.exists(path):
+        return
     try:
-        conn = sqlite3.connect(path)
-        cur = conn.execute("PRAGMA table_info(reddit_posts)")
-        columns = [row[1] for row in cur.fetchall()]
-        conn.close()
-        if "stock_symbol" in columns:
-            with engine.begin() as c:
-                c.execute(text("ALTER TABLE reddit_posts DROP COLUMN stock_symbol"))
+        with engine.begin() as c:
+            # Order: child with FK to reddit_posts first
+            c.execute(text("DROP TABLE IF EXISTS reddit_symbol_mentions"))
+            c.execute(text("DROP TABLE IF EXISTS reddit_posts"))
+            c.execute(text("DROP TABLE IF EXISTS reddit_daily_features"))
     except Exception as exc:
-        logger.warning(
-            "Migration drop reddit_posts.stock_symbol failed (non-SQLite or unsupported): %s",
-            exc,
-        )
+        logger.warning("Migration drop legacy Reddit tables failed: %s", exc)
 
 
 def _migrate_create_job_locks_if_missing() -> None:
@@ -486,10 +477,10 @@ def _migrate_extreme_move_context_fields() -> None:
 def init_db() -> None:
     """Initialize database schema if missing (development convenience)."""
     Base.metadata.create_all(bind=engine)
+    _migrate_drop_legacy_reddit_tables()
     _migrate_create_job_locks_if_missing()
     _migrate_job_run_history_add_success_columns()
     _migrate_job_run_history_add_metrics_and_summary()
-    _migrate_drop_reddit_posts_stock_symbol()
     _migrate_paper_trades_add_option_columns()
     _migrate_notifications_add_signal_metadata()
     _migrate_leader_events_add_job_run_id()

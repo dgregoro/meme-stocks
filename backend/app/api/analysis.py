@@ -9,7 +9,6 @@ from sqlalchemy.orm import Session
 
 from backend.app.config import get_settings
 from backend.app.data.database import get_session
-from backend.app.data.repositories.reddit_symbol_mention_repo import RedditSymbolMentionRepository
 from backend.app.services.analysis_service import run_daily_analysis
 from backend.app.services.causal_dataset_builder import Freq, build_dataset
 from backend.app.services.causal_relationships_service import (
@@ -110,7 +109,7 @@ def get_causal_evidence(
     max_lag: int = Query(default=12, ge=1, le=48),
     include_placebo: bool = Query(default=True),
 ) -> CausalEvidenceApiResponse | InsufficientDataApiResponse:
-    """Get lead-lag evidence: do Reddit mentions/sentiment lead price moves?
+    """Get lead-lag evidence from price and optional post-derived series (often empty).
 
     Returns cross-correlation by lag, predictive regression metrics, and placebo test.
     Labeled as evidence, not proven causality.
@@ -130,9 +129,7 @@ def get_causal_evidence(
     end = datetime.now(timezone.utc)
     start = end - timedelta(days=days)
 
-    mention_repo = RedditSymbolMentionRepository(db)
-    mentions = mention_repo.get_posts_for_symbol(symbol, since=start)
-    posts = [m.post for m in mentions]
+    posts: list = []
 
     dataset_or_err = build_dataset(
         symbol=symbol,

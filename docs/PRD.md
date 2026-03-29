@@ -2,14 +2,26 @@
 ## Meme Stocks Trading Application
 
 **Version:** 1.0
-**Last Updated:** February 28, 2026
+**Last Updated:** March 29, 2026
 **Status:** MVP Complete
+
+---
+
+## Scope: original focus vs current (March 2026)
+
+The product **began** as a **Reddit-first** meme-stock tool: collect subreddit posts, extract tickers, score sentiment, notify on shifts, and study whether mentions relate to price moves.
+
+**Reddit ingestion and storage have been removed** from the application. There is no live social feed; scheduled jobs and APIs no longer collect or serve Reddit posts. Some **analysis fields and CSV columns** (e.g., mention counts) remain for **backward compatibility** and are often zero or unused. **Authoritative behavior** is described in **[ARCHITECTURE.md](ARCHITECTURE.md)** and the running code; requirement IDs below that still say “Reddit” are **historical or aspirational** unless superseded by a newer spec.
+
+**Current emphasis:** Yahoo Finance (and related) price data, pattern/ranking logic, notifications, paper trading, symbol universe, intraday (Alpaca) when enabled, leader-follower and other research workflows.
+
+**Housekeeping:** Later sections of this PRD (features FR-x, user stories, Appendix A CLI/API tables, data model examples) still contain **Reddit-era** wording or “✅ Complete” rows for removed capabilities. **Trust the scope block above and the codebase** for what ships today; treat those later rows as **archive / to be revised** in a future PRD edit.
 
 ---
 
 ## 1. Executive Summary
 
-The Meme Stocks Trading Application is a web-based tool designed for retail investors who want to analyze meme stocks using a combination of social sentiment data and technical price patterns. The application aggregates Reddit discussions, calculates sentiment scores, monitors price movements, and provides actionable insights through end-of-day analysis and real-time notifications.
+The Meme Stocks Trading Application is a web-based tool for retail investors analyzing meme and momentum names using **price data, technical-style signals, and heuristics**, with end-of-day ranked analysis and notifications. **Historically**, the same stack combined **social (Reddit) sentiment** with prices; that social pipeline is **not part of the product today**.
 
 This is a decision-support tool for manual trading—it does not execute trades automatically or integrate with brokers. It is intended as a single-user application for personal use (for now). A command-line interface (CLI) provides full parity with the web UI for terminal users and scripting.
 
@@ -23,20 +35,16 @@ Before making functional changes to the application, update the spec to clarify 
 2. **Update the spec** — In this PRD: add or edit the relevant requirement in Section 5 (Features and Requirements), and if needed the API in Appendix A or user stories in Section 6. Update ROADMAP.md if the work is scheduled in a phase.
 3. **Implement** — Code and tests should satisfy the updated PRD; follow ARCHITECTURE.md for structure.
 
-### 1.2 Research Direction (Future Scope): Reddit Mentions → Price Movement
+### 1.2 Research direction: lead–lag and predictiveness (Reddit was the original motivator)
 
-In addition to the MVP, this repo tracks a research direction:
+The repo includes research tooling (datasets, experiments, `/api/analysis/causal/{symbol}`) that was **originally** aimed at **Reddit mentions vs returns**. Without Reddit ingestion, mention-derived series may be **empty or placeholder**, while **price intraday bars** (when available) still drive causal-style plots and tests.
 
-- Evaluate whether Reddit mention activity *precedes* and helps *predict* future stock price movement.
-- Avoid naive correlation by enforcing **time alignment** and preventing **look-ahead bias**.
-- Prefer interpretable, testable methods first (event-study style analyses, Granger-style predictiveness tests),
-  then iterate toward ML models once dataset construction is reliable and reproducible.
+- Enforce **time alignment** and avoid **look-ahead bias** in datasets.
+- Prefer interpretable methods before heavy ML.
 
-**Lead-lag evidence endpoint**: The `/api/analysis/causal/{symbol}` endpoint returns cross-correlation,
-predictive regression, and placebo test results. It is explicitly labeled as **lead-lag evidence**, not
-proven causality. Results should be interpreted with appropriate caution.
+**Lead-lag evidence endpoint**: `/api/analysis/causal/{symbol}` returns cross-correlation, predictive regression, and placebo results, labeled as **evidence not proven causality**.
 
-This research direction is documented in: `docs/CAUSAL_RESEARCH.md`
+Details: **`docs/CAUSAL_RESEARCH.md`**
 
 ---
 
@@ -56,8 +64,8 @@ This research direction is documented in: `docs/CAUSAL_RESEARCH.md`
 
 ### How This Product Solves These Problems
 
-- **Automated Data Collection**: Continuously monitors Reddit and Yahoo Finance, eliminating manual data gathering.
-- **Sentiment Quantification**: Transforms qualitative social media discussions into actionable sentiment scores.
+- **Automated Data Collection**: Monitors **Yahoo Finance (prices)** on a schedule (and other sources where configured, e.g. Alpaca intraday when enabled). *Reddit monitoring is not active.*
+- **Sentiment-style scoring**: Keyword-based helpers still exist for **ranking composition**; without a social feed they often reflect **neutral / no-data** paths rather than live chatter.
 - **Unusual Activity Alerts**: Proactively notifies users of significant volume spikes, price movements, and sentiment shifts.
 - **Consolidated Analysis**: Provides ranked daily summaries combining sentiment and technical analysis.
 - **Paper Trading**: Enables risk-free strategy testing with full performance tracking.
@@ -152,7 +160,7 @@ These principles apply to all code in this project. They ensure the application 
 |----|-------------|----------|--------|
 | FR-1.1 | Collect posts from configurable subreddits (wallstreetbets, stocks, investing) | Must Have | ✅ Complete |
 | FR-1.2 | Extract stock ticker symbols from post titles | Must Have | ✅ Complete |
-| FR-1.3 | Calculate sentiment score (-1 to +1) using keyword-based analysis | Must Have | ✅ Complete |
+| FR-1.3 | Calculate sentiment score (-1 to +1) using keyword-based analysis on **title and post body** (when stored) | Must Have | ✅ Complete |
 | FR-1.4 | Weight sentiment by engagement (upvotes, comments) | Must Have | ✅ Complete |
 | FR-1.5 | Apply time decay to older posts | Must Have | ✅ Complete |
 | FR-1.6 | Aggregate sentiment per stock symbol | Must Have | ✅ Complete |
@@ -168,8 +176,8 @@ These principles apply to all code in this project. They ensure the application 
 | FR-2.2 | Calculate Simple Moving Averages (20-day, 50-day) | Must Have | ✅ Complete |
 | FR-2.3 | Classify price trends (uptrend, downtrend, sideways) | Must Have | ✅ Complete |
 | FR-2.4 | Detect volume spikes relative to average | Must Have | ✅ Complete |
-| FR-2.5 | Calculate RSI (Relative Strength Index) | Should Have | ❌ Future |
-| FR-2.6 | Detect price breakouts and breakdowns | Should Have | ❌ Future |
+| FR-2.5 | Calculate RSI (Relative Strength Index) | Should Have | ✅ Complete |
+| FR-2.6 | Detect price breakouts and breakdowns | Should Have | Partial (SMA uptrend + volume confirmation; see `pattern_analyzer`) |
 | FR-2.7 | Identify support/resistance levels | Could Have | ❌ Future |
 
 #### FR-3: Unusual Activity Detection & Notifications

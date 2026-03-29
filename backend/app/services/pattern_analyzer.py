@@ -60,13 +60,14 @@ def analyze_price_trend(
 ) -> PriceTrend:
     """Classify trend based on simple moving averages and RSI of close prices.
 
-    - uptrend: sma_short > sma_long
+    - uptrend: sma_short > sma_long (may downgrade to sideways if volume confirmation fails)
     - downtrend: sma_short < sma_long
     - sideways: otherwise or insufficient data
     - rsi_signal: overbought/oversold/neutral from config thresholds
     """
     settings = get_settings()
-    closes = [b.close for b in bars]
+    bar_list = list(bars)
+    closes = [b.close for b in bar_list]
     if not closes:
         return PriceTrend(
             direction="sideways",
@@ -99,11 +100,21 @@ def analyze_price_trend(
         )
 
     if sma_s > sma_l:
-        direction = "uptrend"
+        direction: str = "uptrend"
     elif sma_s < sma_l:
         direction = "downtrend"
     else:
         direction = "sideways"
+
+    # Phase 2.4: treat weak-volume uptrend as sideways (no confirmed breakout)
+    if direction == "uptrend" and settings.pattern_breakout_require_volume and len(bar_list) >= 2:
+        prior = bar_list[:-1]
+        last_bar = bar_list[-1]
+        avg_vol = sum(b.volume for b in prior) / float(len(prior))
+        if avg_vol > 0:
+            vol_ratio = last_bar.volume / avg_vol
+            if vol_ratio < settings.pattern_breakout_volume_ratio:
+                direction = "sideways"
 
     return PriceTrend(
         direction=direction,

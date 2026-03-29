@@ -8,7 +8,6 @@ from sqlalchemy.orm import Session
 
 from backend.app.config import get_settings
 from backend.app.data.repositories.price_data_repo import PriceDataRepository
-from backend.app.data.repositories.reddit_post_repo import RedditPostRepository
 from backend.app.data.repositories.stock_repo import StockRepository
 from backend.app.services.pattern_analyzer import PriceTrend, analyze_price_trend
 from backend.app.services.sentiment_analyzer import (
@@ -24,8 +23,8 @@ class StockAnalysisRow:
 
     Attributes:
         symbol: Stock symbol.
-        sentiment_score: Aggregated sentiment [-1, 1] or None if no Reddit data.
-        mention_count: Number of Reddit posts in the analysis window.
+        sentiment_score: Reserved; None (no social feed).
+        mention_count: Always 0 (no social feed).
         price_trend: 'uptrend', 'downtrend', or 'sideways'.
         composite_score: Combined score [0, 1] used for ranking (higher = better opportunity).
         rsi: RSI value if available, else None.
@@ -104,7 +103,6 @@ def run_daily_analysis(
         window = timedelta(hours=get_settings().sentiment_window_hours)
 
     stock_repo = StockRepository(db)
-    reddit_repo = RedditPostRepository(db)
     price_repo = PriceDataRepository(db)
 
     now = datetime.now(timezone.utc)
@@ -113,8 +111,7 @@ def run_daily_analysis(
     rows: list[StockAnalysisRow] = []
 
     for stock in stocks:
-        posts = reddit_repo.list_for_stock(stock.symbol)
-        sentiment = calculate_weighted_sentiment(stock.symbol, posts, window=window, now=now)
+        sentiment = calculate_weighted_sentiment(stock.symbol, [], window=window, now=now)
 
         bars = build_price_bars_for_stock(stock.symbol, price_repo)
         trend = analyze_price_trend(bars)

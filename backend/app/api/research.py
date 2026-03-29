@@ -17,7 +17,6 @@ from backend.app.services.experiments.directionality import run_directionality, 
 from backend.app.services.experiments.event_study import run_event_study, EventStudyResult
 from backend.app.services.experiments.predictiveness import run_predictiveness, PredictivenessResult
 from backend.app.services.label_service import compute_and_store_forward_returns
-from backend.app.services.reddit_daily_feature_service import compute_and_store_reddit_daily_features
 from backend.app.utils.api_errors import error_detail
 
 logger = logging.getLogger(__name__)
@@ -152,9 +151,9 @@ def post_build_dataset(
     request: BuildDatasetRequest,
     db: Session = Depends(get_session),
 ) -> BuildDatasetResponse:
-    """Build training dataset: compute Reddit daily features, forward returns, join and write CSV.
+    """Build training dataset: forward returns + price join; write CSV.
 
-    Writes to research_dataset_dir. Returns path for use in experiment endpoints.
+    Legacy Reddit feature columns are zeros in the output. Writes to research_dataset_dir.
     """
     try:
         start_d = date.fromisoformat(request.start_day)
@@ -177,9 +176,6 @@ def post_build_dataset(
     output_path = str(out_dir / f"meme_stocks_dataset_{ts}.csv")
 
     try:
-        features_stats = compute_and_store_reddit_daily_features(db, start_d, end_d)
-        db.commit()
-
         labels_stats = compute_and_store_forward_returns(
             db,
             start_d,
@@ -208,7 +204,7 @@ def post_build_dataset(
             path=output_path,
             rows_written=int(ds_stats["rows_written"]),
             labels_rows_upserted=int(labels_stats["rows_upserted"]),
-            features_rows_upserted=int(features_stats["rows_upserted"]),
+            features_rows_upserted=0,
             git_sha=git_sha,
             dataset_version=str(ds_stats.get("dataset_version", "")),
         )

@@ -258,29 +258,7 @@ export const DataCollection: React.FC = () => {
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: spacing.md, marginBottom: spacing.lg }}>
         <div style={cardStyle}>
-          <h3 style={{ marginTop: 0, marginBottom: 4 }}>Reddit ingestion</h3>
-          <div style={{ marginBottom: 6 }}>
-            <span style={healthPill(status.health.reddit)}>
-              {status.health.reddit.toUpperCase()}
-            </span>
-          </div>
-          <div style={{ fontSize: 14 }}>
-            <div>
-              Posts: <strong>{status.reddit.posts_last_1h}</strong> (1h) ·{' '}
-              <strong>{status.reddit.posts_last_24h}</strong> (24h)
-            </div>
-            <div>
-              Mentions: <strong>{status.reddit.mentions_last_1h}</strong> (1h) ·{' '}
-              <strong>{status.reddit.mentions_last_24h}</strong> (24h)
-            </div>
-            <div style={{ marginTop: 6, fontSize: 12, color: '#6b7280' }}>
-              Newest post collected: {formatRelative(status.reddit.newest_post_collected_at_utc)}
-            </div>
-          </div>
-        </div>
-
-        <div style={cardStyle}>
-          <h3 style={{ marginTop: 0, marginBottom: 4 }}>Price ingestion</h3>
+          <h3 style={{ marginTop: 0, marginBottom: 4 }}>Price data</h3>
           <div style={{ marginBottom: 6 }}>
             <span style={healthPill(status.health.prices)}>
               {status.health.prices.toUpperCase()}
@@ -298,22 +276,15 @@ export const DataCollection: React.FC = () => {
         </div>
 
         <div style={cardStyle}>
-          <h3 style={{ marginTop: 0, marginBottom: 4 }}>Daily Reddit features</h3>
+          <h3 style={{ marginTop: 0, marginBottom: 4 }}>Scheduled jobs</h3>
           <div style={{ marginBottom: 6 }}>
-            <span style={healthPill(status.health.daily_features)}>
-              {status.health.daily_features.toUpperCase()}
+            <span style={healthPill(status.health.jobs === 'ok' ? 'ok' : 'stale')}>
+              {status.health.jobs.toUpperCase()}
             </span>
           </div>
-          <div style={{ fontSize: 14 }}>
-            <div>
-              Newest trading day:{' '}
-              <strong>{status.daily_features.newest_trading_day ?? 'n/a'}</strong>
-            </div>
-            <div>
-              Rows: <strong>{status.daily_features.rows_last_7d}</strong> (7d) ·{' '}
-              <strong>{status.daily_features.rows_last_30d}</strong> (30d)
-            </div>
-          </div>
+          <p style={{ fontSize: 13, color: '#6b7280', margin: 0 }}>
+            Derived from recent job runs. Warnings usually mean a job has not completed since startup or is behind schedule.
+          </p>
         </div>
 
         {intradayStatus && (
@@ -614,9 +585,7 @@ export const DataCollection: React.FC = () => {
             <thead>
               <tr style={{ borderBottom: '2px solid #e5e7eb' }}>
                 <th style={{ textAlign: 'left' }}>Symbol</th>
-                <th style={{ textAlign: 'left' }}>Last Reddit</th>
                 <th style={{ textAlign: 'left' }}>Last price</th>
-                <th style={{ textAlign: 'left' }}>Last daily feature</th>
                 <th style={{ textAlign: 'left' }}>Reasons</th>
               </tr>
             </thead>
@@ -624,11 +593,7 @@ export const DataCollection: React.FC = () => {
               {staleSymbols.map((s) => (
                 <tr key={s.symbol} style={{ borderBottom: '1px solid #f3f4f6' }}>
                   <td style={{ fontWeight: 500 }}>{s.symbol}</td>
-                  <td title={s.last_reddit_collected_at_utc ?? undefined}>
-                    {formatRelative(s.last_reddit_collected_at_utc)}
-                  </td>
                   <td>{s.last_price_date ?? 'n/a'}</td>
-                  <td>{s.last_daily_feature_day ?? 'n/a'}</td>
                   <td>{s.stale_reasons.join(', ')}</td>
                 </tr>
               ))}

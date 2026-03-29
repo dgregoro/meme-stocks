@@ -49,13 +49,13 @@ podman run -p 8000:8000 -v meme-stocks-data:/app/data meme-stocks:latest
 
 Data persists in the `meme-stocks-data` volume.
 
-### Reddit credentials
+### Optional environment file (containers)
 
-Create `deployment/.env` with your Reddit API credentials. The compose file loads it via `env_file`; tests do not load it, so CI passes without credentials.
+The stack may load `deployment/.env` for **optional** settings (e.g. `DATABASE_URL`, Alpaca keys if you use intraday). **Reddit API credentials are not used**—the app no longer ingests Reddit. Copy the example and adjust as needed:
 
 ```bash
 cp deployment/.env.example deployment/.env
-# Edit deployment/.env and add your keys
+# Edit deployment/.env only if you need non-default paths or provider keys
 ```
 
 ---
@@ -74,22 +74,17 @@ pip install -r backend/requirements.txt
 
 #### 2. Configure environment (optional)
 
-Defaults work for local dev. For Reddit data collection and custom settings, create `.env` at project root (config loads from cwd; tests do not use it):
+Defaults work for local dev. Create `.env` at project root if you want logging paths, DB URL, scheduling tweaks, or provider keys (**Alpaca** for intraday when enabled). Config loads from cwd; tests do not use your root `.env`.
 
 ```bash
 LOG_LEVEL=INFO
 LOG_FILE=logs/app.log   # yfinance/pandas noise saved here, not printed to terminal
 DATABASE_URL=sqlite:///./data/app.db
-REDDIT_CLIENT_ID=your-client-id
-REDDIT_CLIENT_SECRET=your-client-secret
-REDDIT_USER_AGENT=meme-stocks-app/0.1
 
 # Scheduling (optional, defaults shown)
-REDDIT_COLLECTION_INTERVAL_MINUTES=60
 PRICE_COLLECTION_INTERVAL_MINUTES=15
 NOTIFICATION_CHECK_INTERVAL_MINUTES=30
 DAILY_ANALYSIS_HOUR=16
-REDDIT_SUBREDDITS=wallstreetbets,stocks,investing
 ENABLE_CATCH_UP=true
 ```
 
@@ -138,13 +133,13 @@ Open the printed URL (default `http://localhost:5173`).
 
 The application runs automated background jobs on a schedule:
 
-- **Reddit Collection**: Fetches recent posts from configured subreddits (default: hourly)
 - **Price Collection**: Updates price data for tracked stocks (default: every 15 minutes)
-- **Daily Analysis**: Generates end-of-day analysis (default: 4 PM)
+- **Daily Analysis**: Generates end-of-day analysis (default: 4 PM local)
 - **Notification Checks**: Scans for unusual activity (default: every 30 minutes)
 - **Leader-Follower Detection** (when `LEADER_FOLLOWER_ENABLED=true`): Detects leaders and follower candidates (default: 5 PM)
+- **Intraday ingestion** (when `INTRADAY_INGESTION_ENABLED=true` and Alpaca is configured): Minute-bar fetch on its own interval
 
-**Catch-up functionality**: On startup (e.g., after laptop sleep), the app checks for missed jobs and runs them automatically. Job intervals and subreddits are configurable via environment variables.
+The product **used to** run **Reddit collection** on a schedule; that job and API surface **are removed**. **Catch-up**: On startup (e.g., after laptop sleep), the app can run missed jobs when `ENABLE_CATCH_UP=true`. Intervals are set via environment variables (see `backend/app/config.py`).
 
 **Stock groups bootstrap**: Leader-follower detection needs `stock_groups` populated to produce follower candidates. If empty, the job detects leaders but emits zero candidates. See [Stock Groups Bootstrap](STOCK_GROUPS_BOOTSTRAP.md) for how to seed: `python -m backend.app.cli seed stock-groups`.
 
@@ -162,15 +157,15 @@ All settings are in `backend/app/config.py`. Key variables:
 |----------|---------|-------------|
 | `LOG_LEVEL` | `INFO` | Logging verbosity |
 | `DATABASE_URL` | `sqlite:///./data/app.db` | SQLite database path |
-| `REDDIT_CLIENT_ID`, `REDDIT_CLIENT_SECRET` | — | Required for Reddit data collection |
-| `REDDIT_USER_AGENT` | `meme-stocks-app/0.1` | User agent for Reddit API |
-| `REDDIT_COLLECTION_INTERVAL_MINUTES` | `60` | Reddit fetch interval |
 | `PRICE_COLLECTION_INTERVAL_MINUTES` | `15` | Price update interval |
 | `NOTIFICATION_CHECK_INTERVAL_MINUTES` | `30` | Notification scan interval |
 | `DAILY_ANALYSIS_HOUR` | `16` | Hour (24h) for daily analysis |
-| `REDDIT_SUBREDDITS` | `wallstreetbets,stocks,investing` | Subreddits to monitor |
 | `ENABLE_CATCH_UP` | `true` | Run missed jobs on startup |
 | `CORS_ALLOWED_ORIGINS` | `http://127.0.0.1:5173,...` | Allowed frontend origins |
+| `ALPACA_API_KEY_ID`, `ALPACA_API_SECRET_KEY` | — | Optional; required for intraday when enabled |
+| `INTRADAY_INGESTION_ENABLED` | `false` | When `true`, scheduler runs intraday bar ingestion |
+
+See `backend/app/config.py` for the full list (leader-follower, volume spike, SEC user-agent, and research-related settings).
 
 ---
 

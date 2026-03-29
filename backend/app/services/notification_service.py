@@ -8,7 +8,6 @@ from sqlalchemy.orm import Session
 from backend.app.config import get_settings
 from backend.app.data.repositories.notification_repo import NotificationRepository
 from backend.app.data.repositories.price_data_repo import PriceDataRepository
-from backend.app.data.repositories.reddit_post_repo import RedditPostRepository
 from backend.app.data.repositories.stock_repo import StockRepository
 from backend.app.models.notification import Notification
 from backend.app.services.activity_detector import (
@@ -52,13 +51,12 @@ def generate_notifications_for_stock(db: Session, symbol: str) -> List[Notificat
         return []
 
     settings = get_settings()
-    reddit_repo = RedditPostRepository(db)
     price_repo = PriceDataRepository(db)
     notif_repo = NotificationRepository(db)
 
     notifications: list[Notification] = []
     prices = price_repo.list_for_stock(symbol)
-    posts = reddit_repo.list_for_stock(symbol)
+    posts: list = []
 
     # --- Gather signals for combined evaluation ---
     vol_signal = None

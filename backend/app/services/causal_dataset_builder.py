@@ -1,8 +1,8 @@
 """Time series dataset builder for lead-lag causal analysis.
 
-Builds aligned series: mention counts, aggregated sentiment, price close, and returns
-per time bucket. No look-ahead: bucket sentiment/mentions by posted_at (when the info
-became available to the market) with fallback to collected_at for leakage-safe semantics.
+Builds aligned series: optional social post counts/sentiment (often empty), price close,
+and returns per time bucket. No look-ahead: events bucketed by posted_at when present,
+else collected_at.
 """
 
 from __future__ import annotations
@@ -46,7 +46,7 @@ class CausalDataset:
     """Aligned time series dataset for causal analysis.
 
     DataFrame is indexed by bucket timestamp (UTC). Columns:
-    - mentions: count of Reddit posts in bucket
+    - mentions: count of posts in bucket (often zero)
     - sentiment_mean: mean sentiment (optionally weighted) in bucket
     - price_close: last close in bucket
     - returns: log(price_close).diff()
@@ -101,14 +101,14 @@ def build_dataset(
     posts: list,
     parquet_root: str,
 ) -> CausalDataset | InsufficientDataResult:
-    """Build aligned causal dataset from Reddit posts and intraday bars.
+    """Build aligned causal dataset from optional posts and intraday bars.
 
     Args:
         symbol: Stock symbol.
         start: Start of analysis window (UTC).
         end: End of analysis window (UTC).
         freq: Bucket frequency: "15min", "1h", or "1d".
-        posts: Iterable of posts with .collected_at, .title, .upvotes, .comments.
+        posts: Posts with .collected_at, .title, .upvotes, .comments (may be empty).
         parquet_root: Root path for Parquet feature store.
 
     Returns:
@@ -202,7 +202,7 @@ def build_dataset(
         if bucket_ts not in mentions_per_bucket:
             continue
 
-        sentiment = analyze_post_sentiment(post.title)
+        sentiment = analyze_post_sentiment((getattr(post, "title", None) or ""))
         engagement = post.upvotes + post.comments + 1
         weight = _bucket_sentiment_weight(event_time, event_time, engagement)
 
@@ -210,11 +210,12 @@ def build_dataset(
         sentiment_weighted_per_bucket[bucket_ts] += sentiment * weight
         weight_per_bucket[bucket_ts] += weight
 
-    bucketing_note = (
-        "Bucketed Reddit posts by posted_at (fallback collected_at)."
-        if used_posted_at_count > 0
-        else "Bucketed Reddit posts by collected_at (no posted_at)."
-    )
+    if not posts:
+        bucketing_note = "No posts; mention/sentiment series are zero."
+    elif used_posted_at_count > 0:
+        bucketing_note = "Bucketed posts by posted_at (fallback collected_at)."
+    else:
+        bucketing_note = "Bucketed posts by collected_at (no posted_at)."
 
     # Build final df aligned to price buckets
     resampled["mentions"] = resampled["bucket"].map(lambda t: mentions_per_bucket.get(t, 0))

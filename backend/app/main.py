@@ -36,9 +36,6 @@ from .models import (  # noqa: F401
     paper_trade,
     price_data,
     price_labels,
-    reddit_daily_feature,
-    reddit_post,
-    reddit_symbol_mention,
     stock,
     stock_group,
     symbol_universe,
@@ -46,7 +43,7 @@ from .models import (  # noqa: F401
     extreme_move_event,
 )
 from .api import stocks as stocks_api
-from .api import sentiment_price as sentiment_price_api
+from .api import stock_prices as stock_prices_api
 from .api import analysis as analysis_api
 from .api import status as status_api
 from .api import notifications as notifications_api
@@ -170,8 +167,8 @@ def create_app(
     )
 
     # API routers
+    app.include_router(stock_prices_api.router)
     app.include_router(stocks_api.router)
-    app.include_router(sentiment_price_api.router)
     app.include_router(analysis_api.router)
     app.include_router(status_api.router)
     app.include_router(notifications_api.router)

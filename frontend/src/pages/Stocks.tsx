@@ -24,8 +24,8 @@ export const Stocks: React.FC = () => {
         <h3>Stocks</h3>
         <EmptyState
           title="No stocks tracked"
-          message="Stocks are added when they appear in Reddit mentions or via the API."
-          action="Trigger Reddit collection or refresh symbol universe to discover stocks."
+          message="Stocks are added via the API, symbol universe refresh, or other workflows."
+          action="Use the API or symbol universe tools to add tickers to track."
         />
       </div>
     )

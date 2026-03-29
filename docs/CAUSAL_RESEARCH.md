@@ -1,5 +1,7 @@
 # Causal / Predictive Research: Reddit Mentions → Stock Price Movement
 
+**Operational status (March 2026):** This document describes the **methodology** that motivated early work (**social mentions vs price**). **Reddit ingestion has been removed** from the application; daily “Reddit” feature columns in datasets may be **zeros** or omitted. **Price, labels, and time-series hygiene** (no look-ahead, correct horizons) remain relevant; replace “Reddit” mentally with **any future text feed** or use **price-only** variants of the same checks.
+
 ## Goal
 
 The goal of this research track is to evaluate whether changes in Reddit discussion of a stock

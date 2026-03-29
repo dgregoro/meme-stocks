@@ -30,9 +30,7 @@ class RecipeStep(BaseModel):
             raise ValueError("argv must be non-empty")
         head = v[0].strip().lower()
         if head in ("python", "python3", "uv", "sh", "bash") or head.startswith("/"):
-            raise ValueError(
-                "argv must start with a Typer subcommand (e.g. backfill), not an interpreter path"
-            )
+            raise ValueError("argv must start with a Typer subcommand (e.g. backfill), not an interpreter path")
         if v[0] == "-m":
             raise ValueError("do not pass -m; the runner adds python -m backend.app.cli")
         return v

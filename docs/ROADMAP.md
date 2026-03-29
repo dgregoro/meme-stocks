@@ -6,6 +6,10 @@ This roadmap organizes future development work into prioritized phases.
 
 **Last Updated**: March 29, 2026
 
+### Product scope (March 2026)
+
+The codebase **no longer integrates Reddit** (no API ingestion, no mentions endpoints, no PRAW). The project **originated** around Reddit-driven sentiment and meme names; **current** work emphasizes prices, technical analysis, notifications, paper trading, leader-follower / intraday / research features, and datasets where legacy “Reddit” columns may be zeros. Older roadmap bullets and tests that name Reddit models reflect **history**; see **[PRD.md](PRD.md)** for the documented scope split.
+
 ---
 
 ## Overview
@@ -81,9 +85,9 @@ cd frontend && npm run dev
 | ID | Task | Source | Effort | Status |
 |----|------|--------|--------|--------|
 | 2.1 | Make sentiment keywords configurable | PLAN.md tech debt | Small | ✅ Done |
-| 2.2 | Add post body to sentiment analysis | PLAN.md tech debt | Medium | Not Started |
-| 2.3 | Add RSI indicator | PLAN.md tech debt, PRD FR-2.5 | Medium | Not Started |
-| 2.4 | Add volume confirmation to patterns | PLAN.md tech debt | Small | Not Started |
+| 2.2 | Add post body to sentiment analysis | PLAN.md tech debt | Medium | ✅ Done |
+| 2.3 | Add RSI indicator | PLAN.md tech debt, PRD FR-2.5 | Medium | ✅ Done |
+| 2.4 | Add volume confirmation to patterns | PLAN.md tech debt | Small | ✅ Done |
 | 2.5 | Implement combined-signal alerts | PLAN.md tech debt, PRD FR-3.7 | Medium | ✅ Complete |
 | 2.6 | Fix any deprecation warnings | Test output | Small | ✅ Done in Phase 1 |
 | 2.7 | Increase test coverage to 80%+ | Quality framework | Medium | Not Started |
@@ -115,7 +119,7 @@ Items consolidated from codebase analysis. Address when doing maintenance or bef
 |----------|------|-------|
 | Medium | RedditPostData.stock_symbol naming | Field is placeholder ""; consider renaming to `symbols: list[str]` |
 | Low | Repository injection | Services instantiate repos inline; inject for testability |
-| Low | Re-enable mypy in pre-commit | Disabled due to module path issues; fix config |
+| Low | ~~Re-enable mypy in pre-commit~~ | **Done**: `.pre-commit-config.yaml` runs mypy with `-p backend.app` and `-p backend.tests` (`pyproject.toml`). |
 | Low | Additional test coverage | symbol-universe API tests, migration tests, SQLAlchemy error paths |
 
 ### 2.1 Make Sentiment Keywords Configurable
@@ -135,30 +139,19 @@ sentiment_positive_keywords: str = "buy,moon,hold,bullish,gains,profit,long"
 
 ### 2.2 Add Post Body to Sentiment Analysis
 
-**Current**: Only analyzes post title
-**Target**: Analyze title + body (when available)
+**Done**: Reddit `selftext` is persisted on `RedditPost.body` (truncated per `reddit_post_body_max_chars`), fetched in `RedditService`, and combined with title in `text_for_post_sentiment()` when `sentiment_include_post_body` is true. Causal dataset bucketing uses the same helper.
 
-**Files**: `backend/app/services/sentiment_analyzer.py`, `backend/app/models/reddit_post.py`
+**Files**: `sentiment_analyzer.py`, `reddit_post.py`, `reddit_service.py`, `scheduler_service.py`, `causal_dataset_builder.py`, API responses for mentions / recent posts.
 
 ### 2.3 Add RSI Indicator
 
-**Current**: Only SMA-based trend detection
-**Target**: RSI calculation with overbought/oversold signals
-
-**Formula**:
-```
-RSI = 100 - (100 / (1 + RS))
-RS = Average Gain / Average Loss (14 periods)
-```
-
-**Files**: `backend/app/services/pattern_analyzer.py`
+**Done**: RSI and overbought/oversold/neutral classification are implemented in `pattern_analyzer.py` with `rsi_period`, `rsi_overbought`, `rsi_oversold` in config (was already present; PRD/ROADMAP updated to match).
 
 ### 2.4 Add Volume Confirmation
 
-**Current**: Volume spike detected but not used in pattern confirmation
-**Target**: Require volume confirmation for breakout signals
+**Done**: When `pattern_breakout_require_volume` is true, an SMA-based **uptrend** is downgraded to **sideways** if the latest bar’s volume is below `pattern_breakout_volume_ratio ×` mean volume of all prior bars in the series.
 
-**Files**: `backend/app/services/pattern_analyzer.py`
+**Files**: `pattern_analyzer.py`, `config.py`
 
 ### 2.5 Combined-Signal Alerts
 
@@ -174,7 +167,7 @@ if alignment_score > COMBINED_SIGNAL_THRESHOLD and confidence > 0.7:
 **Files**: `backend/app/services/activity_detector.py`, `backend/app/services/notification_service.py`
 
 ### Success Criteria
-- [ ] All tech debt items from PLAN.md resolved
+- [ ] Remaining Phase 2 items (e.g. 2.7 coverage) and PLAN follow-ups
 - [ ] Test coverage ≥ 80%
 - [ ] No deprecation warnings in test output
 - [ ] Quality score improved from baseline

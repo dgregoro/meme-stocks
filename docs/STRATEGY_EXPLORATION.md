@@ -10,6 +10,7 @@ This document tracks **non-Reddit, daily (or lower) frequency** ideas for system
 
 **Related docs:**
 
+- `docs/STRATEGY_TESTING_PLAN.md` — **how to test** S1–S7 (sequence, methodology, tooling).
 - `docs/SIGNAL_EVALUATION_CHECKLIST.md` — minimum bar before believing an edge.
 - `docs/CAUSAL_RESEARCH.md` — leakage-safe dataset and experiment patterns (adapt features to daily price/volume only).
 - `docs/PLAN.md` — implemented product logic vs. research tracks.

@@ -12,8 +12,6 @@ from sqlalchemy.orm import sessionmaker
 from backend.app.data.database import Base
 from backend.app.models import price_data  # noqa: F401
 from backend.app.models import price_labels  # noqa: F401
-from backend.app.models import reddit_post  # noqa: F401 - RedditSymbolMention backref
-from backend.app.models import reddit_symbol_mention  # noqa: F401 - Stock relationship
 from backend.app.models import stock  # noqa: F401
 from backend.app.services.label_service import compute_and_store_forward_returns
 

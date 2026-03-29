@@ -109,3 +109,45 @@ def test_migrate_extreme_move_context_adds_columns() -> None:
         assert "magnitude_bucket" in cols
         assert "volume_ratio" in cols
         assert "volume_bucket" in cols
+
+
+def test_migrate_drop_legacy_reddit_tables() -> None:
+    """Legacy Reddit tables are dropped when present on SQLite file DBs."""
+    import sqlite3
+
+    from sqlalchemy import create_engine
+
+    from backend.app.data import database
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        path = os.path.join(tmpdir, "reddit_drop.db")
+        url = f"sqlite:///{path}"
+        conn = sqlite3.connect(path)
+        conn.execute(
+            """
+            CREATE TABLE reddit_posts (
+                id VARCHAR(32) PRIMARY KEY
+            )
+            """
+        )
+        conn.execute("CREATE TABLE reddit_symbol_mentions (id INTEGER PRIMARY KEY)")
+        conn.execute("CREATE TABLE reddit_daily_features (id INTEGER PRIMARY KEY)")
+        conn.commit()
+        conn.close()
+        test_engine = create_engine(url, future=True)
+        orig_url = database._db_url
+        orig_engine = database.engine
+        database._db_url = url
+        database.engine = test_engine
+        try:
+            database._migrate_drop_legacy_reddit_tables()
+        finally:
+            database._db_url = orig_url
+            database.engine = orig_engine
+
+        conn = sqlite3.connect(path)
+        names = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        conn.close()
+        assert "reddit_posts" not in names
+        assert "reddit_symbol_mentions" not in names
+        assert "reddit_daily_features" not in names

@@ -6,8 +6,8 @@ This guide describes how to use the application once it is running. For setup an
 
 ## How the app works
 
-- **Data collection** runs in the background: Reddit posts and Yahoo Finance prices are fetched on a schedule. Stocks are either added by you or auto-discovered when mentioned in Reddit posts.
-- **Daily analysis** ranks tracked stocks by a composite score (sentiment + price trend + volume).
+- **Data collection** runs in the background: **Yahoo Finance** (and optional **Alpaca** intraday when enabled) updates prices on a schedule. **Reddit ingestion is not part of the product anymore** (historically, the app also pulled subreddit posts and auto-discovered tickers from mentions). **Tracked stocks** are symbols you add (or other flows such as symbol-universe refresh)—there is no live social feed.
+- **Daily analysis** ranks tracked stocks by a composite score (keyword sentiment fields + price trend + volume; mention-related fields may be zero without social data).
 - **Notifications** alert you to unusual activity (volume spikes, price moves, sentiment shifts).
 - **Paper trading** lets you record hypothetical buys/sells and track portfolio performance without real money.
 
@@ -22,7 +22,7 @@ Open the app in your browser (e.g. `http://localhost:8000` locally or `http://<V
 | Tab | What you can do |
 |-----|-----------------|
 | **Dashboard** | View the daily ranked analysis: stocks with composite score, sentiment, mention count, and price trend. |
-| **Stocks** | List tracked stocks, add a stock by symbol, and (per stock) view sentiment, recent Reddit mentions (with source: subreddit and link), and price history. |
+| **Stocks** | List tracked stocks, add a stock by symbol, and (per stock) view daily analysis fields, sentiment-style scores from the ranking pipeline, and price history. |
 | **Notifications** | See unread alerts for unusual activity (volume spike, price movement, sentiment shift). |
 | **Paper Trading** | Create paper trades (buy/sell a symbol at a price and quantity), list trades, close positions, and view portfolio summary (P/L, win rate). |
 
@@ -66,23 +66,21 @@ Use `--output json` for machine-readable output (e.g. `python -m backend.cli.mai
 
 ### Jobs (optional)
 
-You can trigger data collection and see job history from the CLI:
+You can trigger some background work from the CLI (see also `GET /api/jobs/...` in OpenAPI):
 
 | Task | Command |
 |------|---------|
-| Trigger Reddit collection | `python -m backend.cli.main jobs reddit` |
 | Trigger price collection | `python -m backend.cli.main jobs prices` |
 | Trigger notification check | `python -m backend.cli.main jobs notifications` |
-| Job run history | `python -m backend.cli.main jobs runs reddit-collection` |
-| Recent Reddit posts (with subreddit, url) | `python -m backend.cli.main jobs recent-posts --limit 20` |
-| Reddit mentions for a symbol (source: subreddit, url) | `python -m backend.cli.main stocks mentions SYMBOL [--limit 20]` |
+
+**Job run history** uses the HTTP API, for example: `GET /api/jobs/price-collection/runs` (valid names include `price-collection`, `daily-analysis`, `notification-check`, `leader-follower-detection` when that feature is enabled). **Reddit**-related CLI subcommands and **`reddit-collection`** job APIs are **removed** alongside Reddit ingestion.
 
 ---
 
 ## Key concepts
 
-- **Tracked stocks**: The list of symbols the app collects prices and Reddit sentiment for. Add symbols manually (Stocks tab or `stocks add`), or let the app discover them from Reddit posts.
-- **Daily analysis**: A ranked list combining sentiment score, mention count, price trend (uptrend/downtrend/sideways), and composite score. Generated on a schedule (default once per day); also available on demand via the Dashboard or `analysis` command.
+- **Tracked stocks**: Symbols the app collects **prices** for and includes in daily ranking and notifications. Add symbols manually (Stocks tab or `stocks add`), or use other flows (e.g. symbol-universe refresh) as documented elsewhere—**not** via Reddit discovery.
+- **Daily analysis**: A ranked list combining sentiment-style score, mention-count fields (often zero without a social feed), price trend (uptrend/downtrend/sideways), and composite score. Generated on a schedule (default once per day); also available on demand via the Dashboard or `analysis` command.
 - **Notifications**: Alerts created when the app detects volume spikes, significant price moves, or sentiment shifts for a tracked stock. Stored until read; no push to email or other channels in the current version.
 - **Paper trades**: Simulated positions. Create a trade (symbol, action buy/sell, quantity, price); close it later with an exit price. Portfolio and trade list show realized and unrealized P/L. Options (calls/puts) are supported with `--option`, `--strike`, and `--expiry`.
 

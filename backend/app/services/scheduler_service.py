@@ -16,25 +16,13 @@ from backend.app.config import get_settings
 from backend.app.data.database import SessionLocal
 from backend.app.data.repositories.job_execution_repo import JobExecutionRepository
 from backend.app.data.repositories.price_data_repo import PriceDataRepository
-from backend.app.data.repositories.reddit_post_repo import RedditPostRepository
 from backend.app.data.repositories.stock_repo import StockRepository
 from backend.app.models.price_data import PriceData
-from backend.app.models.reddit_post import RedditPost
-from backend.app.models.stock import Stock
 from backend.app.services.intraday_ingestion_service import run_intraday_ingestion
-from backend.app.services.job_metrics import (
-    REDDIT_POSTS_FETCHED,
-    REDDIT_POSTS_INSERTED,
-    REDDIT_STOCKS_CREATED,
-    REDDIT_SYMBOLS_MENTIONED,
-)
 from backend.app.services.notification_service import generate_notifications_for_stock
 from backend.app.services.leader_follower_service import run_detection
-from backend.app.services.reddit_daily_feature_service import compute_and_store_reddit_daily_features
-from backend.app.services.reddit_service import RedditService
 from backend.app.services.yahoo_service import YahooFinanceService
 from backend.app.utils.errors import ExternalAPIError
-from backend.app.utils.ticker_extractor import extract_tickers
 
 logger = logging.getLogger(__name__)
 
@@ -50,22 +38,7 @@ class SchedulerService:
     def __init__(self) -> None:
         self._scheduler = BackgroundScheduler()
         self._settings = get_settings()
-        self._reddit_service: RedditService | None
-        if self._reddit_configured():
-            self._reddit_service = RedditService()
-        else:
-            self._reddit_service = None
-            logger.info(
-                "Reddit credentials not configured (REDDIT_CLIENT_ID/CLIENT_SECRET); "
-                "Reddit collection will be skipped"
-            )
         self._yahoo_service = YahooFinanceService()
-
-    def _reddit_configured(self) -> bool:
-        """Return True if Reddit API credentials are present and non-empty."""
-        sid = self._settings.reddit_client_id
-        sec = self._settings.reddit_client_secret
-        return bool(sid and sec)
 
     def start(self) -> None:
         """Start the scheduler; run catch-up in background if enabled."""
@@ -147,37 +120,6 @@ class SchedulerService:
             local_today_start = datetime.combine(local_today, time.min, tzinfo=tz)
             today_start_utc = local_today_start.astimezone(timezone.utc)
 
-            # Check Reddit collection
-            last_reddit = ensure_timezone_aware(job_repo.get_last_run("reddit_collection"))
-            if last_reddit is None or (now - last_reddit).total_seconds() > 3600:
-                logger.info("Catching up on Reddit collection...")
-                started = datetime.now(timezone.utc)
-                stats = self._collect_reddit_data(db)
-                finished = datetime.now(timezone.utc)
-                posts_inserted = stats.get(REDDIT_POSTS_INSERTED, 0)
-                posts_fetched = stats.get(REDDIT_POSTS_FETCHED, 0)
-                symbols_mentioned = stats.get(REDDIT_SYMBOLS_MENTIONED, 0)
-                summary = (
-                    f"reddit: inserted {posts_inserted} posts ({posts_fetched} fetched), "
-                    f"symbols={symbols_mentioned}"
-                )
-                metrics = {
-                    REDDIT_POSTS_FETCHED: posts_fetched,
-                    REDDIT_POSTS_INSERTED: posts_inserted,
-                    REDDIT_SYMBOLS_MENTIONED: symbols_mentioned,
-                    REDDIT_STOCKS_CREATED: stats.get(REDDIT_STOCKS_CREATED, 0),
-                }
-                job_repo.record_run(
-                    "reddit_collection",
-                    run_at=finished,
-                    success=True,
-                    started_at=started,
-                    duration_seconds=(finished - started).total_seconds(),
-                    summary=summary,
-                    metrics=metrics,
-                )
-                db.commit()
-
             # Check price collection
             last_price = ensure_timezone_aware(job_repo.get_last_run("price_collection"))
             if last_price is None or (now - last_price).total_seconds() > 900:
@@ -240,35 +182,6 @@ class SchedulerService:
                 )
                 db.commit()
 
-            # Reddit daily features (run once per day; catch up if not run today, in market timezone)
-            last_reddit_daily = ensure_timezone_aware(job_repo.get_last_run("reddit_daily_features"))
-            if last_reddit_daily is None or last_reddit_daily < today_start_utc:
-                logger.info("Catching up on Reddit daily features...")
-                started = datetime.now(timezone.utc)
-                daily_stats: dict[str, Any] = dict(self._run_reddit_daily_features(db))
-                finished = datetime.now(timezone.utc)
-                rows_upserted = stats.get("rows_upserted", 0)
-                symbols = stats.get("symbols_seen", 0)
-                days = 0
-                if "start_day" in stats and "end_day" in stats:
-                    try:
-                        s = date.fromisoformat(str(stats["start_day"]))
-                        e = date.fromisoformat(str(stats["end_day"]))
-                        days = max(0, (e - s).days + 1)
-                    except (ValueError, TypeError):
-                        pass
-                summary = f"daily reddit features: {rows_upserted} rows ({symbols} symbols × {days} days)"
-                job_repo.record_run(
-                    "reddit_daily_features",
-                    run_at=finished,
-                    success=True,
-                    started_at=started,
-                    duration_seconds=(finished - started).total_seconds(),
-                    summary=summary,
-                    metrics=daily_stats,
-                )
-                db.commit()
-
         except Exception as exc:
             logger.error(f"Error during catch-up: {exc}", exc_info=True)
             db.rollback()
@@ -277,14 +190,6 @@ class SchedulerService:
 
     def _schedule_jobs(self) -> None:
         """Schedule all periodic jobs."""
-        # Reddit collection
-        self._scheduler.add_job(
-            self._collect_reddit_data_job,
-            trigger=IntervalTrigger(minutes=self._settings.reddit_collection_interval_minutes),
-            id="reddit_collection",
-            replace_existing=True,
-        )
-
         # Price collection
         self._scheduler.add_job(
             self._collect_price_data_job,
@@ -322,20 +227,6 @@ class SchedulerService:
                 next_run_time=datetime.now(timezone.utc),
             )
 
-        # Reddit daily features (once per day after market close)
-        self._scheduler.add_job(
-            self._reddit_daily_features_job,
-            trigger=CronTrigger(
-                hour=self._settings.reddit_daily_features_job_hour,
-                minute=0,
-            ),
-            id="reddit_daily_features",
-            replace_existing=True,
-            max_instances=1,
-            coalesce=True,
-            misfire_grace_time=3600,
-        )
-
         # Leader-follower signal detection (when enabled; once per day)
         if getattr(self._settings, "leader_follower_enabled", False):
             self._scheduler.add_job(
@@ -350,163 +241,6 @@ class SchedulerService:
                 coalesce=True,
                 misfire_grace_time=1800,
             )
-
-    def _collect_reddit_data_job(self) -> None:
-        """Scheduled job wrapper for Reddit collection."""
-        db = SessionLocal()
-        started_at = datetime.now(timezone.utc)
-        try:
-            stats = self._collect_reddit_data(db)
-            finished_at = datetime.now(timezone.utc)
-            duration = (finished_at - started_at).total_seconds()
-            posts_inserted = stats.get(REDDIT_POSTS_INSERTED, 0)
-            posts_fetched = stats.get(REDDIT_POSTS_FETCHED, 0)
-            symbols_mentioned = stats.get(REDDIT_SYMBOLS_MENTIONED, 0)
-            summary = f"reddit: inserted {posts_inserted} posts ({posts_fetched} fetched), symbols={symbols_mentioned}"
-            metrics = {
-                REDDIT_POSTS_FETCHED: posts_fetched,
-                REDDIT_POSTS_INSERTED: posts_inserted,
-                REDDIT_SYMBOLS_MENTIONED: symbols_mentioned,
-                REDDIT_STOCKS_CREATED: stats.get(REDDIT_STOCKS_CREATED, 0),
-            }
-            job_repo = JobExecutionRepository(db)
-            job_repo.record_run(
-                "reddit_collection",
-                run_at=finished_at,
-                success=True,
-                started_at=started_at,
-                duration_seconds=duration,
-                summary=summary,
-                metrics=metrics,
-            )
-            db.commit()
-        except Exception as exc:
-            logger.error(f"Error in Reddit collection job: {exc}", exc_info=True)
-            db.rollback()
-            finished_at = datetime.now(timezone.utc)
-            duration = (finished_at - started_at).total_seconds()
-            self._record_job_failure(
-                "reddit_collection",
-                exc,
-                started_at=started_at,
-                finished_at=finished_at,
-                duration_seconds=duration,
-            )
-        finally:
-            db.close()
-
-    def _collect_reddit_data(self, db: Session) -> dict[str, int]:
-        """Collect Reddit posts and save them to the database.
-
-        Returns:
-            Dictionary with canonical stats: posts_fetched, posts_inserted,
-            symbols_mentioned, stocks_created (see job_metrics.py).
-        """
-        stats = {
-            REDDIT_POSTS_FETCHED: 0,
-            REDDIT_POSTS_INSERTED: 0,
-            REDDIT_SYMBOLS_MENTIONED: 0,
-            REDDIT_STOCKS_CREATED: 0,
-        }
-
-        if self._reddit_service is None:
-            logger.debug("Skipping Reddit collection: credentials not configured")
-            return stats
-
-        try:
-            subreddits = [s.strip() for s in self._settings.reddit_subreddits.split(",")]
-            posts = self._reddit_service.fetch_recent_posts(subreddits, limit_per_subreddit=100)
-            stats[REDDIT_POSTS_FETCHED] = len(posts)
-        except ExternalAPIError as exc:
-            logger.error(f"Failed to fetch Reddit posts: {exc}")
-            return stats
-
-        if not posts:
-            logger.debug("No Reddit posts fetched")
-            return stats
-
-        # Auto-discover stocks from Reddit posts
-        from backend.app.data.repositories.reddit_symbol_mention_repo import (
-            RedditSymbolMentionRepository,
-        )
-        from backend.app.models.reddit_symbol_mention import RedditSymbolMention
-
-        stock_repo = StockRepository(db)
-        reddit_repo = RedditPostRepository(db)
-        mention_repo = RedditSymbolMentionRepository(db)
-        saved_count = 0
-        posts_with_tickers = 0
-        stocks_created = 0
-
-        for post_data in posts:
-            # Extract tickers from title (pass subreddit for disambiguation context)
-            tickers_set = extract_tickers(
-                post_data.title,
-                known_symbols=None,
-                use_symbol_universe=True,
-                subreddit=post_data.subreddit,
-                flair=None,
-            )
-            tickers = tickers_set if isinstance(tickers_set, set) else tickers_set[0]
-
-            # If no ticker found, skip this post
-            if not tickers:
-                continue
-
-            posts_with_tickers += 1
-
-            # Check if post already exists
-            existing_post = reddit_repo.get(post_data.id)
-            if existing_post is None:
-                # Create the post once (not per symbol)
-                reddit_post = RedditPost(
-                    id=post_data.id,
-                    subreddit=post_data.subreddit,
-                    title=post_data.title,
-                    author=post_data.author,
-                    upvotes=post_data.upvotes,
-                    comments=post_data.comments,
-                    url=post_data.url,
-                    posted_at=post_data.posted_at,
-                    collected_at=post_data.collected_at,
-                )
-                reddit_repo.add(reddit_post)
-                saved_count += 1
-
-            # For each ticker found, ensure stock exists and create mention
-            for symbol in tickers:
-                # Auto-create stock if it doesn't exist
-                existing_stock = stock_repo.get(symbol)
-                if existing_stock is None:
-                    # Create new stock with minimal info (name will be updated if we fetch from Yahoo)
-                    new_stock = Stock(
-                        symbol=symbol,
-                        name=f"{symbol} (auto-discovered)",
-                        sector=None,
-                        market_cap=None,
-                    )
-                    stock_repo.add(new_stock)
-                    stocks_created += 1
-                    logger.debug(f"Auto-created stock: {symbol}")
-
-                # Check if mention already exists
-                existing_mentions = mention_repo.get_symbols_for_post(post_data.id)
-                if symbol not in existing_mentions:
-                    # Create symbol mention
-                    mention = RedditSymbolMention(
-                        post_id=post_data.id,
-                        symbol=symbol,
-                    )
-                    mention_repo.add(mention)
-
-        stats[REDDIT_SYMBOLS_MENTIONED] = posts_with_tickers
-        stats[REDDIT_POSTS_INSERTED] = saved_count
-        stats[REDDIT_STOCKS_CREATED] = stocks_created
-        logger.info(
-            f"Saved {saved_count} Reddit posts (fetched {len(posts)}, "
-            f"{posts_with_tickers} with tickers, created {stocks_created} new stocks)"
-        )
-        return stats
 
     def _collect_price_data_job(self) -> None:
         """Scheduled job wrapper for price collection."""
@@ -732,51 +466,6 @@ class SchedulerService:
         finally:
             db.close()
 
-    def _reddit_daily_features_job(self) -> None:
-        """Scheduled job: aggregate Reddit posts into daily features per (symbol, trading_day)."""
-        db = SessionLocal()
-        started_at = datetime.now(timezone.utc)
-        try:
-            stats = self._run_reddit_daily_features(db)
-            finished_at = datetime.now(timezone.utc)
-            duration = (finished_at - started_at).total_seconds()
-            rows_upserted = stats.get("rows_upserted", 0)
-            symbols = stats.get("symbols_seen", 0)
-            days = 0
-            if "start_day" in stats and "end_day" in stats:
-                try:
-                    s = date.fromisoformat(str(stats["start_day"]))
-                    e = date.fromisoformat(str(stats["end_day"]))
-                    days = max(0, (e - s).days + 1)
-                except (ValueError, TypeError):
-                    pass
-            summary = f"daily reddit features: {rows_upserted} rows ({symbols} symbols × {days} days)"
-            job_repo = JobExecutionRepository(db)
-            job_repo.record_run(
-                "reddit_daily_features",
-                run_at=finished_at,
-                success=True,
-                started_at=started_at,
-                duration_seconds=duration,
-                summary=summary,
-                metrics=stats,
-            )
-            db.commit()
-        except Exception as exc:
-            logger.error("Error in Reddit daily features job: %s", exc, exc_info=True)
-            db.rollback()
-            finished_at = datetime.now(timezone.utc)
-            duration = (finished_at - started_at).total_seconds()
-            self._record_job_failure(
-                "reddit_daily_features",
-                exc,
-                started_at=started_at,
-                finished_at=finished_at,
-                duration_seconds=duration,
-            )
-        finally:
-            db.close()
-
     def _leader_follower_detection_job(self) -> None:
         """Scheduled job: detect leaders, select followers, create signals."""
         db = SessionLocal()
@@ -831,10 +520,3 @@ class SchedulerService:
             )
         finally:
             db.close()
-
-    def _run_reddit_daily_features(self, db: Session) -> dict[str, int | str]:
-        """Compute and persist Reddit daily features for the configured lookback window."""
-        tz = ZoneInfo(self._settings.market_timezone)
-        end_day = datetime.now(tz).date()
-        start_day = end_day - timedelta(days=self._settings.reddit_daily_features_lookback_days)
-        return compute_and_store_reddit_daily_features(db, start_day, end_day)

@@ -2,6 +2,8 @@
 
 This document defines the patterns an agent should follow when implementing features in this codebase.
 
+**Product scope:** The codebase **no longer integrates Reddit** (no social ingestion client in `backend/app/clients/`, no scheduled Reddit jobs). The project **originated** around Reddit-driven sentiment; **current** features center on prices, analysis, notifications, and research modules described in **[PRD.md](PRD.md)** (scope callout) and **[ROADMAP.md](ROADMAP.md)**.
+
 **Write code to be easily understood by AI agents.** Clear structure, meaningful names, explicit docstrings, and consistent conventions help both humans and AI navigate and modify the codebase.
 
 ---
@@ -66,6 +68,22 @@ backend/app/
 
 ---
 
+## Backend Typer CLI (`python -m backend.app.cli`)
+
+The **database-backed** CLI is a **Typer** application used for datasets, seeding, historical backfills, paper-trade simulation, walk-forward optimization, robustness runs, causal `experiment` commands, and YAML **research recipes** (spec 018). It imports services and uses `SessionLocal` directly.
+
+**Layout**
+
+- `backend/app/cli/__main__.py` — entry when you run `python -m backend.app.cli`.
+- `backend/app/cli/main.py` — builds the root `app` and registers command groups.
+- `backend/app/cli/orm_imports.py` — side-effect imports of all SQLAlchemy models so `init_db()` and migrations see every table.
+- `backend/app/cli/common.py` — shared helpers (e.g. date parsing).
+- `backend/app/cli/commands/` — one module per command group (`build_dataset`, `seed`, `backfill`, `evaluate`, `simulate`, `optimize`, `robustness`, `experiment`, `research`).
+
+This is distinct from the **HTTP API client** CLI described below (`meme-stocks`), which talks to a running server only.
+
+---
+
 ## CLI Architecture
 
 The CLI (`meme-stocks`) is an **API client**: it does not contain business logic or access the database directly. It requires a running backend and issues HTTP requests to the REST API. This keeps a single source of truth and avoids duplicating service logic.
@@ -107,7 +125,7 @@ backend/
 │   ├── commands/
 │   │   ├── stocks.py     # stocks list, show, add
 │   │   ├── trades.py     # trades list, create, close
-│   │   ├── jobs.py       # jobs reddit, prices, notifications, runs, recent-posts
+│   │   ├── jobs.py       # jobs prices, notifications (HTTP client; paths vary)
 │   │   ├── symbols.py    # symbols refresh, stats
 │   │   └── ...
 │   └── output.py         # Table and JSON formatters
@@ -459,7 +477,7 @@ app.include_router(my_new_model_router)
 - **Target**: 80%+ line coverage on `backend/app`. Run `pytest backend/tests/ --cov=backend/app --cov-report=term-missing` to measure.
 - **Prioritize**: Consult the "Test coverage opportunities" table in this section for modules with the lowest coverage and suggested tests.
 - **Unit tests** (`@pytest.mark.unit`): Fast, isolated; test pure functions or logic with mocked dependencies. No DB, no external APIs.
-- **Integration tests** (`@pytest.mark.integration`): Hit DB or API routes. Use `TestClient` for endpoints; use test DB or mocks for external services. Mock Reddit/Yahoo/SEC when possible.
+- **Integration tests** (`@pytest.mark.integration`): Hit DB or API routes. Use `TestClient` for endpoints; use test DB or mocks for external services. Mock Yahoo Finance, Alpaca, SEC, or other providers when possible.
 
 ```python
 from __future__ import annotations
@@ -599,8 +617,7 @@ def test_service_get_by_id_not_found() -> None:
 | `api/paper_trading.py` | Medium | 82% — error paths | Test 404 on trade close; validation errors; portfolio edge cases |
 | `api/jobs.py` | Medium | 85% — exception handlers | Test 500 on job failure; scheduler unavailable (503) |
 | `services/paper_trading_service.py` | Medium | 88% — exit trade, portfolio | Test trade not found; portfolio with no trades |
-| `data/repositories/reddit_post_repo.py` | Medium | 78% — error paths | Test DataAccessError on commit/flush |
-| `data/repositories/reddit_symbol_mention_repo.py` | Medium | 78% | Test add/get error paths |
+| `data/repositories/extreme_move_event_repo.py` | Medium | (see `pytest --cov`) | Error paths, list filters, commit failures |
 | `data/database.py` | Low | 80% — migrations | Test migration idempotency; skip on :memory: |
 | `main.py` | Low | 77% — lifespan, SPA | Test SPA routing; frontend mount when dist exists |
 

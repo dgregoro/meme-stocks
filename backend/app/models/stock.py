@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from sqlalchemy import String, DateTime, Float
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.app.data.database import Base
 
@@ -11,7 +11,7 @@ from backend.app.data.database import Base
 class Stock(Base):
     """A tracked stock symbol with metadata (name, sector, market cap).
 
-    Stocks must exist before paper trades or Reddit symbol mentions can reference them.
+    Stocks must exist before paper trades or price rows can reference them.
     """
 
     __tablename__ = "stocks"
@@ -27,7 +27,3 @@ class Stock(Base):
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
     )
-
-    # Relationships
-    reddit_mentions = relationship("RedditSymbolMention", back_populates="stock")
-    reddit_daily_features = relationship("RedditDailyFeature", back_populates="stock")

@@ -38,7 +38,7 @@ export const Dashboard: React.FC = () => {
     Promise.all([
       api.analysisDaily().then(setRows),
       api.listNotifications().then((n) => setUnreadCount(n.filter((x) => !x.read).length)),
-      api.getJobRuns('reddit-collection').then((runs) => setLastRun(runs[0] ?? null)),
+      api.getJobRuns('price-collection').then((runs) => setLastRun(runs[0] ?? null)),
     ])
       .catch((e) => setError(String(e)))
       .finally(() => {
@@ -93,8 +93,8 @@ export const Dashboard: React.FC = () => {
         <h2>Daily Analysis</h2>
         <EmptyState
           title="No analysis yet"
-          message="Daily analysis ranks stocks by sentiment and price trend."
-          action="Trigger Reddit collection and daily analysis jobs to populate this view."
+          message="Daily analysis ranks stocks by trend and reserved sentiment fields (no social feed)."
+          action="Add stocks and run price collection so analysis and charts can populate."
         />
       </div>
     )
@@ -140,7 +140,7 @@ export const Dashboard: React.FC = () => {
               minWidth: 140,
             }}
           >
-            <div style={{ fontSize: 12, color: '#666', marginBottom: 4 }}>Last Reddit run</div>
+            <div style={{ fontSize: 12, color: '#666', marginBottom: 4 }}>Last price collection</div>
             <div style={{ fontSize: 14 }} title={lastRun.run_at}>
               {formatRelativeTime(lastRun.run_at)}
             </div>

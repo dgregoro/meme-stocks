@@ -172,7 +172,7 @@ Manual audit using checklist below.
 
 ### What to Check
 - [ ] No `except: pass` or `except Exception: pass`
-- [ ] Reddit API calls handle: network errors, rate limits, auth failures
+- [ ] External API clients (Yahoo Finance, Alpaca, SEC, etc.) handle: network errors, rate limits, auth failures
 - [ ] Yahoo API calls handle: network errors, invalid symbols, missing data
 - [ ] Background jobs don't crash on errors
 - [ ] API returns 4xx for client errors, 5xx for server errors

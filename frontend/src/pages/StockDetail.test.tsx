@@ -6,9 +6,8 @@ import * as apiModule from '../services/api'
 
 vi.mock('../services/api', () => ({
   api: {
-    getSentiment: vi.fn(),
+    analysisDaily: vi.fn(),
     getPrices: vi.fn(),
-    getMentions: vi.fn(),
   },
   fetchCausalEvidence: vi.fn(),
 }))
@@ -27,32 +26,24 @@ function renderStockDetail(symbol: string) {
 
 describe('StockDetail', () => {
   beforeEach(() => {
-    vi.mocked(api.getSentiment).mockResolvedValue({
-      stock_symbol: 'AAPL',
-      score: 0.35,
-      mention_count: 20,
-      window_hours: 24,
-      classification: 'positive',
-    })
+    vi.mocked(api.analysisDaily).mockResolvedValue([
+      { symbol: 'AAPL', sentiment_score: 0.35, mention_count: 0, price_trend: 'uptrend', composite_score: 0.85 },
+      { symbol: 'GME', sentiment_score: null, mention_count: 0, price_trend: 'sideways', composite_score: 0.5 },
+    ])
     vi.mocked(api.getPrices).mockResolvedValue([
       { date: '2026-02-01', open: 100, high: 102, low: 99, close: 101, volume: 1e6 },
       { date: '2026-02-02', open: 101, high: 103, low: 100, close: 102, volume: 1.2e6 },
     ])
-    vi.mocked(api.getMentions).mockResolvedValue([
-      { id: '1', subreddit: 'wallstreetbets', title: 'AAPL to the moon', url: '/r/wsb/1', author: 'u1', upvotes: 100, comments: 10, posted_at: '', collected_at: '' },
-    ])
   })
 
-  it('shows loading then content with symbol, chart, sentiment, and mentions', async () => {
+  it('shows loading then content with symbol, chart, and daily analysis section', async () => {
     renderStockDetail('AAPL')
     await waitFor(() => { expect(screen.getByRole('link', { name: '← Back to list' })).toBeInTheDocument() })
     expect(screen.getByRole('link', { name: '← Back to list' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Price' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Sentiment' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Recent Reddit mentions' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Daily analysis (sentiment slot)' })).toBeInTheDocument()
     expect(screen.getByText(/positive/)).toBeInTheDocument()
     expect(screen.getByText(/0.35/)).toBeInTheDocument()
-    expect(screen.getByText(/r\/wallstreetbets/)).toBeInTheDocument()
   })
 
   it('shows no price data when prices empty', async () => {
@@ -63,7 +54,7 @@ describe('StockDetail', () => {
   })
 
   it('shows error when API fails', async () => {
-    vi.mocked(api.getSentiment).mockRejectedValue(new Error('Network error'))
+    vi.mocked(api.analysisDaily).mockRejectedValue(new Error('Network error'))
     renderStockDetail('XYZ')
     await waitFor(() => { expect(screen.getByText(/Error:/)).toBeInTheDocument() })
     expect(screen.getByRole('alert')).toHaveTextContent('Network error')

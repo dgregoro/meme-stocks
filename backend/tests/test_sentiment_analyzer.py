@@ -19,6 +19,7 @@ class DummyPost:
     upvotes: int
     comments: int
     collected_at: datetime
+    body: str = ""
 
 
 def test_analyze_post_sentiment_basic_keywords() -> None:
@@ -33,6 +34,20 @@ def test_calculate_weighted_sentiment_no_posts_returns_no_data() -> None:
     assert isinstance(summary, SentimentSummary)
     assert summary.score is None
     assert summary.mention_count == 0
+
+
+def test_calculate_weighted_sentiment_ignores_post_body_uses_title_only() -> None:
+    now = datetime(2024, 1, 2, 12, 0, tzinfo=timezone.utc)
+    post = DummyPost(
+        title="GME thread",
+        body="This is a scam total dump sell now",
+        upvotes=50,
+        comments=5,
+        collected_at=now - timedelta(hours=1),
+    )
+    summary = calculate_weighted_sentiment("GME", posts=[post], window=timedelta(hours=24), now=now)
+    assert summary.score is not None
+    assert summary.score == 0.0
 
 
 def test_calculate_weighted_sentiment_with_engagement_and_decay() -> None:

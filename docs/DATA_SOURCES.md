@@ -1,6 +1,8 @@
 # Data Sources
 
-This document describes where the application gets its market and social data, and any plan-specific limitations.
+This document describes where the application gets its market data and any plan-specific limitations.
+
+**Social / Reddit (March 2026):** The project **originated** with Reddit as a social signal. **Reddit is no longer ingested**; there is no PRAW client or live subreddit feed in the running stack. Any “mention” or social columns in analysis or exports are **legacy or research-oriented** and may be unset or zero.
 
 ---
 

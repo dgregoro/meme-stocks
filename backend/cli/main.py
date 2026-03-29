@@ -74,7 +74,7 @@ def sentiment(
     base_url: str = base_url_opt,
     output: str = output_opt,
 ) -> None:
-    """Sentiment analysis for a symbol."""
+    """Daily analysis fields for a symbol (keyword sentiment is unused without a social feed)."""
     commands.sentiment_cmd(symbol=symbol.upper(), base_url=base_url, output_fmt=output)
 
 
@@ -210,15 +210,6 @@ jobs_app = typer.Typer(help="Background jobs")
 app.add_typer(jobs_app, name="jobs")
 
 
-@jobs_app.command("reddit")
-def jobs_reddit(
-    base_url: str = base_url_opt,
-    output: str = output_opt,
-) -> None:
-    """Trigger Reddit collection."""
-    commands.jobs_reddit_cmd(base_url=base_url, output=output)
-
-
 @jobs_app.command("prices")
 def jobs_prices(
     base_url: str = base_url_opt,
@@ -235,16 +226,6 @@ def jobs_notifications(
 ) -> None:
     """Trigger notification check."""
     commands.jobs_notifications_cmd(base_url=base_url, output=output)
-
-
-@jobs_app.command("recent-posts")
-def jobs_recent_posts(
-    limit: int = typer.Option(20, "--limit", "-n", help="Max posts to return"),
-    base_url: str = base_url_opt,
-    output: str = output_opt,
-) -> None:
-    """Recent Reddit posts with tickers."""
-    commands.jobs_recent_posts_cmd(limit=limit, base_url=base_url, output=output)
 
 
 def main() -> None:

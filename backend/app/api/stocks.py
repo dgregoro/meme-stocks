@@ -54,7 +54,7 @@ class CreateStockRequest(BaseModel):
 def create_stock(req: CreateStockRequest, db: Session = Depends(get_session)) -> StockResponse:
     """Add a new stock to track.
 
-    The stock symbol will be used for ticker extraction from Reddit posts.
+    The symbol is normalized to uppercase for consistency with the rest of the API.
     """
     repo = StockRepository(db)
 

@@ -10,15 +10,10 @@ from sqlalchemy.pool import StaticPool
 from backend.app.main import create_app
 from backend.app.data.database import Base, get_session
 from backend.app.models.price_data import PriceData
-from backend.app.models.reddit_daily_feature import RedditDailyFeature
-from backend.app.models.reddit_post import RedditPost
-from backend.app.models.reddit_symbol_mention import RedditSymbolMention
 from backend.app.models.stock import Stock
 
 
 def create_test_engine_and_sessionmaker():
-    # Use a shared in-memory SQLite DB so connections see the same data.
-    # check_same_thread=False is required for SQLite with multiple connections.
     engine = create_engine(
         "sqlite:///:memory:",
         future=True,
@@ -36,7 +31,6 @@ def build_test_app_with_db() -> tuple[TestClient, Session]:
     session = TestSessionLocal()
     app = create_app(omit_scheduler=True)
 
-    # Override DB dependency to use our in-memory session.
     def override_get_session():
         db = TestSessionLocal()
         try:
@@ -52,7 +46,6 @@ def build_test_app_with_db() -> tuple[TestClient, Session]:
 def test_list_and_get_stocks() -> None:
     client, db = build_test_app_with_db()
 
-    # Seed one stock
     stock = Stock(symbol="GME", name="GameStop", sector="Retail", market_cap=1_000_000_000)
     db.add(stock)
     db.commit()
@@ -78,30 +71,12 @@ def test_get_stock_not_found_returns_404() -> None:
     assert body["detail"]["error_type"] == "NotFoundError"
 
 
-def test_get_sentiment_and_prices_for_stock() -> None:
+def test_get_prices_for_stock() -> None:
     client, db = build_test_app_with_db()
-
-    now = datetime.now(timezone.utc)
 
     stock = Stock(symbol="AMC", name="AMC", sector="Entertainment", market_cap=None)
     db.add(stock)
 
-    # Seed one reddit post with symbol mention
-    post = RedditPost(
-        id="post1",
-        subreddit="wallstreetbets",
-        title="AMC to the moon buy buy",
-        author="user",
-        upvotes=100,
-        comments=10,
-        url="https://reddit.com/post1",
-        posted_at=now,
-        collected_at=now,
-    )
-    db.add(post)
-    db.add(RedditSymbolMention(post_id="post1", symbol="AMC"))
-
-    # Seed one price bar
     price = PriceData(
         stock_symbol="AMC",
         date=date(2024, 1, 1),
@@ -110,88 +85,14 @@ def test_get_sentiment_and_prices_for_stock() -> None:
         low=9.5,
         close=11.5,
         volume=1_000_000,
+        timestamp=datetime.now(timezone.utc),
     )
     db.add(price)
     db.commit()
 
-    # Sentiment
-    s_resp = client.get("/api/stocks/AMC/sentiment")
-    assert s_resp.status_code == 200
-    s_data = s_resp.json()
-    assert s_data["stock_symbol"] == "AMC"
-    assert s_data["mention_count"] == 1
-    assert s_data["classification"] in {"positive", "neutral", "negative", "no_data"}
-
-    # Prices
     p_resp = client.get("/api/stocks/AMC/prices")
     assert p_resp.status_code == 200
     p_data = p_resp.json()
     assert isinstance(p_data, list)
     assert len(p_data) == 1
     assert p_data[0]["close"] == 11.5
-
-    # Mentions (source: subreddit, url)
-    m_resp = client.get("/api/stocks/AMC/mentions")
-    assert m_resp.status_code == 200
-    m_data = m_resp.json()
-    assert isinstance(m_data, list)
-    assert len(m_data) == 1
-    assert m_data[0]["subreddit"] == "wallstreetbets"
-    assert m_data[0]["url"] == "https://reddit.com/post1"
-    assert m_data[0]["title"] == "AMC to the moon buy buy"
-    assert "id" in m_data[0] and "posted_at" in m_data[0]
-
-
-def test_get_mentions_not_found_returns_404() -> None:
-    client, _ = build_test_app_with_db()
-    resp = client.get("/api/stocks/UNKNOWN/mentions")
-    assert resp.status_code == 404
-    body = resp.json()
-    assert body["detail"]["error_type"] == "NotFoundError"
-
-
-def test_get_mentions_empty_list_for_stock_with_no_posts() -> None:
-    client, db = build_test_app_with_db()
-    stock = Stock(symbol="XYZ", name="XYZ Corp", sector=None, market_cap=None)
-    db.add(stock)
-    db.commit()
-
-    resp = client.get("/api/stocks/XYZ/mentions")
-    assert resp.status_code == 200
-    assert resp.json() == []
-
-
-def test_get_reddit_daily_features_for_stock() -> None:
-    client, db = build_test_app_with_db()
-
-    stock = Stock(symbol="GME", name="GameStop", sector="Retail", market_cap=None)
-    db.add(stock)
-
-    # Two days of daily features
-    f1 = RedditDailyFeature(
-        symbol="GME",
-        trading_day=date(2026, 3, 2),
-        mention_count=3,
-        unique_authors=2,
-        total_upvotes=15,
-        total_comments=4,
-        upvote_weighted_mentions=1.23,
-    )
-    f2 = RedditDailyFeature(
-        symbol="GME",
-        trading_day=date(2026, 3, 3),
-        mention_count=1,
-        unique_authors=1,
-        total_upvotes=5,
-        total_comments=1,
-        upvote_weighted_mentions=0.7,
-    )
-    db.add_all([f1, f2])
-    db.commit()
-
-    resp = client.get("/api/stocks/GME/reddit-daily-features?start=2026-03-02&end=2026-03-03")
-    assert resp.status_code == 200
-    data = resp.json()
-    assert isinstance(data, list)
-    assert [row["trading_day"] for row in data] == ["2026-03-02", "2026-03-03"]
-    assert data[0]["mention_count"] == 3

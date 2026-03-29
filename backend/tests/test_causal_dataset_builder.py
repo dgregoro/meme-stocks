@@ -47,7 +47,13 @@ def _post(
     comments: int = 5,
     posted_at: datetime | None = None,
 ):
-    attrs: dict = {"collected_at": collected_at, "title": title, "upvotes": upvotes, "comments": comments}
+    attrs: dict = {
+        "collected_at": collected_at,
+        "title": title,
+        "body": "",
+        "upvotes": upvotes,
+        "comments": comments,
+    }
     if posted_at is not None:
         attrs["posted_at"] = posted_at
     return SimpleNamespace(**attrs)

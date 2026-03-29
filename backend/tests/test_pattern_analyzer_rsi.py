@@ -92,6 +92,8 @@ def test_analyze_price_trend_returns_rsi_when_enough_bars() -> None:
         mock.return_value.rsi_period = 14
         mock.return_value.rsi_overbought = 70.0
         mock.return_value.rsi_oversold = 30.0
+        mock.return_value.pattern_breakout_require_volume = False
+        mock.return_value.pattern_breakout_volume_ratio = 1.0
         trend = analyze_price_trend(bars)
     assert trend.rsi is not None
     assert 0 <= trend.rsi <= 100
@@ -106,6 +108,8 @@ def test_analyze_price_trend_rsi_signal_oversold() -> None:
         mock.return_value.rsi_period = 14
         mock.return_value.rsi_overbought = 70.0
         mock.return_value.rsi_oversold = 30.0
+        mock.return_value.pattern_breakout_require_volume = False
+        mock.return_value.pattern_breakout_volume_ratio = 1.0
         trend = analyze_price_trend(bars)
     assert trend.rsi is not None
     assert trend.rsi_signal == "oversold"
@@ -119,6 +123,8 @@ def test_analyze_price_trend_rsi_signal_neutral() -> None:
         mock.return_value.rsi_period = 14
         mock.return_value.rsi_overbought = 70.0
         mock.return_value.rsi_oversold = 30.0
+        mock.return_value.pattern_breakout_require_volume = False
+        mock.return_value.pattern_breakout_volume_ratio = 1.0
         trend = analyze_price_trend(bars)
     assert trend.rsi == 50.0
     assert trend.rsi_signal == "neutral"
@@ -132,6 +138,8 @@ def test_analyze_price_trend_insufficient_sma_returns_complete_price_trend() -> 
         mock.return_value.rsi_period = 14
         mock.return_value.rsi_overbought = 70.0
         mock.return_value.rsi_oversold = 30.0
+        mock.return_value.pattern_breakout_require_volume = False
+        mock.return_value.pattern_breakout_volume_ratio = 1.0
         trend = analyze_price_trend(bars)
     assert trend.direction == "sideways"
     assert trend.sma_short is None

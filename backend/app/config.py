@@ -21,11 +21,6 @@ class Settings(BaseSettings):
 
     database_url: str = "sqlite:///./data/app.db"
 
-    # Reddit API credentials
-    reddit_client_id: str | None = None
-    reddit_client_secret: str | None = None
-    reddit_user_agent: str = "meme-stocks-app/0.1"
-
     # Analysis thresholds (can be tuned via environment)
     sentiment_positive_threshold: float = 0.3
     sentiment_negative_threshold: float = -0.2
@@ -38,14 +33,17 @@ class Settings(BaseSettings):
     # Analysis weights and windows
     analysis_sentiment_weight: float = 0.6  # Weight for sentiment in composite score
     analysis_trend_weight: float = 0.4  # Weight for trend in composite score
-    sentiment_window_hours: int = 24  # Window for sentiment aggregation
-    reddit_max_age_days: int = 2  # Max age of Reddit posts to fetch
+    sentiment_window_hours: int = 24  # Reserved for future sentiment sources
     price_history_days: int = 30  # Days of price history for analysis
 
-    # RSI (Relative Strength Index) - PLAN.md / Phase 2.3
+    # RSI (Relative Strength Index) — Phase 2.3 (see pattern_analyzer)
     rsi_period: int = 14
     rsi_overbought: float = 70.0
     rsi_oversold: float = 30.0
+
+    # SMA uptrend treated as breakout only if latest volume confirms (Phase 2.4)
+    pattern_breakout_require_volume: bool = True
+    pattern_breakout_volume_ratio: float = 1.0  # latest / mean(prior volumes); 1.0 = at least average
 
     # Combined signal alerts (Phase 2, Task 2.5)
     combined_signal_weight_sentiment: float = 2.0
@@ -59,11 +57,9 @@ class Settings(BaseSettings):
     cors_allowed_origins: str = "http://127.0.0.1:5173,http://localhost:5173"
 
     # Scheduling configuration
-    reddit_collection_interval_minutes: int = 60  # Collect Reddit data every hour
     price_collection_interval_minutes: int = 15  # Collect price data every 15 minutes
     notification_check_interval_minutes: int = 30  # Check for notifications every 30 minutes
     daily_analysis_hour: int = 16  # Run daily analysis at 4 PM (16:00) local time
-    reddit_subreddits: str = "wallstreetbets,stocks,investing"  # Comma-separated list
     enable_catch_up: bool = True  # Run missed jobs on startup
 
     # SEC EDGAR (requires User-Agent; use contact email for compliance)
@@ -178,12 +174,10 @@ class Settings(BaseSettings):
         "data/research"  # Output dir for build-dataset; experiments accept only paths under this
     )
 
-    # Reddit daily features (causal research): trading-day assignment and aggregation job
+    # Market clock (intraday ingestion, status dashboards)
     market_timezone: str = "America/New_York"
     market_close_hour_local: int = 16  # Local hour when market closes
     market_close_minute_local: int = 0  # Local minute when market closes
-    reddit_daily_features_lookback_days: int = 30
-    reddit_daily_features_job_hour: int = 17  # Run after market close
 
     @field_validator("rsi_period")
     @classmethod
@@ -204,6 +198,13 @@ class Settings(BaseSettings):
         if self.rsi_oversold >= self.rsi_overbought:
             raise ValueError("rsi_oversold must be < rsi_overbought")
         return self
+
+    @field_validator("pattern_breakout_volume_ratio")
+    @classmethod
+    def pattern_breakout_volume_ratio_positive(cls, v: float) -> float:
+        if v <= 0:
+            raise ValueError("pattern_breakout_volume_ratio must be > 0")
+        return v
 
     model_config = SettingsConfigDict(
         # Only load .env from cwd (repo root). Tests run without it.

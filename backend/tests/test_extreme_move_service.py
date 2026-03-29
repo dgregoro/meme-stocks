@@ -152,8 +152,6 @@ def test_backfill_invalid_range_raises() -> None:
     db = _session()
     try:
         with pytest.raises(ValueError, match="start_date"):
-            backfill_extreme_moves(
-                db, date(2024, 1, 5), date(2024, 1, 1), symbols=["ZZZ"], replace_range=False
-            )
+            backfill_extreme_moves(db, date(2024, 1, 5), date(2024, 1, 1), symbols=["ZZZ"], replace_range=False)
     finally:
         db.close()

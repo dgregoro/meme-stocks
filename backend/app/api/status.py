@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -14,11 +14,9 @@ from backend.app.data.repositories.job_execution_repo import JobExecutionReposit
 from backend.app.models.job_run_history import JobRunHistory
 from backend.app.services.status_service import (
     CollectionStatusResult,
-    DailyFeatureStatusResult,
     HealthResult,
     JobStatusResult,
     PriceCollectionStatusResult,
-    RedditCollectionStatusResult,
     SymbolStalenessResult,
     get_collection_status,
     get_stale_symbols,
@@ -46,47 +44,23 @@ class JobStatus(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-class RedditCollectionStatus(BaseModel):
-    posts_last_1h: int
-    posts_last_24h: int
-    mentions_last_1h: int
-    mentions_last_24h: int
-    newest_post_posted_at_utc: datetime | None = None
-    newest_post_collected_at_utc: datetime | None = None
-    oldest_post_collected_at_utc: datetime | None = None
-
-    model_config = ConfigDict(from_attributes=True)
-
-
 class PriceCollectionStatus(BaseModel):
-    newest_price_date: datetime | None = None
+    newest_price_date: date | None = None
     price_rows_last_7d: int
     price_rows_last_30d: int
 
     model_config = ConfigDict(from_attributes=True)
 
 
-class DailyFeatureStatus(BaseModel):
-    newest_trading_day: datetime | None = None
-    rows_last_7d: int
-    rows_last_30d: int
-
-    model_config = ConfigDict(from_attributes=True)
-
-
 class CollectionHealth(BaseModel):
-    reddit: Literal["ok", "stale", "empty"]
     prices: Literal["ok", "stale", "empty"]
-    daily_features: Literal["ok", "stale", "empty"]
     jobs: Literal["ok", "warning"]
 
     model_config = ConfigDict(from_attributes=True)
 
 
 class CollectionThresholds(BaseModel):
-    reddit_stale_after_minutes: int
     prices_stale_after_days: int
-    features_stale_after_days: int
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -95,9 +69,7 @@ class CollectionStatusResponse(BaseModel):
     server_time_utc: datetime
     market_time_local: datetime
     jobs: list[JobStatus]
-    reddit: RedditCollectionStatus
     prices: PriceCollectionStatus
-    daily_features: DailyFeatureStatus
     health: CollectionHealth
     thresholds: CollectionThresholds
 
@@ -106,9 +78,7 @@ class CollectionStatusResponse(BaseModel):
 
 class StaleSymbolStatus(BaseModel):
     symbol: str
-    last_reddit_collected_at_utc: datetime | None = None
-    last_price_date: datetime | None = None
-    last_daily_feature_day: datetime | None = None
+    last_price_date: date | None = None
     stale_reasons: list[str]
 
     model_config = ConfigDict(from_attributes=True)
@@ -134,16 +104,8 @@ def _convert_jobs(results: list[JobStatusResult]) -> list[JobStatus]:
     return [JobStatus.model_validate(r) for r in results]
 
 
-def _convert_reddit(result: RedditCollectionStatusResult) -> RedditCollectionStatus:
-    return RedditCollectionStatus.model_validate(result)
-
-
 def _convert_prices(result: PriceCollectionStatusResult) -> PriceCollectionStatus:
     return PriceCollectionStatus.model_validate(result)
-
-
-def _convert_daily_features(result: DailyFeatureStatusResult) -> DailyFeatureStatus:
-    return DailyFeatureStatus.model_validate(result)
 
 
 def _convert_health(result: HealthResult) -> CollectionHealth:
@@ -165,20 +127,15 @@ def get_collection_status_api(db: Session = Depends(get_session)) -> CollectionS
         server_time_utc=status_result.server_time_utc,
         market_time_local=status_result.market_time_local,
         jobs=_convert_jobs(status_result.jobs),
-        reddit=_convert_reddit(status_result.reddit),
         prices=_convert_prices(status_result.prices),
-        daily_features=_convert_daily_features(status_result.daily_features),
         health=_convert_health(status_result.health),
         thresholds=CollectionThresholds(
-            reddit_stale_after_minutes=status_result.health.reddit_stale_after_minutes,
             prices_stale_after_days=status_result.health.prices_stale_after_days,
-            features_stale_after_days=status_result.health.features_stale_after_days,
         ),
     )
 
 
 def _as_utc_aware(dt: datetime | None) -> datetime | None:
-    """Normalize datetime to UTC-aware; treat naive as UTC."""
     if dt is None:
         return None
     if dt.tzinfo is None:
@@ -232,7 +189,6 @@ def get_job_runs_for_job(
 
 
 def _parse_metrics_json(metrics_json: str | None) -> dict[str, object] | None:
-    """Parse metrics_json; return None on failure but keep summary."""
     if not metrics_json:
         return None
     try:
@@ -243,7 +199,6 @@ def _parse_metrics_json(metrics_json: str | None) -> dict[str, object] | None:
 
 
 def _job_run_from_history(h: JobRunHistory) -> JobRun:
-    """Build JobRun from JobRunHistory, normalizing datetimes to UTC-aware."""
     finished = _as_utc_aware(h.run_at)
     started = _as_utc_aware(h.started_at)
     duration = h.duration_seconds
@@ -266,7 +221,7 @@ def get_stale_symbols_api(
     limit: int = Query(25, ge=1, le=200),
     db: Session = Depends(get_session),
 ) -> list[StaleSymbolStatus]:
-    """Return top-N stalest symbols across Reddit, prices, and daily features."""
+    """Return top-N stalest symbols by price freshness."""
     try:
         results: list[SymbolStalenessResult] = get_stale_symbols(db, limit)
     except DataAccessError as exc:

@@ -109,6 +109,7 @@ def test_build_dataset_returns_path_and_stats(
         assert "rows_written" in data
         assert "labels_rows_upserted" in data
         assert "features_rows_upserted" in data
+        assert data["features_rows_upserted"] == 0
         assert "git_sha" in data
         assert "dataset_version" in data
         assert data["path"].endswith(".csv")

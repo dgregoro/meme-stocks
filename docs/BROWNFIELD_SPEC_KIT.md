@@ -4,7 +4,7 @@ This document provides context for AI agents creating or implementing specs in t
 
 ## Project Overview
 
-Meme-stocks is a **decision-support tool** for retail investors analyzing meme stocks using Reddit sentiment and price data. It does not execute trades. Backend (FastAPI/Python) + frontend (React/Vite).
+Meme-stocks is a **decision-support tool** for retail investors analyzing meme and momentum names using **price data, indicators, and heuristics** (plus keyword sentiment fields in rankings). **Reddit ingestion was removed**; the product **started** Reddit-centric but is **not** today. It does not execute live trades. Backend (FastAPI/Python) + frontend (React/Vite).
 
 ## Architecture
 
@@ -14,11 +14,11 @@ Meme-stocks is a **decision-support tool** for retail investors analyzing meme s
 | Services  | `backend/app/services/`          | Business logic, orchestration            |
 | Repos     | `backend/app/data/repositories/`| Data access only                         |
 | Models    | `backend/app/models/`            | SQLAlchemy ORM                           |
-| Clients   | `backend/app/clients/`           | External APIs (Reddit, Yahoo, Alpaca)   |
+| Clients   | `backend/app/clients/`           | External APIs (Yahoo Finance, Alpaca, SEC as applicable)   |
 | Frontend  | `frontend/src/`                  | React, Vite, API client in `services/api.ts` |
 | CLI       | `backend/cli/`                   | API client; no direct DB access          |
 
-**Data flow**: Reddit/Yahoo → clients → services → repos → DB. Scheduler jobs run ingestion and analysis. Frontend and CLI call REST API.
+**Data flow**: Market data providers → clients → services → repos → DB. Scheduler jobs run price collection, analysis, notifications, and optional features (intraday, leader-follower, etc.). Frontend and CLI call the REST API.
 
 ## Key Docs
 

@@ -42,7 +42,7 @@ def refresh_symbol_universe(db: Session = Depends(get_session)) -> RefreshRespon
 
     This endpoint fetches stock listings from SEC EDGAR and updates the
     symbol universe database. The symbol universe is used to validate
-    ticker symbols extracted from Reddit posts.
+    ticker symbols extracted from text (e.g. watchlists, seeded universe).
 
     Returns:
         Statistics about the refresh operation.

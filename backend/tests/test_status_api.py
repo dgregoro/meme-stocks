@@ -1,21 +1,18 @@
 from __future__ import annotations
 
 from collections.abc import Generator
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timezone
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy import create_engine
 from sqlalchemy.pool import StaticPool
 
 from backend.app.data.database import Base, get_session
 from backend.app.main import create_app
 from backend.app.models.job_run_history import JobRunHistory
 from backend.app.models.price_data import PriceData
-from backend.app.models.reddit_daily_feature import RedditDailyFeature
-from backend.app.models.reddit_post import RedditPost
-from backend.app.models.reddit_symbol_mention import RedditSymbolMention
 from backend.app.models.stock import Stock
 from backend.app.services import status_service as status_service_module
 
@@ -48,7 +45,6 @@ def test_get_collection_status_counters_and_health(monkeypatch: pytest.MonkeyPat
     """Status endpoint returns expected structure and basic counter/health correctness."""
     client, db = _build_test_app_with_db()
 
-    # Fix \"now\" inside status_service so time windows are deterministic.
     fixed_now = datetime(2026, 3, 2, 12, 0, 0, tzinfo=timezone.utc)
 
     class FixedDateTime(datetime):  # type: ignore[misc]
@@ -60,38 +56,8 @@ def test_get_collection_status_counters_and_health(monkeypatch: pytest.MonkeyPat
 
     monkeypatch.setattr(status_service_module, "datetime", FixedDateTime)
 
-    # Seed minimal data so counters are non-zero and types exercised.
     stock = Stock(symbol="GME", name="GameStop", sector=None, market_cap=None)
     db.add(stock)
-
-    post = RedditPost(
-        id="post1",
-        subreddit="wallstreetbets",
-        title="GME to the moon",
-        author="u1",
-        upvotes=10,
-        comments=2,
-        url="https://reddit.com/...",
-        posted_at=fixed_now - timedelta(minutes=30),
-        collected_at=fixed_now - timedelta(minutes=30),
-    )
-    db.add(post)
-    db.add(RedditSymbolMention(post_id="post1", symbol="GME"))
-
-    # Older Reddit post outside 1h window but inside 24h.
-    older_post = RedditPost(
-        id="post_old",
-        subreddit="wallstreetbets",
-        title="GME earlier",
-        author="u2",
-        upvotes=3,
-        comments=1,
-        url="https://reddit.com/...",
-        posted_at=fixed_now - timedelta(hours=2),
-        collected_at=fixed_now - timedelta(hours=2),
-    )
-    db.add(older_post)
-    db.add(RedditSymbolMention(post_id="post_old", symbol="GME"))
 
     price = PriceData(
         stock_symbol="GME",
@@ -103,17 +69,6 @@ def test_get_collection_status_counters_and_health(monkeypatch: pytest.MonkeyPat
         volume=1000,
     )
     db.add(price)
-
-    feature = RedditDailyFeature(
-        symbol="GME",
-        trading_day=fixed_now.date(),
-        mention_count=1,
-        unique_authors=1,
-        total_upvotes=10,
-        total_comments=2,
-        upvote_weighted_mentions=1.0,
-    )
-    db.add(feature)
     db.commit()
 
     resp = client.get("/api/status/collection")
@@ -123,13 +78,7 @@ def test_get_collection_status_counters_and_health(monkeypatch: pytest.MonkeyPat
     assert "server_time_utc" in body
     assert "market_time_local" in body
     assert isinstance(body.get("jobs"), list)
-
-    reddit = body.get("reddit")
-    assert isinstance(reddit, dict)
-    assert reddit["posts_last_1h"] == 1
-    assert reddit["posts_last_24h"] == 2
-    assert reddit["mentions_last_1h"] == 1
-    assert reddit["mentions_last_24h"] == 2
+    assert "reddit" not in body
 
     prices = body.get("prices")
     assert isinstance(prices, dict)
@@ -137,22 +86,16 @@ def test_get_collection_status_counters_and_health(monkeypatch: pytest.MonkeyPat
     assert prices["price_rows_last_7d"] == 1
     assert prices["price_rows_last_30d"] == 1
 
-    daily = body.get("daily_features")
-    assert isinstance(daily, dict)
-    assert daily["newest_trading_day"].startswith(fixed_now.date().isoformat())
-    assert daily["rows_last_7d"] == 1
-    assert daily["rows_last_30d"] == 1
-
     health = body.get("health")
     assert isinstance(health, dict)
-    assert health["reddit"] in {"ok", "stale", "empty"}
     assert health["prices"] in {"ok", "stale", "empty"}
-    assert health["daily_features"] in {"ok", "stale", "empty"}
     assert health["jobs"] in {"ok", "warning"}
+    assert "thresholds" in body
+    assert body["thresholds"]["prices_stale_after_days"] == 2
 
 
-def test_collection_status_with_naive_datetimes_from_db(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Status endpoints handle naive datetimes from DB (e.g. SQLite) without TypeError."""
+def test_collection_status_with_job_history(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Collection status reflects job runs in history."""
     client, db = _build_test_app_with_db()
 
     fixed_now = datetime(2026, 3, 2, 12, 0, 0, tzinfo=timezone.utc)
@@ -166,44 +109,39 @@ def test_collection_status_with_naive_datetimes_from_db(monkeypatch: pytest.Monk
 
     monkeypatch.setattr(status_service_module, "datetime", FixedDateTime)
 
-    # Insert JobExecution with naive datetime (SQLite returns naive for non-TZ strings).
-    db.execute(
-        text(
-            "INSERT INTO job_executions (job_name, last_run_at, created_at, updated_at) "
-            "VALUES ('reddit_collection', '2026-03-02 11:00:00', '2026-03-02 11:00:00', '2026-03-02 11:00:00')"
+    t_run = datetime(2026, 3, 2, 11, 0, 0, tzinfo=timezone.utc)
+    db.add(
+        JobRunHistory(
+            job_name="price_collection",
+            run_at=t_run,
+            success=True,
+            error_message=None,
         )
     )
 
     stock = Stock(symbol="GME", name="GameStop", sector=None, market_cap=None)
     db.add(stock)
-
-    # RedditPost with naive collected_at (30 min before fixed_now when treated as UTC).
-    naiv_30m_ago = datetime(2026, 3, 2, 11, 30, 0)
-    post = RedditPost(
-        id="post1",
-        subreddit="wallstreetbets",
-        title="GME",
-        author="u1",
-        upvotes=10,
-        comments=2,
-        url="https://reddit.com/...",
-        posted_at=naiv_30m_ago,
-        collected_at=naiv_30m_ago,
+    db.add(
+        PriceData(
+            stock_symbol="GME",
+            date=fixed_now.date(),
+            open=10.0,
+            high=12.0,
+            low=9.5,
+            close=11.0,
+            volume=1000,
+        )
     )
-    db.add(post)
-    db.add(RedditSymbolMention(post_id="post1", symbol="GME"))
     db.commit()
 
     resp = client.get("/api/status/collection")
     assert resp.status_code == 200
     body = resp.json()
-    assert "health" in body
-    assert body["health"]["reddit"] == "ok"  # 30 min ago < 120 min threshold (naive treated as UTC)
     assert body["health"]["jobs"] in {"ok", "warning"}
 
 
-def test_stale_symbols_with_naive_datetimes(monkeypatch: pytest.MonkeyPatch) -> None:
-    """get_stale_symbols handles naive collected_at from DB without TypeError."""
+def test_stale_symbols_stale_price(monkeypatch: pytest.MonkeyPatch) -> None:
+    """get /symbols/stale marks symbols with old price data."""
     client, db = _build_test_app_with_db()
 
     fixed_now = datetime(2026, 3, 2, 12, 0, 0, tzinfo=timezone.utc)
@@ -220,21 +158,18 @@ def test_stale_symbols_with_naive_datetimes(monkeypatch: pytest.MonkeyPatch) -> 
     stock = Stock(symbol="GME", name="GameStop", sector=None, market_cap=None)
     db.add(stock)
 
-    # Post with naive collected_at 3 hours ago (stale per 120 min threshold).
-    naiv_3h_ago = datetime(2026, 3, 2, 9, 0, 0)
-    post = RedditPost(
-        id="post1",
-        subreddit="wallstreetbets",
-        title="GME",
-        author="u1",
-        upvotes=10,
-        comments=2,
-        url="https://reddit.com/...",
-        posted_at=naiv_3h_ago,
-        collected_at=naiv_3h_ago,
+    old_day = date(2026, 2, 20)
+    db.add(
+        PriceData(
+            stock_symbol="GME",
+            date=old_day,
+            open=10.0,
+            high=12.0,
+            low=9.5,
+            close=11.0,
+            volume=1000,
+        )
     )
-    db.add(post)
-    db.add(RedditSymbolMention(post_id="post1", symbol="GME"))
     db.commit()
 
     resp = client.get("/api/status/symbols/stale?limit=10")
@@ -244,7 +179,7 @@ def test_stale_symbols_with_naive_datetimes(monkeypatch: pytest.MonkeyPatch) -> 
     symbols = [s["symbol"] for s in data]
     assert "GME" in symbols
     gme = next(s for s in data if s["symbol"] == "GME")
-    assert "reddit_stale" in gme["stale_reasons"]
+    assert "price_stale" in gme["stale_reasons"]
 
 
 def test_status_jobs_runs_empty_returns_empty_list() -> None:
@@ -263,7 +198,7 @@ def test_status_jobs_runs_returns_history_with_datetimes_and_duration() -> None:
     started = datetime(2026, 3, 1, 9, 59, 55, tzinfo=timezone.utc)
     db.add(
         JobRunHistory(
-            job_name="reddit_collection",
+            job_name="price_collection",
             run_at=t0,
             started_at=started,
             duration_seconds=5.0,
@@ -277,12 +212,11 @@ def test_status_jobs_runs_returns_history_with_datetimes_and_duration() -> None:
     assert resp.status_code == 200
     data = resp.json()
     assert len(data) == 1
-    assert data[0]["job_name"] == "reddit_collection"
+    assert data[0]["job_name"] == "price_collection"
     assert data[0]["success"] is True
     assert data[0]["duration_seconds"] == 5.0
     assert "finished_at_utc" in data[0]
     assert "started_at_utc" in data[0]
-    # ISO8601 should include timezone (Z or +00:00)
     fin = data[0]["finished_at_utc"]
     assert fin is not None and ("Z" in str(fin) or "+00:00" in str(fin))
 
@@ -320,15 +254,15 @@ def test_status_collection_includes_last_success_utc() -> None:
     client, db = _build_test_app_with_db()
 
     t0 = datetime(2026, 3, 1, 10, 0, 0, tzinfo=timezone.utc)
-    db.add(JobRunHistory(job_name="reddit_collection", run_at=t0, success=True, error_message=None))
+    db.add(JobRunHistory(job_name="price_collection", run_at=t0, success=True, error_message=None))
     db.commit()
 
     resp = client.get("/api/status/collection")
     assert resp.status_code == 200
     jobs = resp.json().get("jobs", [])
-    reddit_job = next((j for j in jobs if j["job_id"] == "reddit_collection"), None)
-    assert reddit_job is not None
-    assert "last_success_utc" in reddit_job
+    price_job = next((j for j in jobs if j["job_id"] == "price_collection"), None)
+    assert price_job is not None
+    assert "last_success_utc" in price_job
 
 
 def test_job_runs_endpoint_returns_metrics_json_parsed() -> None:
@@ -338,14 +272,14 @@ def test_job_runs_endpoint_returns_metrics_json_parsed() -> None:
     t0 = datetime(2026, 3, 1, 10, 0, 0, tzinfo=timezone.utc)
     db.add(
         JobRunHistory(
-            job_name="reddit_collection",
+            job_name="price_collection",
             run_at=t0,
             started_at=t0,
             duration_seconds=5.0,
             success=True,
             error_message=None,
-            summary="reddit: inserted 12 posts (50 fetched), symbols=8",
-            metrics_json='{"posts_fetched":50,"posts_inserted":12,"symbols_mentioned":8}',
+            summary="prices: 42 rows inserted for 3 symbols",
+            metrics_json='{"rows_inserted":42,"symbols":3}',
         )
     )
     db.commit()
@@ -355,8 +289,8 @@ def test_job_runs_endpoint_returns_metrics_json_parsed() -> None:
     data = resp.json()
     assert len(data) == 1
     run = data[0]
-    assert run["summary"] == "reddit: inserted 12 posts (50 fetched), symbols=8"
-    assert run["metrics"] == {"posts_fetched": 50, "posts_inserted": 12, "symbols_mentioned": 8}
+    assert run["summary"] == "prices: 42 rows inserted for 3 symbols"
+    assert run["metrics"] == {"rows_inserted": 42, "symbols": 3}
 
 
 def test_job_runs_endpoint_handles_missing_metrics_gracefully() -> None:
@@ -366,11 +300,11 @@ def test_job_runs_endpoint_handles_missing_metrics_gracefully() -> None:
     t0 = datetime(2026, 3, 1, 10, 0, 0, tzinfo=timezone.utc)
     db.add(
         JobRunHistory(
-            job_name="price_collection",
+            job_name="notification_check",
             run_at=t0,
             success=True,
             error_message=None,
-            summary="prices: 42 rows inserted",
+            summary="notifications: 0 generated for 2 symbols",
             metrics_json=None,
         )
     )
@@ -380,7 +314,7 @@ def test_job_runs_endpoint_handles_missing_metrics_gracefully() -> None:
     assert resp.status_code == 200
     data = resp.json()
     assert len(data) == 1
-    assert data[0]["summary"] == "prices: 42 rows inserted"
+    assert data[0]["summary"] == "notifications: 0 generated for 2 symbols"
     assert data[0]["metrics"] is None
 
 

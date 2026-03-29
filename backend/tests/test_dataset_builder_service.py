@@ -15,9 +15,6 @@ from sqlalchemy.orm import sessionmaker
 from backend.app.data.database import Base
 from backend.app.models import price_data  # noqa: F401
 from backend.app.models import price_labels  # noqa: F401
-from backend.app.models import reddit_daily_feature  # noqa: F401
-from backend.app.models import reddit_post  # noqa: F401 - RedditSymbolMention backref
-from backend.app.models import reddit_symbol_mention  # noqa: F401 - Stock relationship
 from backend.app.models import stock  # noqa: F401
 from backend.app.services.dataset_builder_service import build_training_dataset
 from backend.app.services.label_service import compute_and_store_forward_returns
@@ -39,15 +36,9 @@ def _make_price(symbol: str, d: date, close: float, volume: int = 1000):
 
 @pytest.mark.integration
 def test_build_training_dataset_join_features_and_labels() -> None:
-    """One RedditDailyFeature for (GME, 2026-02-02), PriceData for 2026-02-02 and 2026-02-07.
-
-    After label generation and dataset build for horizon=5, assert one row with correct
-    label and feature fields.
-    """
+    """Price labels + OHLCV; legacy Reddit columns are zeros."""
     from backend.app.data.repositories.price_data_repo import PriceDataRepository
-    from backend.app.data.repositories.reddit_daily_feature_repo import RedditDailyFeatureRepository
     from backend.app.data.repositories.stock_repo import StockRepository
-    from backend.app.models.reddit_daily_feature import RedditDailyFeature
     from backend.app.models.stock import Stock
 
     engine = create_engine("sqlite:///:memory:")
@@ -59,22 +50,6 @@ def test_build_training_dataset_join_features_and_labels() -> None:
         stock_repo.add(Stock(symbol="GME", name="GameStop", sector=None, market_cap=None))
         db.flush()
 
-        # RedditDailyFeature for GME on 2026-02-02
-        feature_repo = RedditDailyFeatureRepository(db)
-        feature_repo.upsert(
-            RedditDailyFeature(
-                symbol="GME",
-                trading_day=date(2026, 2, 2),
-                mention_count=10,
-                unique_authors=5,
-                total_upvotes=100,
-                total_comments=20,
-                upvote_weighted_mentions=2.5,
-            )
-        )
-        db.flush()
-
-        # PriceData: trading days Mon 2..Fri 6, Mon 9 (weekend omitted; horizon=5 uses 5th session)
         price_repo = PriceDataRepository(db)
         price_repo.add(_make_price("GME", date(2026, 2, 2), 100.0, 5000))
         price_repo.add(_make_price("GME", date(2026, 2, 3), 101.0, 5100))
@@ -84,11 +59,9 @@ def test_build_training_dataset_join_features_and_labels() -> None:
         price_repo.add(_make_price("GME", date(2026, 2, 9), 105.0, 6000))
         db.commit()
 
-        # Generate labels
         compute_and_store_forward_returns(db, date(2026, 2, 2), date(2026, 2, 2), horizons=[5])
         db.commit()
 
-        # Build dataset for horizon=5
         with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False) as f:
             out_path = f.name
 
@@ -110,14 +83,13 @@ def test_build_training_dataset_join_features_and_labels() -> None:
             r = rows[0]
             assert r["symbol"] == "GME"
             assert r["trading_day"] == "2026-02-02"
-            assert r["mention_count"] == "10"
-            assert r["unique_authors"] == "5"
-            assert r["total_upvotes"] == "100"
-            assert r["total_comments"] == "20"
-            assert r["upvote_weighted_mentions"] == "2.5"
+            assert r["mention_count"] == "0"
+            assert r["unique_authors"] == "0"
+            assert r["total_upvotes"] == "0"
+            assert r["total_comments"] == "0"
+            assert r["upvote_weighted_mentions"] == "0.0"
             assert r["close"] == "100.0"
             assert r["volume"] == "5000"
-            # fwd_return = 105/100 - 1 = 0.05
             assert abs(float(r["y_fwd_return_5"]) - 0.05) < 1e-9
             assert "metadata_path" in stats
             meta_path = stats["metadata_path"]
