@@ -34,6 +34,8 @@ deployment/.env
 # Data & logs
 /data/
 logs/
+# Local deployment SQLite (populated by backfill; do not commit)
+deployment/data/
 
 # Local leader-follower evaluation dumps (repo root)
 lf_*.json
