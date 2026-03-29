@@ -1,0 +1,29 @@
+# Example: backfill extreme-move events then print CLI evaluation summary.
+# Prerequisites: stocks + price_data populated; DATABASE_URL / cwd consistent with CLI.
+# From repo root:  python -m backend.app.cli research recipe run specs/018-hypothesis-research-recipe/examples/extreme-move-eval.yaml
+# Dry run:        python -m backend.app.cli research recipe run ... --dry-run
+
+version: 1
+name: extreme-move-backfill-then-evaluate-cli
+
+steps:
+  - name: Backfill extreme-move events (replace range)
+    argv:
+      - backfill
+      - extreme-move
+      - --start
+      - "2025-02-01"
+      - --end
+      - "2026-03-20"
+      - --replace-range
+
+  - name: Evaluate extreme-move (JSON to stdout)
+    argv:
+      - evaluate
+      - extreme-move
+      - --start
+      - "2025-02-01"
+      - --end
+      - "2026-03-20"
+      - --limit
+      - "2000"
