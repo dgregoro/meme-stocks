@@ -2,6 +2,8 @@
 
 This document defines how to measure and track the quality of the meme-stocks project.
 
+For **new trading or research signals** (before optimization, filters, or ML), use **[Signal evaluation checklist](SIGNAL_EVALUATION_CHECKLIST.md)** as a minimum data-quality gate.
+
 ---
 
 ## Quality Scorecard
