@@ -1,0 +1,37 @@
+# Automated daily-strategy merit runs (S1 + S2). Edit dates/symbols to match your DB.
+# From repo root:
+#   python -m backend.app.cli research recipe run \
+#     specs/018-hypothesis-research-recipe/examples/daily-strategy-merit.yaml
+# Prerequisites: seed stocks + price_data backfill for listed symbols.
+
+version: 1
+name: daily-strategy-s1-s2-merit-example
+
+steps:
+  - name: S1 merit (trading splits, pooled)
+    argv:
+      - evaluate
+      - daily-strategy
+      - s1-merit
+      - --start
+      - "2022-01-01"
+      - --end
+      - "2024-12-31"
+      - --symbols
+      - "SPY"
+      - --splits
+      - "4"
+      - --split-mode
+      - trading
+
+  - name: S2 merit (single window)
+    argv:
+      - evaluate
+      - daily-strategy
+      - s2-merit
+      - --start
+      - "2022-01-01"
+      - --end
+      - "2024-12-31"
+      - --symbols
+      - "SPY"

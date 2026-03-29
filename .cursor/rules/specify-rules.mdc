@@ -33,6 +33,7 @@ Auto-generated from all feature plans. Last updated: 2026-03-28
 - SQLite; new table `volume_spike_events` via SQLAlchemy `Base.metadata.create_all` (015-volume-spike-vs-baseline-signal-research)
 - SQLite; `extreme_move_events` + context columns via migration (016, 017-mean-reversion-context-filters)
 - Python 3.11 + Typer + PyYAML; `python -m backend.app.cli research recipe run|validate` (018-hypothesis-research-recipe); no new DB tables
+- Python 3.11 + Typer; strategy eval data preflight / `--ensure-data` for `evaluate daily-strategy` (019-strategy-eval-data-preflight); planned — reuse seed + backfill services
 
 - Python 3.11 + FastAPI, SQLAlchemy, existing services (activity_detector, pattern_analyzer, sentiment_analyzer) (002-combined-signal-alerts)
 
@@ -57,6 +58,7 @@ Python 3.11: Follow standard conventions
 - 018-hypothesis-research-recipe: YAML recipes orchestrate chained `backend.app.cli` steps
 - 015-volume-spike-vs-baseline-signal-research: Added Python 3.11 + FastAPI, SQLAlchemy, Pydantic, Typer (existing backend stack)
 - 014-leader-follower-regime-filtering: Added Python 3.11
+- 019-strategy-eval-data-preflight: (planned) verify price_data before strategy eval; optional auto seed/backfill
 
 <!-- MANUAL ADDITIONS START -->
 <!-- MANUAL ADDITIONS END -->

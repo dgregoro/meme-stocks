@@ -70,7 +70,7 @@ backend/app/
 
 ## Backend Typer CLI (`python -m backend.app.cli`)
 
-The **database-backed** CLI is a **Typer** application used for datasets, seeding, historical backfills, paper-trade simulation, walk-forward optimization, robustness runs, causal `experiment` commands, and YAML **research recipes** (spec 018). It imports services and uses `SessionLocal` directly.
+The **database-backed** CLI is a **Typer** application used for datasets, seeding, historical backfills, paper-trade simulation, walk-forward optimization, robustness runs, causal `experiment` commands, YAML **research recipes** (spec 018), **research universe** helpers (`research universe sp1500-fetch-wikipedia`, `sp1500-cap-filter` for unofficial S&P 1500 lists + Yahoo cap filter; see `data/research/universes/README.md`), and **daily-frequency strategy evaluation** (`evaluate daily-strategy s1|s2`, **`s1-merit` / `s2-merit`** with `--splits`, **`--split-mode`**, **`--append-jsonl`**; YAML recipe under `specs/018-hypothesis-research-recipe/examples/`). It imports services and uses `SessionLocal` directly.
 
 **Layout**
 

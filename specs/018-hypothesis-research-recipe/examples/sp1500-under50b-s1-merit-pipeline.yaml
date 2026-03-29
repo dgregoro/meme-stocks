@@ -1,0 +1,46 @@
+# One command after editing dates/paths:
+#   python -m backend.app.cli research recipe run \
+#     specs/018-hypothesis-research-recipe/examples/sp1500-under50b-s1-merit-pipeline.yaml
+#
+# Prerequisites: data/research/universes/sp_composite_1500_constituents.csv
+#   (from `research universe sp1500-fetch-wikipedia -o ...` or your vendor list).
+#
+# Step 1 hits Yahoo ~1500 times (slow). Step 2 may need price_data — add a backfill step or
+# use --ensure-data on evaluate if Alpaca keys are set (watch ensure cap for --all-stocks only).
+
+version: 1
+name: unofficial-sp1500-under-50b-cap-s1-merit-pipeline
+
+steps:
+  - name: Yahoo cap filter + seed stocks + symbol list
+    argv:
+      - research
+      - universe
+      - sp1500-cap-filter
+      - --as-of
+      - "2026-03-29"
+      - --max-market-cap-usd
+      - "50000000000"
+      - --constituents-file
+      - data/research/universes/sp_composite_1500_constituents.csv
+      - --output-json
+      - data/research/universes/last_sp1500_under50b.json
+      - --output-symbols-file
+      - data/research/universes/last_sp1500_under50b_symbols.txt
+      - --seed-stocks
+
+  - name: S1 merit (pooled) on filtered list
+    argv:
+      - evaluate
+      - daily-strategy
+      - s1-merit
+      - --start
+      - "2022-01-01"
+      - --end
+      - "2024-12-31"
+      - --symbols-file
+      - data/research/universes/last_sp1500_under50b_symbols.txt
+      - --split-mode
+      - trading
+      - --splits
+      - "4"

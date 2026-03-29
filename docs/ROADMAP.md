@@ -201,6 +201,8 @@ if alignment_score > COMBINED_SIGNAL_THRESHOLD and confidence > 0.7:
 | 3.14 | Mean reversion after extreme daily moves (read-only) | specs/016-mean-reversion-after-extreme-moves | ✅ Implemented |
 | 3.15 | Mean reversion with context filters (magnitude × volume, read-only) | specs/017-mean-reversion-context-filters | ✅ Implemented |
 | 3.16 | Hypothesis research recipe runner (YAML orchestration of CLI steps) | specs/018-hypothesis-research-recipe | ✅ Implemented |
+| 3.17 | Strategy eval data preflight & optional auto-fetch (daily-strategy CLI) | specs/019-strategy-eval-data-preflight | ✅ Implemented |
+| 3.18 | S&P Composite 1500 research universe (constituents + Yahoo cap filter CLI) | ad hoc research tooling | ✅ Implemented |
 
 ### 3.7 Leader-Follower Signal Detection ✅
 

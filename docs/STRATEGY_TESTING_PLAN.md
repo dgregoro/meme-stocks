@@ -5,6 +5,7 @@ This document is the **operational test plan** for the ideas in `docs/STRATEGY_E
 **Companion docs:**
 
 - `docs/STRATEGY_EXPLORATION.md` — definitions and **result tables** (log each run there).
+- `docs/STRATEGY_CONCLUSION_FRAMEWORK.md` — **how to justify** kill vs supported conclusions (pre-registration, universe, hold-out, ablations, costs).
 - `docs/SIGNAL_EVALUATION_CHECKLIST.md` — **gate** before “pursue”; fail → kill or gather more data, no tuning spiral.
 - `docs/CAUSAL_RESEARCH.md` — leakage-safe habits (time-based splits, as-of features); ignore Reddit-specific artifacts when applying the spirit of the rules.
 
@@ -55,6 +56,8 @@ For each formal run, capture in `STRATEGY_EXPLORATION.md` (global + strategy tab
 | **Calendar flags** | S4; OpEx week, FOMC week, holidays—prefer a maintained calendar table or deterministic script. |
 | **Panel universe** | S5; liquid names + rules (min price, min dollar volume) and survivorship honesty. |
 | **Execution environment** | Same DB / export path for backfill and evaluation (checklist §7). |
+
+**Strategy eval preflight (CLI):** `evaluate daily-strategy` commands (`s1`, `s2`, `s1-merit`, `s2-merit`, `eval-bundle`) accept `--preflight-only` to print a JSON readiness report and exit `2` if any symbol lacks `stocks` / `price_data` for the eval window (no network). With `--ensure-data`, the CLI creates missing `stocks` rows when needed and invokes the same **Alpaca daily** backfill path as `backfill daily-prices` (requires `ALPACA_API_KEY_ID` / `ALPACA_API_SECRET_KEY`). `--ensure-data` with `--all-stocks` is capped by `daily_strategy_ensure_data_max_symbols` in config to limit accidental bulk API usage.
 
 ---
 
@@ -164,7 +167,13 @@ These paths already exist; they skew Reddit/causal today but illustrate patterns
 | CLI entrypoint | `python -m backend.app.cli --help` | Wire new subcommands or recipes as you add signals. |
 | Research recipes | `python -m backend.app.cli research recipe run …` | Phase F orchestration once steps are stable. |
 | Rolling robustness | `robustness` CLI (if configured for your experiment) | Walk-forward summaries after baseline event study works. |
-| Evaluate summaries | `evaluate extreme-move`, `evaluate volume-spike` | Templates for “event → forward returns” reporting—not a plug-in for S1/S2 without new event definitions. |
+| Evaluate summaries | `evaluate extreme-move`, `evaluate volume-spike` | Templates for “event → forward returns” reporting. |
+| Daily strategy S1/S2 | `python -m backend.app.cli evaluate daily-strategy s1 --symbol SPY` (optional `--start` / `--end`) | Same forward-return machinery; regimes/buckets from daily OHLCV. Use `… daily-strategy s2 …` for gap ecology. |
+| S1 merit (automated gate) | `python -m backend.app.cli evaluate daily-strategy s1-merit --start YYYY-MM-DD --end YYYY-MM-DD --symbols A,B` or `--all-stocks` | **Pooled** regimes over the window, **vs unconditional baseline** (same days), concentration + **checklist** in JSON (`daily_strategy_merit_*` in config). |
+| S1 merit rolling | Same command + `--splits N` (e.g. 4) | Default **`--split-mode calendar`**: **N** contiguous **calendar** chunks. **`--split-mode trading`**: **N** equal **trading-day** blocks from the union of `price_data` dates (symbols: merit universe or `--trading-calendar-symbols CSV`). If the union is empty, falls back to calendar (see `split_mode_used` in JSON). |
+| S2 merit | `… daily-strategy s2-merit` | Same flags as **s1-merit** (pooled buckets, baseline, checklist, `--splits`, `--split-mode`, `--append-jsonl`). |
+| S1/S2 merit log | `--append-jsonl path` | Appends **one JSON line** per run. |
+| Recipe (batch) | `python -m backend.app.cli research recipe run specs/018-hypothesis-research-recipe/examples/daily-strategy-merit.yaml` | Chains **s1-merit** + **s2-merit** with example dates (edit YAML first). |
 | Extreme / volume events | `backfill` research commands | Shows how persisted **events** are built from `price_data`; S1/S2 might add new event types or separate analysis tables. |
 
 **Gap:** None of the above implements S3–S7 end-to-end without new code or external notebooks; the plan assumes you will add minimal glue (export + evaluation script) per strategy until patterns stabilize.

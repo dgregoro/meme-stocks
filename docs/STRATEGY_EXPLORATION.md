@@ -11,6 +11,7 @@ This document tracks **non-Reddit, daily (or lower) frequency** ideas for system
 **Related docs:**
 
 - `docs/STRATEGY_TESTING_PLAN.md` — **how to test** S1–S7 (sequence, methodology, tooling).
+- `docs/STRATEGY_CONCLUSION_FRAMEWORK.md` — **well-supported conclusion** (pre-registration, hold-out, checklist mapping, costs).
 - `docs/SIGNAL_EVALUATION_CHECKLIST.md` — minimum bar before believing an edge.
 - `docs/CAUSAL_RESEARCH.md` — leakage-safe dataset and experiment patterns (adapt features to daily price/volume only).
 - `docs/PLAN.md` — implemented product logic vs. research tracks.
@@ -38,6 +39,8 @@ Append a row per meaningful run (backtest, ablation, or formal experiment). Use 
 | Run date   | Strategy ID | Universe / tickers | Horizon(s) | Train / test split        | Verdict (kill / maybe / pursue) | Links / notes (commit, notebook, CLI command) |
 | ---------- | ----------- | ------------------ | ---------- | ------------------------- | --------------------------------- | ---------------------------------------------- |
 | YYYY-MM-DD | S1          |                    |            |                           |                                   |                                                |
+
+**CLI (Phase A):** `evaluate daily-strategy s1` / `s2` (single symbol); **`s1-merit`** / **`s2-merit`** (pooled, baseline, checklist, **`--splits`**, **`--split-mode calendar|trading`**, **`--append-jsonl`**). Or run **`research recipe run specs/018-hypothesis-research-recipe/examples/daily-strategy-merit.yaml`** after editing dates/symbols. **Requires daily rows in `price_data`:** run `python -m backend.app.cli seed stocks` (includes SPY in the `benchmarks` group), then `python -m backend.app.cli backfill daily-prices --start 2018-01-01 --end 2025-12-31 --symbols SPY` with Alpaca keys set (or collect prices via your usual Yahoo path). If data is missing, the JSON (and stderr) includes a `hint`. See `docs/STRATEGY_TESTING_PLAN.md`.
 
 **Verdict definitions:**
 
