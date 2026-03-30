@@ -6,7 +6,7 @@ alwaysApply: true
 
 # meme-stocks Development Guidelines
 
-Auto-generated from all feature plans. Last updated: 2026-03-28
+Auto-generated from all feature plans. Last updated: 2026-03-29
 
 ## Active Technologies
 - Python 3.11 + FastAPI, SQLAlchemy, existing PriceDataRepository, StockRepository, JobExecutionRepository (003-leader-follower-signal-detection)
@@ -34,6 +34,9 @@ Auto-generated from all feature plans. Last updated: 2026-03-28
 - SQLite; `extreme_move_events` + context columns via migration (016, 017-mean-reversion-context-filters)
 - Python 3.11 + Typer + PyYAML; `python -m backend.app.cli research recipe run|validate` (018-hypothesis-research-recipe); no new DB tables
 - Python 3.11 + Typer; strategy eval data preflight / `--ensure-data` for `evaluate daily-strategy` (019-strategy-eval-data-preflight); planned — reuse seed + backfill services
+- Python 3.11; `backend.app.services.research_execution` — shared costs, drawdown/equity metrics, window splits, `ResearchRunEnvelope` (3.21; specs/020-shared-research-execution)
+- Python 3.11+ (project std; CI may use 3.12) + SQLAlchemy (consumers only), Typer CLI (future commands), existing `PriceDataRepository` for planned backtest (020-shared-research-execution)
+- SQLite existing (`daily_strategy_merit_runs` optional envelope embed); no new tables required for core (020-shared-research-execution)
 
 - Python 3.11 + FastAPI, SQLAlchemy, existing services (activity_detector, pattern_analyzer, sentiment_analyzer) (002-combined-signal-alerts)
 
@@ -53,12 +56,9 @@ cd src [ONLY COMMANDS FOR ACTIVE TECHNOLOGIES][ONLY COMMANDS FOR ACTIVE TECHNOLO
 Python 3.11: Follow standard conventions
 
 ## Recent Changes
+- 020-shared-research-execution: Added Python 3.11+ (project std; CI may use 3.12) + SQLAlchemy (consumers only), Typer CLI (future commands), existing `PriceDataRepository` for planned backtest
 - 016-mean-reversion-after-extreme-moves: Added Python 3.11 + FastAPI, SQLAlchemy, Pydantic, Typer
 - 017-mean-reversion-context-filters: magnitude/volume buckets on extreme_move_events; evaluation by-magnitude/by-volume/by-magnitude-volume
-- 018-hypothesis-research-recipe: YAML recipes orchestrate chained `backend.app.cli` steps
-- 015-volume-spike-vs-baseline-signal-research: Added Python 3.11 + FastAPI, SQLAlchemy, Pydantic, Typer (existing backend stack)
-- 014-leader-follower-regime-filtering: Added Python 3.11
-- 019-strategy-eval-data-preflight: (planned) verify price_data before strategy eval; optional auto seed/backfill
 
 <!-- MANUAL ADDITIONS START -->
 <!-- MANUAL ADDITIONS END -->
