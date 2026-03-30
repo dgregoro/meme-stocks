@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from backend.app.models import (  # noqa: F401
+    daily_strategy_merit_run,
     intraday_ingest_run,
     intraday_ingest_state,
     job_execution,

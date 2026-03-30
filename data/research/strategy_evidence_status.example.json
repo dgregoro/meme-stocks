@@ -1,0 +1,10 @@
+{
+  "S1": {
+    "evidence": "not_tested",
+    "notes": "After a formal merit run, set evidence to tested and optional verdict (kill|maybe|pursue)."
+  },
+  "S2": {
+    "evidence": "in_progress",
+    "notes": "Example: pilot universe before full gate."
+  }
+}

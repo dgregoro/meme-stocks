@@ -14,6 +14,7 @@ from backend.app.cli.commands.research import register_research
 from backend.app.cli.commands.robustness import register_robustness
 from backend.app.cli.commands.seed import register_seed
 from backend.app.cli.commands.simulate import register_simulate
+from backend.app.cli.commands.strategies import register_strategies
 
 app = typer.Typer(
     name="meme-stocks-app",
@@ -30,6 +31,7 @@ register_optimize(app)
 register_robustness(app)
 register_evaluate(app)
 register_research(app)
+register_strategies(app)
 
 
 def main() -> None:

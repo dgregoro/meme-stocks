@@ -174,6 +174,10 @@ class Settings(BaseSettings):
     daily_strategy_ensure_data_prior_calendar_days: int = 580
     daily_strategy_ensure_data_end_buffer_calendar_days: int = 45
     daily_strategy_ensure_data_max_symbols: int = 64
+    # When True, s1-merit / s2-merit / eval-bundle persist full JSON to daily_strategy_merit_runs
+    daily_strategy_merit_persist_runs: bool = True
+    # Default round-trip cost for documentation / ResearchRunEnvelope (actual sims use their own fields)
+    research_default_round_trip_cost_bps: float = 10.0
 
     # Extreme move research (016): large daily close-to-close return; mean-reversion hypothesis
     extreme_move_up_threshold_pct: float = 5.0
@@ -190,6 +194,8 @@ class Settings(BaseSettings):
     )
     # S&P Composite 1500 cap-filter CLI: default CSV path (repo-relative); see data/research/universes/README.md
     research_sp1500_constituents_csv: str = "data/research/universes/sp_composite_1500_constituents.csv"
+    # Optional hand-edited JSON for ``strategies list`` evidence column; see example in data/research/
+    research_strategy_evidence_status_json: str = "data/research/strategy_evidence_status.json"
 
     # Market clock (intraday ingestion, status dashboards)
     market_timezone: str = "America/New_York"

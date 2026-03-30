@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from datetime import date
 from pathlib import Path
-from typing import Literal, cast
+from typing import Any, Literal, cast
 
 import typer
 from sqlalchemy.orm import Session
@@ -93,6 +93,19 @@ def _emit_strategy_merit_bundle_stdout_jsonl(
         with path.open("a", encoding="utf-8") as fh:
             fh.write(json.dumps(bundle, default=str) + "\n")
         typer.echo(f"Appended JSONL line to {path}", err=True)
+
+
+def _persist_merit_output(db: Session, report: dict[str, Any], *, no_persist: bool) -> None:
+    """Store full merit / bundle JSON when enabled; never raises."""
+    from backend.app.services.daily_strategy_merit_persistence import try_persist_merit_report
+
+    rid = try_persist_merit_report(db, report, skip=no_persist)
+    if rid is not None:
+        typer.echo(
+            f"Recorded merit run id={rid} (daily_strategy_merit_runs). "
+            f"Show: python -m backend.app.cli strategies merit-runs show --id {rid}",
+            err=True,
+        )
 
 
 def _daily_strategy_preflight_phase(
@@ -209,6 +222,11 @@ def register_evaluate(app: typer.Typer) -> None:
             "--ensure-data",
             help="Before eval: create missing stock rows and Alpaca backfill if needed (requires API keys)",
         ),
+        no_persist: bool = typer.Option(
+            False,
+            "--no-persist",
+            help="Do not store this run in daily_strategy_merit_runs",
+        ),
     ) -> None:
         """Automated strategy gate: pooled merit on [start,end] plus optional rolling stability (one JSON blob)."""
         from backend.app.data.repositories.stock_repo import StockRepository
@@ -297,6 +315,7 @@ def register_evaluate(app: typer.Typer) -> None:
                     "Tip: use --preflight-only to inspect data readiness or --ensure-data to seed/backfill (Alpaca).",
                     err=True,
                 )
+            _persist_merit_output(db, bundle, no_persist=no_persist)
             _emit_strategy_merit_bundle_stdout_jsonl(bundle, append_jsonl=append_jsonl)
         finally:
             db.close()
@@ -351,6 +370,11 @@ def register_evaluate(app: typer.Typer) -> None:
             False,
             "--ensure-data",
             help="Before merit run: create missing stock rows and Alpaca backfill if needed",
+        ),
+        no_persist: bool = typer.Option(
+            False,
+            "--no-persist",
+            help="Do not store this run in daily_strategy_merit_runs",
         ),
     ) -> None:
         """Pooled S1 over [start,end]: baseline comparison + automated checklist (JSON)."""
@@ -437,6 +461,7 @@ def register_evaluate(app: typer.Typer) -> None:
                     "Tip: use --preflight-only to inspect data readiness or --ensure-data to seed/backfill (Alpaca).",
                     err=True,
                 )
+            _persist_merit_output(db, report, no_persist=no_persist)
             _emit_merit_report_stdout_jsonl(report, splits=splits, append_jsonl=append_jsonl)
         finally:
             db.close()
@@ -460,6 +485,11 @@ def register_evaluate(app: typer.Typer) -> None:
             False,
             "--ensure-data",
             help="Before merit run: create missing stock rows and Alpaca backfill if needed",
+        ),
+        no_persist: bool = typer.Option(
+            False,
+            "--no-persist",
+            help="Do not store this run in daily_strategy_merit_runs",
         ),
     ) -> None:
         """Pooled S2 gap ecology: same automation pattern as s1-merit."""
@@ -546,6 +576,7 @@ def register_evaluate(app: typer.Typer) -> None:
                     "Tip: use --preflight-only to inspect data readiness or --ensure-data to seed/backfill (Alpaca).",
                     err=True,
                 )
+            _persist_merit_output(db, report, no_persist=no_persist)
             _emit_merit_report_stdout_jsonl(report, splits=splits, append_jsonl=append_jsonl)
         finally:
             db.close()
