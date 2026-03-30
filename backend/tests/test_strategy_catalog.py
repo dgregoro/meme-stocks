@@ -30,8 +30,8 @@ def test_build_strategy_list_rows_defaults() -> None:
     s3 = next(r for r in rows if r.strategy_id == "S3")
     assert s1.tooling == "implemented"
     assert s1.evidence == "not_tested"
-    assert s3.tooling == "planned"
-    assert s3.evidence == "n_a"
+    assert s3.tooling == "implemented"
+    assert s3.evidence == "not_tested"
 
 
 @pytest.mark.unit

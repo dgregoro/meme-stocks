@@ -94,7 +94,9 @@ def run_strategy_eval_data_preflight(
     mode: PreflightMode = "check",
     all_stocks_ensure: bool = False,
 ) -> StrategyEvalPreflightResult:
-    """Verify (and optionally fetch) OHLCV prerequisites for S1/S2 evaluation.
+    """Verify (and optionally fetch) prerequisites for S1/S2/S3 daily-strategy evaluation.
+
+    S3 additionally requires persisted VIX/VIX3M observations (``backfill vol-term`` / Yahoo).
 
     * ``mode="check"``: read-only; no Alpaca.
     * ``mode="ensure"``: create missing ``stocks`` rows, then Alpaca daily backfill for symbols
@@ -134,6 +136,25 @@ def run_strategy_eval_data_preflight(
         if seed_r.get("created", 0) > 0:
             db.commit()
             actions.append(f"stock_rows_created={seed_r['created']}")
+
+        if strategy == "s3":
+            bf_start, bf_end = _backfill_date_range(eval_start, eval_end)
+            extra = max(1, int(settings.s3_macro_backfill_calendar_buffer_days))
+            macro_start = bf_start - timedelta(days=extra)
+            try:
+                from backend.app.services.vol_term_structure_service import backfill_vol_term_observations
+
+                vr = backfill_vol_term_observations(db, macro_start, bf_end, replace_range=False)
+                actions.append(
+                    f"backfill_vol_term rows_upserted={vr.get('rows_upserted', 0)} " f"range={macro_start}..{bf_end}"
+                )
+                for err in vr.get("errors") or []:
+                    errors.append(str(err))
+                    logger.warning("preflight vol-term backfill: %s", err)
+            except Exception as exc:
+                msg = str(exc)
+                errors.append(msg)
+                logger.warning("preflight vol-term backfill failed: %s", exc)
 
     assessments = _assess_all(db, syms, strategy, eval_start, eval_end)
     all_ready = all(a.status == "ready" for a in assessments)

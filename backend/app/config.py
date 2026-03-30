@@ -176,6 +176,15 @@ class Settings(BaseSettings):
     daily_strategy_ensure_data_max_symbols: int = 64
     # When True, s1-merit / s2-merit / eval-bundle persist full JSON to daily_strategy_merit_runs
     daily_strategy_merit_persist_runs: bool = True
+
+    # Daily-frequency S3: VIX vs VIX3M term structure (021); Yahoo indices + expanding quantile regimes
+    s3_vix_symbol: str = "^VIX"
+    s3_vix3m_symbol: str = "^VIX3M"
+    s3_feature_mode: str = "spread"  # spread | ratio
+    s3_ratio_denominator_floor: float = 0.01
+    s3_regime_min_history_days: int = 252
+    s3_regime_n_buckets: int = 4
+    s3_macro_backfill_calendar_buffer_days: int = 420
     # Default round-trip cost for documentation / ResearchRunEnvelope (actual sims use their own fields)
     research_default_round_trip_cost_bps: float = 10.0
 

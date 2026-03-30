@@ -27,5 +27,6 @@ from backend.app.models import (  # noqa: F401
     stock_group,
     symbol_universe,
     volume_spike_event,
+    vol_term_structure_observation,
     extreme_move_event,
 )

@@ -6,6 +6,7 @@ import typer
 
 from backend.app.cli.common import parse_cli_date
 from backend.app.data.database import SessionLocal, init_db
+from backend.app.utils.errors import ExternalAPIError
 
 
 def register_backfill(app: typer.Typer) -> None:
@@ -22,8 +23,6 @@ def register_backfill(app: typer.Typer) -> None:
         ),
     ) -> None:
         """Replay leader-follower detection for a historical date range."""
-        from backend.app.utils.errors import ExternalAPIError
-
         start_d = parse_cli_date(start)
         end_d = parse_cli_date(end)
         if start_d > end_d:
@@ -75,7 +74,6 @@ def register_backfill(app: typer.Typer) -> None:
     ) -> None:
         """Fetch Alpaca daily bars into price_data only (no leader-follower detection)."""
         from backend.app.services.leader_follower_replay_service import run_daily_price_backfill
-        from backend.app.utils.errors import ExternalAPIError
 
         start_d = parse_cli_date(start)
         end_d = parse_cli_date(end)
@@ -129,6 +127,40 @@ def register_backfill(app: typer.Typer) -> None:
             result = backfill_volume_spikes(db, start_d, end_d, symbols=sym_list, replace_range=replace_range)
             typer.echo(f"Backfill volume-spike: {start_d} to {end_d}")
             typer.echo(json.dumps(result, indent=2))
+        finally:
+            db.close()
+
+    @backfill_app.command("vol-term")
+    def backfill_vol_term(
+        start: str = typer.Option(..., "--start", "-s", help="Start date (YYYY-MM-DD)"),
+        end: str = typer.Option(..., "--end", "-e", help="End date (YYYY-MM-DD)"),
+        replace_range: bool = typer.Option(
+            False,
+            "--replace-range",
+            help="Delete existing vol_term_structure_observations in [start,end] before insert",
+        ),
+    ) -> None:
+        """Fetch ^VIX and ^VIX3M daily closes from Yahoo into vol_term_structure_observations (S3)."""
+        from backend.app.services.vol_term_structure_service import backfill_vol_term_observations
+
+        start_d = parse_cli_date(start)
+        end_d = parse_cli_date(end)
+        if start_d > end_d:
+            typer.echo("Error: start_date must be <= end_date", err=True)
+            raise typer.Exit(1)
+
+        init_db()
+        db = SessionLocal()
+        try:
+            try:
+                result = backfill_vol_term_observations(db, start_d, end_d, replace_range=replace_range)
+            except ExternalAPIError as e:
+                typer.echo(f"Error: {e}", err=True)
+                raise typer.Exit(2)
+            typer.echo(f"Backfill vol-term: {start_d} to {end_d}")
+            typer.echo(json.dumps(result, indent=2))
+            if result.get("errors"):
+                raise typer.Exit(2)
         finally:
             db.close()
 

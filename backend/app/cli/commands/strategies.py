@@ -96,8 +96,7 @@ def register_strategies(app: typer.Typer) -> None:
             None,
             "--status-file",
             help=(
-                "Override RESEARCH_STRATEGY_EVIDENCE_STATUS_JSON "
-                "(JSON map of S1..S7 to evidence fields; optional)"
+                "Override RESEARCH_STRATEGY_EVIDENCE_STATUS_JSON " "(JSON map of S1..S7 to evidence fields; optional)"
             ),
         ),
     ) -> None:
@@ -108,11 +107,7 @@ def register_strategies(app: typer.Typer) -> None:
         ``data/research/strategy_evidence_status.example.json`` or via ``--status-file``.
         """
         settings = get_settings()
-        path = (
-            Path(status_file).expanduser()
-            if status_file
-            else Path(settings.research_strategy_evidence_status_json)
-        )
+        path = Path(status_file).expanduser() if status_file else Path(settings.research_strategy_evidence_status_json)
         if not path.is_absolute():
             path = Path.cwd() / path
         try:

@@ -54,8 +54,8 @@ STRATEGY_DEFINITIONS: tuple[StrategyDefinition, ...] = (
         "Label regimes from VIX vs medium-term vol (e.g. VIX3M) and relate to equity "
         "rule performance out-of-sample.",
         "VIX + longer vol index + equity returns",
-        "planned",
-        None,
+        "implemented",
+        "backfill vol-term | evaluate daily-strategy s3 | s3-merit | eval-bundle --strategy s3",
     ),
     StrategyDefinition(
         "S4",
@@ -128,22 +128,16 @@ def load_evidence_overrides(path: Path | None) -> dict[str, dict[str, Any]]:
     try:
         top = json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
-        raise StrategyEvidenceFileError(
-            f"Invalid JSON in strategy evidence file {path}: {exc}"
-        ) from exc
+        raise StrategyEvidenceFileError(f"Invalid JSON in strategy evidence file {path}: {exc}") from exc
     if not isinstance(top, dict):
-        raise StrategyEvidenceFileError(
-            f"Strategy evidence file {path} must be a JSON object at the top level."
-        )
+        raise StrategyEvidenceFileError(f"Strategy evidence file {path} must be a JSON object at the top level.")
     out: dict[str, dict[str, Any]] = {}
     for key, val in top.items():
         sid = _normalize_strategy_key(str(key))
         if sid not in KNOWN_IDS:
             continue
         if not isinstance(val, dict):
-            raise StrategyEvidenceFileError(
-                f"Entry {sid!r} in {path} must be a JSON object, not {type(val).__name__}."
-            )
+            raise StrategyEvidenceFileError(f"Entry {sid!r} in {path} must be a JSON object, not {type(val).__name__}.")
         out[sid] = dict(val)
     return _validate_evidence_entries(out, path)
 
@@ -153,14 +147,11 @@ def _validate_evidence_entries(data: dict[str, dict[str, Any]], path: Path) -> d
         ev = entry.get("evidence")
         if ev is not None:
             if not isinstance(ev, str):
-                raise StrategyEvidenceFileError(
-                    f"{sid}.evidence in {path} must be a string, not {type(ev).__name__}."
-                )
+                raise StrategyEvidenceFileError(f"{sid}.evidence in {path} must be a string, not {type(ev).__name__}.")
             ev_n = _normalize_evidence_token(ev)
             if ev_n not in ALLOWED_EVIDENCE:
                 raise StrategyEvidenceFileError(
-                    f"{sid}.evidence in {path} must be one of "
-                    f"{sorted(ALLOWED_EVIDENCE)}, got {ev!r}."
+                    f"{sid}.evidence in {path} must be one of " f"{sorted(ALLOWED_EVIDENCE)}, got {ev!r}."
                 )
             entry["evidence"] = ev_n
         vd = entry.get("verdict")
@@ -172,15 +163,13 @@ def _validate_evidence_entries(data: dict[str, dict[str, Any]], path: Path) -> d
             v_n = vd.strip().lower()
             if v_n not in ALLOWED_VERDICT:
                 raise StrategyEvidenceFileError(
-                    f"{sid}.verdict in {path} must be one of "
-                    f"{sorted(ALLOWED_VERDICT)}, got {vd!r}."
+                    f"{sid}.verdict in {path} must be one of " f"{sorted(ALLOWED_VERDICT)}, got {vd!r}."
                 )
             entry["verdict"] = v_n
         for opt_key in ("last_run_date", "notes"):
             if opt_key in entry and entry[opt_key] is not None and not isinstance(entry[opt_key], str):
                 raise StrategyEvidenceFileError(
-                    f"{sid}.{opt_key} in {path} must be a string or omitted, "
-                    f"not {type(entry[opt_key]).__name__}."
+                    f"{sid}.{opt_key} in {path} must be a string or omitted, " f"not {type(entry[opt_key]).__name__}."
                 )
     return data
 

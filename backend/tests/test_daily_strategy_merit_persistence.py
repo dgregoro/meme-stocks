@@ -49,6 +49,19 @@ def test_build_merit_run_row_s1() -> None:
 
 
 @pytest.mark.unit
+def test_build_merit_run_row_s3() -> None:
+    rep = {
+        "kind": "s3_merit_report",
+        "eval_window": {"start": "2024-01-01", "end": "2024-06-01"},
+        "symbols_requested": ["SPY"],
+        "checklist": {"pass": False, "failures": ["x"]},
+    }
+    row = build_merit_run_row(rep)
+    assert row.strategy_id == "s3"
+    assert row.checklist_pass is False
+
+
+@pytest.mark.unit
 def test_build_merit_run_row_bundle() -> None:
     rep = {
         "kind": "strategy_merit_bundle",

@@ -10,10 +10,12 @@ from backend.app.services.daily_frequency_strategy_research import (
     S2_BUCKET_KEYS,
     _rollup_s1_merit_rolling,
     _rollup_s2_merit_rolling,
+    _rollup_s3_merit_rolling,
     _sign_stable,
     _strategy_merit_bundle_summary,
     _top5_concentration,
 )
+from backend.app.services.s3_vol_term_regime import s3_bucket_keys
 from backend.app.services.research_execution.window_splits import (
     split_calendar_range,
     split_sorted_trading_days,
@@ -93,6 +95,30 @@ def test_trading_day_chunks_even_split() -> None:
     assert len(parts) == 2
     assert parts[0] == (days[0], days[4])
     assert parts[1] == (days[5], days[9])
+
+
+def test_rollup_s3_detects_sign_flip() -> None:
+    horizons = (1,)
+    bks = s3_bucket_keys(4)
+    q0 = bks[0]
+    fake = [
+        {
+            "report": {
+                "checklist": {"pass": True},
+                "vs_baseline_avg_pct": {q0: {"1": {"avg_excess_vs_baseline_pct": 0.4}}},
+                "by_regime": {q0: {"1": {"evaluable_count": 55}}},
+            }
+        },
+        {
+            "report": {
+                "checklist": {"pass": True},
+                "vs_baseline_avg_pct": {q0: {"1": {"avg_excess_vs_baseline_pct": -0.2}}},
+                "by_regime": {q0: {"1": {"evaluable_count": 55}}},
+            }
+        },
+    ]
+    r = _rollup_s3_merit_rolling(fake, min_events_per_bucket=50, horizons=horizons, bucket_keys=bks)
+    assert r["rolling_pass"] is False
 
 
 def test_rollup_s2_detects_sign_flip() -> None:

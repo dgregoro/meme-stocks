@@ -10,13 +10,14 @@ import logging
 import math
 import statistics
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 from typing import Any, Literal, Sequence, cast
 
 from sqlalchemy.orm import Session
 
 from backend.app.config import get_settings
 from backend.app.data.repositories.price_data_repo import PriceDataRepository
+from backend.app.data.repositories.vol_term_structure_repo import VolTermStructureRepository
 from backend.app.services.research_execution.window_splits import (
     split_calendar_range,
     split_sorted_trading_days,
@@ -24,11 +25,16 @@ from backend.app.services.research_execution.window_splits import (
 from backend.app.data.repositories.stock_repo import StockRepository
 from backend.app.models.price_data import PriceData
 from backend.app.services.leader_follower_evaluation_service import compute_forward_return
+from backend.app.services.s3_vol_term_regime import (
+    compute_s3_feature,
+    prior_expanding_quantile_regimes,
+    s3_bucket_keys,
+)
 
 logger = logging.getLogger(__name__)
 
 SplitMode = Literal["calendar", "trading"]
-StrategyMeritId = Literal["s1", "s2"]
+StrategyMeritId = Literal["s1", "s2", "s3"]
 
 
 @dataclass(frozen=True)
@@ -198,6 +204,13 @@ def metrics_from_returns(returns: list[float]) -> dict[str, Any]:
     }
 
 
+def _macro_vol_term_data_hint() -> str:
+    return (
+        "Insufficient VIX/VIX3M macro history for S3 (need s3_regime_min_history_days qualifying features). "
+        "Run: python -m backend.app.cli backfill vol-term --start 2010-01-01 --end 2025-12-31"
+    )
+
+
 def _price_data_hint(db: Session, symbol: str, n_price_rows_raw: int, n_valid_bars: int) -> str:
     """Human-readable next step when evaluation has too little usable data."""
     stock = StockRepository(db).get(symbol)
@@ -258,6 +271,91 @@ class S2WindowSample:
     bucket_returns: dict[str, dict[str, list[float]]]
     baseline_returns: dict[str, list[float]]
     counts: dict[str, int]
+
+
+@dataclass(frozen=True)
+class S3WindowSample:
+    """Vol term-structure quantile regime forward returns + baseline for one symbol."""
+
+    regime_returns: dict[str, dict[str, list[float]]]
+    baseline_returns: dict[str, list[float]]
+    counts: dict[str, int]
+
+
+def _load_s3_feature_by_date(
+    db: Session,
+    *,
+    load_start: date,
+    load_end: date,
+) -> dict[date, float | None]:
+    settings = get_settings()
+    use_ratio = settings.s3_feature_mode.strip().lower() == "ratio"
+    floor = float(settings.s3_ratio_denominator_floor)
+    repo = VolTermStructureRepository(db)
+    rows = repo.list_between(load_start, load_end)
+    out: dict[date, float | None] = {}
+    for r in rows:
+        out[r.observation_date] = compute_s3_feature(
+            r.vix_close,
+            r.vix3m_close,
+            use_ratio=use_ratio,
+            denom_floor=floor,
+        )
+    return out
+
+
+def _compute_s3_window_sample(
+    db: Session,
+    bars: list[DailyBar],
+    *,
+    horizons: tuple[int, ...],
+    since: date | None,
+    until: date | None,
+) -> S3WindowSample | None:
+    """Baseline + expanding-quantile regime buckets from VIX/VIX3M feature (DB-backed)."""
+    min_needed = max(horizons) + 5
+    if len(bars) < min_needed:
+        return None
+    settings = get_settings()
+    n_bk = max(2, min(20, int(settings.s3_regime_n_buckets)))
+    min_hist = max(2, int(settings.s3_regime_min_history_days))
+    buf = max(1, int(settings.s3_macro_backfill_calendar_buffer_days))
+    d_first, d_last = bars[0].d, bars[-1].d
+    load_start = d_first - timedelta(days=buf)
+    feature_by_date = _load_s3_feature_by_date(db, load_start=load_start, load_end=d_last)
+    regime_by_date = prior_expanding_quantile_regimes(
+        feature_by_date,
+        min_history=min_hist,
+        n_buckets=n_bk,
+    )
+    bucket_keys = s3_bucket_keys(n_bk)
+    by_reg: dict[str, dict[str, list[float]]] = {k: {str(h): [] for h in horizons} for k in bucket_keys}
+    baseline: dict[str, list[float]] = {str(h): [] for h in horizons}
+    counts: dict[str, int] = {k: 0 for k in bucket_keys}
+    price_one = _price_close_dict(bars)
+    dates = [b.d for b in bars]
+
+    for i in range(len(bars)):
+        d = dates[i]
+        if since is not None and d < since:
+            continue
+        if until is not None and d > until:
+            continue
+        forwards: dict[int, float] = {}
+        for h in horizons:
+            fr = compute_forward_return("_series", d, h, price_one)
+            if fr is not None:
+                forwards[h] = fr
+        for h, fr in forwards.items():
+            baseline[str(h)].append(fr)
+        lab = regime_by_date.get(d)
+        if lab is None or lab not in by_reg:
+            continue
+        counts[lab] = counts.get(lab, 0) + 1
+        for h, fr in forwards.items():
+            by_reg[lab][str(h)].append(fr)
+
+    return S3WindowSample(regime_returns=by_reg, baseline_returns=baseline, counts=counts)
 
 
 def _compute_s1_window_sample(
@@ -386,7 +484,7 @@ def _compute_s2_window_sample(
 
 @dataclass(frozen=True)
 class DailyStrategySymbolDataAssessment:
-    """Result of a read-only data sufficiency check for S1/S2 daily strategy eval."""
+    """Result of a read-only data sufficiency check for S1/S2/S3 daily strategy eval."""
 
     symbol: str
     status: Literal["ready", "missing_stock", "insufficient_history"]
@@ -397,16 +495,17 @@ class DailyStrategySymbolDataAssessment:
 
 
 def daily_strategy_min_valid_bars(strategy: StrategyMeritId) -> int:
-    """Minimum valid daily bars required (same contract as _compute_s1/_compute_s2)."""
+    """Minimum valid daily bars required (same contract as _compute_s1/_compute_s2/_compute_s3)."""
     settings = get_settings()
+    horizons = _parse_horizons_setting(settings.daily_strategy_horizons)
     if strategy == "s1":
         vol_w = max(2, settings.daily_strategy_realized_vol_window)
         vz_w = max(2, settings.daily_strategy_volume_z_window)
         min_prior = max(10, settings.daily_strategy_regime_min_prior_days)
-        horizons = _parse_horizons_setting(settings.daily_strategy_horizons)
         return max(vol_w, vz_w) + min_prior + max(horizons) + 5
+    if strategy == "s3":
+        return max(horizons) + 5
     ma_w = max(2, settings.daily_strategy_gap_ma_window)
-    horizons = _parse_horizons_setting(settings.daily_strategy_horizons)
     return ma_w + max(horizons) + 5
 
 
@@ -419,8 +518,7 @@ def assess_daily_strategy_symbol_data(
 ) -> DailyStrategySymbolDataAssessment:
     """Check whether ``price_data`` and ``stocks`` support evaluation for one symbol.
 
-    Uses the same feature windows and :func:`_compute_s1_window_sample` /
-    :func:`_compute_s2_window_sample` paths as merit and single-symbol eval.
+    Uses the same feature windows as merit / single-symbol eval (S1/S2/S3 compute paths).
     """
     symu = symbol.strip().upper()
     stock_repo = StockRepository(db)
@@ -466,6 +564,58 @@ def assess_daily_strategy_symbol_data(
             until=eval_end,
         )
         if s1_sample is None:
+            return DailyStrategySymbolDataAssessment(
+                symbol=symu,
+                status="insufficient_history",
+                message=_price_data_hint(db, symu, len(rows), len(bars)),
+                min_bars_required=min_need,
+                valid_bar_count=len(bars),
+                raw_price_row_count=len(rows),
+            )
+        return DailyStrategySymbolDataAssessment(
+            symbol=symu,
+            status="ready",
+            message=None,
+            min_bars_required=min_need,
+            valid_bar_count=len(bars),
+            raw_price_row_count=len(rows),
+        )
+
+    if strategy == "s3":
+        horizons = _parse_horizons_setting(settings.daily_strategy_horizons)
+        min_hist = max(2, int(settings.s3_regime_min_history_days))
+        buf = max(1, int(settings.s3_macro_backfill_calendar_buffer_days))
+        if len(bars) < min_need:
+            return DailyStrategySymbolDataAssessment(
+                symbol=symu,
+                status="insufficient_history",
+                message=_price_data_hint(db, symu, len(rows), len(bars)),
+                min_bars_required=min_need,
+                valid_bar_count=len(bars),
+                raw_price_row_count=len(rows),
+            )
+        d_anchor = eval_start if eval_start is not None else bars[0].d
+        load_end = eval_end if eval_end is not None else bars[-1].d
+        load_start = d_anchor - timedelta(days=buf)
+        fb = _load_s3_feature_by_date(db, load_start=load_start, load_end=load_end)
+        nq = sum(1 for v in fb.values() if v is not None)
+        if nq < min_hist:
+            return DailyStrategySymbolDataAssessment(
+                symbol=symu,
+                status="insufficient_history",
+                message=_macro_vol_term_data_hint(),
+                min_bars_required=min_need,
+                valid_bar_count=len(bars),
+                raw_price_row_count=len(rows),
+            )
+        s3_sample = _compute_s3_window_sample(
+            db,
+            bars,
+            horizons=horizons,
+            since=eval_start,
+            until=eval_end,
+        )
+        if s3_sample is None:
             return DailyStrategySymbolDataAssessment(
                 symbol=symu,
                 status="insufficient_history",
@@ -675,6 +825,53 @@ def _rollup_s2_merit_rolling(
         "instability_failures": instability_detail,
         "rolling_pass": rolling_pass,
         "note": "Same interpretation as S1 rollup; buckets = gap ecology regimes.",
+    }
+
+
+def _rollup_s3_merit_rolling(
+    split_payloads: list[dict[str, Any]],
+    *,
+    min_events_per_bucket: int,
+    horizons: tuple[int, ...],
+    bucket_keys: tuple[str, ...],
+) -> dict[str, Any]:
+    """Cross-split excess stability for S3 quantile regimes (same pattern as S2)."""
+    all_splits_pass = all(p["report"].get("checklist", {}).get("pass") is True for p in split_payloads)
+
+    excess_sign_stable: dict[str, dict[str, bool | str]] = {b: {} for b in bucket_keys}
+    instability_detail: list[str] = []
+
+    for bkt in bucket_keys:
+        for hk in map(str, horizons):
+            excesses: list[float] = []
+            for p in split_payloads:
+                rep = p["report"]
+                ex = rep.get("vs_baseline_avg_pct", {}).get(bkt, {}).get(hk, {}).get("avg_excess_vs_baseline_pct")
+                n = rep.get("by_regime", {}).get(bkt, {}).get(hk, {}).get("evaluable_count", 0)
+                if ex is not None and n >= min_events_per_bucket:
+                    excesses.append(float(ex))
+            if len(excesses) < 2:
+                excess_sign_stable[bkt][hk] = "skipped_not_enough_splits_with_events"
+            else:
+                ok = _sign_stable(excesses)
+                excess_sign_stable[bkt][hk] = ok
+                if not ok:
+                    instability_detail.append(
+                        f"{bkt} {hk}d: excess vs baseline flips sign across splits "
+                        f"(values={','.join(str(round(x, 4)) for x in excesses)})"
+                    )
+
+    strict_stable_required = [
+        (b, hk) for b in bucket_keys for hk in map(str, horizons) if excess_sign_stable[b].get(hk) is False
+    ]
+    rolling_pass = all_splits_pass and not strict_stable_required
+
+    return {
+        "all_splits_checklist_pass": all_splits_pass,
+        "excess_vs_baseline_sign_stable": excess_sign_stable,
+        "instability_failures": instability_detail,
+        "rolling_pass": rolling_pass,
+        "note": "Same interpretation as S2 rollup; regimes = expanding VIX/VIX3M quantile buckets.",
     }
 
 
@@ -996,6 +1193,163 @@ def run_s2_merit_rolling_report(
     }
 
 
+def run_s3_merit_report(
+    db: Session,
+    symbols: list[str],
+    eval_start: date,
+    eval_end: date,
+) -> dict[str, Any]:
+    """Pooled S3 vol term structure regimes over a fixed window + baseline + checklist."""
+    settings = get_settings()
+    horizons = _parse_horizons_setting(settings.daily_strategy_horizons)
+    min_ev = max(1, settings.daily_strategy_merit_min_events_per_regime)
+    conc_max = float(settings.daily_strategy_merit_concentration_top5_max_pct)
+    n_bk = max(2, min(20, int(settings.s3_regime_n_buckets)))
+    bucket_keys = s3_bucket_keys(n_bk)
+
+    repo = PriceDataRepository(db)
+    pooled_regime: dict[str, dict[str, list[float]]] = {k: {str(h): [] for h in horizons} for k in bucket_keys}
+    pooled_base: dict[str, list[float]] = {str(h): [] for h in horizons}
+    pooled_counts: dict[str, int] = {k: 0 for k in bucket_keys}
+    regime_symbol_events: dict[str, dict[str, int]] = {k: {} for k in bucket_keys}
+    skipped: list[dict[str, str]] = []
+
+    for sym in symbols:
+        symu = sym.strip().upper()
+        rows = repo.list_for_stock(symu)
+        bars = bars_from_price_rows(rows)
+        sample = _compute_s3_window_sample(
+            db,
+            bars,
+            horizons=horizons,
+            since=eval_start,
+            until=eval_end,
+        )
+        if sample is None:
+            skipped.append(
+                {
+                    "symbol": symu,
+                    "reason": "insufficient_bars_or_no_eval_days",
+                    "hint": _price_data_hint(db, symu, len(rows), len(bars)),
+                }
+            )
+            continue
+        for reg in bucket_keys:
+            pooled_counts[reg] += sample.counts.get(reg, 0)
+            for sy in sample.regime_returns[reg]:
+                pooled_regime[reg][sy].extend(sample.regime_returns[reg][sy])
+            n_ev = sample.counts.get(reg, 0)
+            if n_ev:
+                regime_symbol_events[reg][symu] = regime_symbol_events[reg].get(symu, 0) + n_ev
+        for hk in pooled_base:
+            pooled_base[hk].extend(sample.baseline_returns.get(hk, []))
+
+    baseline_metrics = {hk: metrics_from_returns(rs) for hk, rs in pooled_base.items()}
+    regime_metrics: dict[str, Any] = {}
+    vs_baseline: dict[str, Any] = {}
+    conc_by_regime: dict[str, float] = {}
+    for reg, hmap in pooled_regime.items():
+        regime_metrics[reg] = {hk: metrics_from_returns(rs) for hk, rs in hmap.items()}
+        vs_baseline[reg] = {}
+        conc_by_regime[reg] = _top5_concentration(regime_symbol_events[reg])
+        for hk in hmap:
+            rm = regime_metrics[reg][hk]
+            bm = baseline_metrics.get(hk, {})
+            ravg = rm.get("avg_return_pct", 0.0)
+            bavg = bm.get("avg_return_pct", 0.0)
+            vs_baseline[reg][hk] = {
+                "avg_excess_vs_baseline_pct": round(ravg - bavg, 4),
+                "baseline_avg_return_pct": bavg,
+            }
+
+    checklist_failures: list[str] = []
+    for reg in bucket_keys:
+        for hk in map(str, horizons):
+            rm = regime_metrics[reg][hk]
+            n = rm.get("evaluable_count", 0)
+            if n < min_ev:
+                checklist_failures.append(f"{reg} horizon {hk}: evaluable_count {n} < {min_ev}")
+            med = rm.get("median_return_pct")
+            avg = rm.get("avg_return_pct")
+            if n >= 10 and med is not None and avg is not None and med * avg < 0:
+                checklist_failures.append(f"{reg} horizon {hk}: median and avg disagree in sign")
+        n_sym = len({s for s in regime_symbol_events[reg] if regime_symbol_events[reg][s] > 0})
+        if n_sym > 1 and conc_by_regime[reg] > conc_max and pooled_counts.get(reg, 0) > 0:
+            checklist_failures.append(f"{reg}: top-5 symbol concentration {conc_by_regime[reg]} > {conc_max}")
+
+    return {
+        "kind": "s3_merit_report",
+        "eval_window": {"start": str(eval_start), "end": str(eval_end)},
+        "symbols_requested": [s.strip().upper() for s in symbols],
+        "symbols_with_data": sorted({s for ev in regime_symbol_events.values() for s in ev}),
+        "symbols_skipped": skipped,
+        "params": {
+            "s3_feature_mode": settings.s3_feature_mode,
+            "s3_regime_min_history_days": int(settings.s3_regime_min_history_days),
+            "s3_regime_n_buckets": n_bk,
+            "merit_min_events_per_regime": min_ev,
+            "merit_concentration_top5_max_pct": conc_max,
+        },
+        "horizons": list(horizons),
+        "pooled_counts": pooled_counts,
+        "concentration_top5_by_regime": conc_by_regime,
+        "baseline_metrics": baseline_metrics,
+        "by_regime": regime_metrics,
+        "vs_baseline_avg_pct": vs_baseline,
+        "checklist": {
+            "pass": len(checklist_failures) == 0,
+            "failures": checklist_failures,
+            "note": "Minimum bar from SIGNAL_EVALUATION_CHECKLIST; passing does not imply tradable edge.",
+        },
+    }
+
+
+def run_s3_merit_rolling_report(
+    db: Session,
+    symbols: list[str],
+    eval_start: date,
+    eval_end: date,
+    *,
+    n_splits: int,
+    split_mode: SplitMode = "calendar",
+    trading_calendar_symbols: Sequence[str] | None = None,
+) -> dict[str, Any]:
+    """Rolling S3 merit (calendar or trading splits)."""
+    n_splits = max(1, int(n_splits))
+    cal_syms = (
+        list(trading_calendar_symbols) if trading_calendar_symbols is not None else [s.strip().upper() for s in symbols]
+    )
+    windows, mode_used = _merit_rolling_windows(db, eval_start, eval_end, n_splits, split_mode, cal_syms)
+    settings = get_settings()
+    min_ev = max(1, settings.daily_strategy_merit_min_events_per_regime)
+    horizons = _parse_horizons_setting(settings.daily_strategy_horizons)
+    n_bk = max(2, min(20, int(settings.s3_regime_n_buckets)))
+    bucket_keys = s3_bucket_keys(n_bk)
+
+    split_payloads: list[dict[str, Any]] = []
+    for ws, we in windows:
+        rep = run_s3_merit_report(db, symbols, ws, we)
+        split_payloads.append({"eval_window": {"start": str(ws), "end": str(we)}, "report": rep})
+
+    rollup = _rollup_s3_merit_rolling(
+        split_payloads,
+        min_events_per_bucket=min_ev,
+        horizons=horizons,
+        bucket_keys=bucket_keys,
+    )
+
+    return {
+        "kind": "s3_merit_report_rolling",
+        "n_splits": len(windows),
+        "split_mode_requested": split_mode,
+        "split_mode_used": mode_used,
+        "parent_window": {"start": str(eval_start), "end": str(eval_end)},
+        "windows": [f"{a}..{b}" for a, b in windows],
+        "splits": split_payloads,
+        "rollup": rollup,
+    }
+
+
 def _strategy_merit_bundle_summary(
     strategy: StrategyMeritId,
     single: dict[str, Any],
@@ -1070,6 +1424,19 @@ def run_strategy_merit_bundle(
         rolling = None
         if rs >= 2:
             rolling = run_s2_merit_rolling_report(
+                db,
+                symbols,
+                eval_start,
+                eval_end,
+                n_splits=rs,
+                split_mode=split_mode,
+                trading_calendar_symbols=cal_override,
+            )
+    elif strategy == "s3":
+        single = run_s3_merit_report(db, symbols, eval_start, eval_end)
+        rolling = None
+        if rs >= 2:
+            rolling = run_s3_merit_rolling_report(
                 db,
                 symbols,
                 eval_start,
@@ -1225,6 +1592,66 @@ def run_s2_evaluation(
     }
 
 
+def run_s3_evaluation(
+    db: Session,
+    symbol: str,
+    since: date | None,
+    until: date | None,
+) -> dict[str, Any]:
+    """S3: expanding quantile regimes on VIX/VIX3M feature vs forward equity returns."""
+    settings = get_settings()
+    horizons = _parse_horizons_setting(settings.daily_strategy_horizons)
+
+    repo = PriceDataRepository(db)
+    rows = repo.list_for_stock(symbol)
+    bars = bars_from_price_rows(rows)
+    min_needed = max(horizons) + 5
+    if len(bars) < min_needed:
+        logger.warning(
+            "S3: insufficient bars for %s (%s valid / %s raw rows, need %s)",
+            symbol,
+            len(bars),
+            len(rows),
+            min_needed,
+        )
+        hint = _price_data_hint(db, symbol, len(rows), len(bars))
+        base = _empty_summary("S3_vol_term_structure", symbol, since, until, horizons, hint=hint)
+        return base
+
+    sample = _compute_s3_window_sample(db, bars, horizons=horizons, since=since, until=until)
+    if sample is None:
+        return _empty_summary(
+            "S3_vol_term_structure",
+            symbol,
+            since,
+            until,
+            horizons,
+            hint="Internal error: S3 sample computation returned None after size check.",
+        )
+
+    summary_by: dict[str, Any] = {}
+    for reg_key, hmap in sample.regime_returns.items():
+        summary_by[reg_key] = {}
+        for hk, rs in hmap.items():
+            summary_by[reg_key][hk] = metrics_from_returns(rs)
+
+    n_bk = max(2, min(20, int(settings.s3_regime_n_buckets)))
+
+    return {
+        "strategy": "S3_vol_term_structure",
+        "symbol": symbol,
+        "date_range": {"start": str(since) if since else None, "end": str(until) if until else None},
+        "params": {
+            "s3_feature_mode": settings.s3_feature_mode,
+            "s3_regime_min_history_days": int(settings.s3_regime_min_history_days),
+            "s3_regime_n_buckets": n_bk,
+        },
+        "horizons": list(horizons),
+        "counts": sample.counts,
+        "by_regime": summary_by,
+    }
+
+
 def _empty_summary(
     strategy: str,
     symbol: str,
@@ -1244,7 +1671,7 @@ def _empty_summary(
     }
     if hint:
         base["hint"] = hint
-    if "S1" in strategy:
+    if "S1" in strategy or strategy.startswith("S3"):
         base["by_regime"] = {}
     else:
         base["by_bucket"] = {}
