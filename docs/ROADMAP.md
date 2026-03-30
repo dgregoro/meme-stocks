@@ -203,6 +203,9 @@ if alignment_score > COMBINED_SIGNAL_THRESHOLD and confidence > 0.7:
 | 3.16 | Hypothesis research recipe runner (YAML orchestration of CLI steps) | specs/018-hypothesis-research-recipe | ✅ Implemented |
 | 3.17 | Strategy eval data preflight & optional auto-fetch (daily-strategy CLI) | specs/019-strategy-eval-data-preflight | ✅ Implemented |
 | 3.18 | S&P Composite 1500 research universe (constituents + Yahoo cap filter CLI) | ad hoc research tooling | ✅ Implemented |
+| 3.19 | Strategy catalog CLI (`strategies list` + optional evidence JSON) | ad hoc research tooling | ✅ Implemented |
+| 3.20 | Persist merit / eval-bundle runs (`daily_strategy_merit_runs`; `strategies merit-runs`) | ad hoc research tooling | ✅ Implemented |
+| 3.21 | Shared `research_execution` package (costs, metrics, window splits, `ResearchRunEnvelope`) | [specs/020-shared-research-execution](specs/020-shared-research-execution/README.md) | ✅ Implemented (core); follow-up slices planned in spec |
 
 ### 3.7 Leader-Follower Signal Detection ✅
 

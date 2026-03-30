@@ -70,7 +70,7 @@ backend/app/
 
 ## Backend Typer CLI (`python -m backend.app.cli`)
 
-The **database-backed** CLI is a **Typer** application used for datasets, seeding, historical backfills, paper-trade simulation, walk-forward optimization, robustness runs, causal `experiment` commands, YAML **research recipes** (spec 018), **research universe** helpers (`research universe sp1500-fetch-wikipedia`, `sp1500-cap-filter` for unofficial S&P 1500 lists + Yahoo cap filter; see `data/research/universes/README.md`), and **daily-frequency strategy evaluation** (`evaluate daily-strategy s1|s2`, **`s1-merit` / `s2-merit`** with `--splits`, **`--split-mode`**, **`--append-jsonl`**; YAML recipe under `specs/018-hypothesis-research-recipe/examples/`). It imports services and uses `SessionLocal` directly.
+The **database-backed** CLI is a **Typer** application used for datasets, seeding, historical backfills, paper-trade simulation, walk-forward optimization, robustness runs, causal `experiment` commands, YAML **research recipes** (spec 018), **research universe** helpers (`research universe sp1500-fetch-wikipedia`, `sp1500-cap-filter` for unofficial S&P 1500 lists + Yahoo cap filter; see `data/research/universes/README.md`), **`strategies list`** / **`strategies merit-runs`** (S1–S7 catalog; persisted merit/bundle JSON in **`daily_strategy_merit_runs`**), and **daily-frequency strategy evaluation** (`evaluate daily-strategy s1|s2`, **`s1-merit` / `s2-merit`** with `--splits`, **`--split-mode`**, **`--append-jsonl`**, **`--no-persist`**; YAML recipe under `specs/018-hypothesis-research-recipe/examples/`). It imports services and uses `SessionLocal` directly.
 
 **Layout**
 
@@ -78,9 +78,24 @@ The **database-backed** CLI is a **Typer** application used for datasets, seedin
 - `backend/app/cli/main.py` — builds the root `app` and registers command groups.
 - `backend/app/cli/orm_imports.py` — side-effect imports of all SQLAlchemy models so `init_db()` and migrations see every table.
 - `backend/app/cli/common.py` — shared helpers (e.g. date parsing).
-- `backend/app/cli/commands/` — one module per command group (`build_dataset`, `seed`, `backfill`, `evaluate`, `simulate`, `optimize`, `robustness`, `experiment`, `research`).
+- `backend/app/cli/commands/` — one module per command group (`build_dataset`, `seed`, `backfill`, `evaluate`, `simulate`, `optimize`, `robustness`, `experiment`, `research`, `strategies`).
 
 This is distinct from the **HTTP API client** CLI described below (`meme-stocks`), which talks to a running server only.
+
+### Shared research execution (`backend/app/services/research_execution/`)
+
+Cross-strategy primitives used by daily-frequency merit rolling, leader-follower paper sims, and future backtests:
+
+- **`costs`** — `apply_round_trip_cost`, `round_trip_cost_pct_from_bps` (percent return space; same convention as leader-follower `per_trade_cost_pct`).
+- **`metrics`** — `max_drawdown_from_equity`, `compound_equity_from_period_returns`.
+- **`window_splits`** — `split_calendar_range`, `split_sorted_trading_days` (walk-forward / rolling windows; no DB).
+- **`run_envelope`** — `ResearchRunEnvelope` for reproducibility metadata (universe label, symbol fingerprint, default cost bps, optional `APP_VERSION` / `GIT_SHA`).
+- **`daily_simple_backtest`** — `run_daily_simple_long_only_backtest` on in-memory `DailyBar` lists (long-only, `same_close` / `next_open`, fixed horizon; skips with structured reasons). Use `daily_simple_result_to_jsonable` for CLI/exports: **percentage-point** returns per `net-metrics-reporting.md` (`trade_return_pct_*`, `cumulative_return_pct_*`, cost fields); internal `period_returns_*` remain **fractions** for compounding.
+- **`walk_forward_harness`** — `run_walk_forward_windows` wraps per-window callbacks with optional `strict` failure propagation.
+
+Default cost assumption for docs/envelopes: `research_default_round_trip_cost_bps` in `config.py`. Wire envelopes into new simulators by merging `envelope.to_json_dict()` into run output or DB JSON.
+
+**Specs:** [specs/020-shared-research-execution/README.md](../specs/020-shared-research-execution/README.md) — slice docs for core helpers, envelope, daily backtest / walk-forward harness, and reporting conventions.
 
 ---
 

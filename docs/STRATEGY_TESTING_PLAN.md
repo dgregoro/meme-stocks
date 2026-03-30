@@ -59,6 +59,8 @@ For each formal run, capture in `STRATEGY_EXPLORATION.md` (global + strategy tab
 
 **Strategy eval preflight (CLI):** `evaluate daily-strategy` commands (`s1`, `s2`, `s1-merit`, `s2-merit`, `eval-bundle`) accept `--preflight-only` to print a JSON readiness report and exit `2` if any symbol lacks `stocks` / `price_data` for the eval window (no network). With `--ensure-data`, the CLI creates missing `stocks` rows when needed and invokes the same **Alpaca daily** backfill path as `backfill daily-prices` (requires `ALPACA_API_KEY_ID` / `ALPACA_API_SECRET_KEY`). `--ensure-data` with `--all-stocks` is capped by `daily_strategy_ensure_data_max_symbols` in config to limit accidental bulk API usage.
 
+**Merit run persistence:** By default (`DAILY_STRATEGY_MERIT_PERSIST_RUNS=true`), each **`s1-merit`**, **`s2-merit`**, and **`eval-bundle`** run stores the **full JSON payload** in SQLite table **`daily_strategy_merit_runs`** (metadata columns + `report_json`). Stderr prints the new row id. Use **`--no-persist`** to skip. Inspect: `python -m backend.app.cli strategies merit-runs list` and `… merit-runs show --id N`.
+
 ---
 
 ## 3. Recommended sequence (by test difficulty)
@@ -178,6 +180,50 @@ These paths already exist; they skew Reddit/causal today but illustrate patterns
 
 **Gap:** None of the above implements S3–S7 end-to-end without new code or external notebooks; the plan assumes you will add minimal glue (export + evaluation script) per strategy until patterns stabilize.
 
+### 5.1 Listing strategies, checking status, and running tests
+
+All commands below are run from the **repository root** with `python -m backend.app.cli …`.
+
+**Listing strategies (discovery)**
+
+- **Catalog table** (IDs, short names, tooling `implemented|planned`, evidence `not_tested|in_progress|tested|n_a`):
+  `python -m backend.app.cli strategies list`
+  Add **`--verbose`** for full descriptions and CLI hints; **`--json`** for machine-readable output. Optional hand-edited status file: `data/research/strategy_evidence_status.json` (see `data/research/strategy_evidence_status.example.json`; override path with **`RESEARCH_STRATEGY_EVIDENCE_STATUS_JSON`** or **`--status-file`**).
+- **Recorded merit / bundle runs:** `python -m backend.app.cli strategies merit-runs list [--json]` and **`… merit-runs show --id ID`** (full JSON).
+- Show top-level evaluate commands:
+  `python -m backend.app.cli evaluate --help`
+- Show daily-frequency strategy subcommands and flags:
+  `python -m backend.app.cli evaluate daily-strategy --help`
+- **Implemented in this CLI** under `evaluate daily-strategy`: **s1** (realized vol vs volume-z mismatch) and **s2** (gap ecology). The `--strategy` option on `eval-bundle` accepts only `s1` or `s2`.
+- For the full **S1–S7** research roadmap (including strategies not yet wired to this CLI), see `docs/STRATEGY_EXPLORATION.md`.
+
+**Strategy and data status (preflight)**
+
+- Add **`--preflight-only`** to `daily-strategy` commands **`s1`**, **`s2`**, **`s1-merit`**, **`s2-merit`**, or **`eval-bundle`**. The process prints a **JSON** readiness report for the chosen symbols and date window, then exits **0** if every symbol is ready, **2** if any symbol is missing a `stocks` row or has insufficient `price_data` for that strategy’s minimum bars. **No network** in this mode.
+- Do **not** combine `--preflight-only` with `--ensure-data` (the CLI rejects that).
+- For **`s1`** / **`s2`** single-symbol runs, stderr may include a short **`hint`** when history is thin; stdout is the full JSON summary.
+- Merit and **`eval-bundle`** runs also echo human-readable **checklist / gate** lines on stderr (PASS or FAIL); the authoritative detail is in the JSON (`checklist`, `summary`, `rollup`, etc.).
+
+**Running evaluations (“testing” the strategies on your data)**
+
+| Goal | Command pattern |
+| ---- | ---------------- |
+| One symbol, exploratory JSON | `evaluate daily-strategy s1 --symbol SPY [--start YYYY-MM-DD --end YYYY-MM-DD]` or `… s2 …` |
+| Pooled S1 merit + checklist | `evaluate daily-strategy s1-merit --start … --end …` plus **`--symbols A,B`**, **`--symbols-file path`**, or **`--all-stocks`** |
+| Pooled S2 merit | `evaluate daily-strategy s2-merit` (same universe flags as s1-merit) |
+| Combined gate bundle (single window + optional rolling) | `evaluate daily-strategy eval-bundle --strategy s1\|s2 --start … --end …` plus universe flags; use **`--rolling-splits N`** for rolling stability |
+| Optional Alpaca backfill before eval | Add **`--ensure-data`** (requires `ALPACA_API_KEY_ID` / `ALPACA_API_SECRET_KEY`). With **`--all-stocks`**, the number of symbols is capped by **`daily_strategy_ensure_data_max_symbols`** in `backend/app/config.py`. |
+
+Append one JSON line per run with **`--append-jsonl path`** where supported (`s1-merit`, `s2-merit`, `eval-bundle`).
+
+**Automated tests (Python)**
+
+- `python -m pytest backend/tests/test_daily_frequency_strategy_research.py -v`
+- `python -m pytest backend/tests/test_strategy_eval_data_preflight.py -v`
+- `python -m pytest backend/tests/test_daily_strategy_merit.py backend/tests/test_daily_strategy_hints.py -v`
+
+Full repo checks: `./scripts/verify.sh`.
+
 ---
 
 ## 6. Decision flow
@@ -199,3 +245,5 @@ Pre-register spec → Build features (train period only for thresholds) →
 | Date       | Change                          |
 | ---------- | ------------------------------- |
 | 2026-03-29 | Initial testing plan for S1–S7 |
+| 2026-03-29 | Section 5.1 CLI quick reference: list strategies, preflight status, run evals, pytest |
+| 2026-03-29 | `strategies list` + optional evidence JSON (`RESEARCH_STRATEGY_EVIDENCE_STATUS_JSON`) |
