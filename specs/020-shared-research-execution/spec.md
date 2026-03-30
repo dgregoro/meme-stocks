@@ -1,8 +1,8 @@
 # Feature Specification: Shared research execution platform (020)
 
-**Feature Branch**: `020-shared-research-execution`  
-**Created**: 2026-03-29  
-**Status**: Active (core implemented; extended slices planned)  
+**Feature Branch**: `020-shared-research-execution`
+**Created**: 2026-03-29
+**Status**: Active (core implemented; extended slices planned)
 **Input**: Cross-strategy costs, metrics, window splits, run metadata; planned daily backtest and walk-forward harness.
 
 ## Clarifications

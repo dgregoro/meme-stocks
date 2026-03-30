@@ -47,5 +47,5 @@ pytest backend/tests/test_research_execution.py -v
 
 ## Docs
 
-- [README](./README.md) — slice index  
-- [integration-conventions.md](./integration-conventions.md) — import graph  
+- [README](./README.md) — slice index
+- [integration-conventions.md](./integration-conventions.md) — import graph
