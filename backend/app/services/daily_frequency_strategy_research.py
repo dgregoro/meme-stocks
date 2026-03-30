@@ -10,13 +10,17 @@ import logging
 import math
 import statistics
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date
 from typing import Any, Literal, Sequence, cast
 
 from sqlalchemy.orm import Session
 
 from backend.app.config import get_settings
 from backend.app.data.repositories.price_data_repo import PriceDataRepository
+from backend.app.services.research_execution.window_splits import (
+    split_calendar_range,
+    split_sorted_trading_days,
+)
 from backend.app.data.repositories.stock_repo import StockRepository
 from backend.app.models.price_data import PriceData
 from backend.app.services.leader_follower_evaluation_service import compute_forward_return
@@ -524,32 +528,6 @@ def _top5_concentration(counts_by_symbol: dict[str, int]) -> float:
     return round(top5 / total, 4)
 
 
-def _calendar_splits(start: date, end: date, n: int) -> list[tuple[date, date]]:
-    """Partition [start, end] into ``n`` contiguous calendar sub-ranges (inclusive)."""
-    if n <= 1:
-        return [(start, end)]
-    if start > end:
-        raise ValueError("start must be <= end")
-    total_days = (end - start).days + 1
-    if total_days < n:
-        return [(start, end)]
-    base, rem = divmod(total_days, n)
-    out: list[tuple[date, date]] = []
-    cur = start
-    for i in range(n):
-        seg_days = base + (1 if i < rem else 0)
-        if seg_days <= 0:
-            break
-        seg_end = cur + timedelta(days=seg_days - 1)
-        if seg_end > end:
-            seg_end = end
-        out.append((cur, seg_end))
-        cur = seg_end + timedelta(days=1)
-        if cur > end:
-            break
-    return out if out else [(start, end)]
-
-
 def _load_union_trading_days(
     db: Session,
     symbols: Sequence[str],
@@ -567,27 +545,6 @@ def _load_union_trading_days(
     return sorted(days)
 
 
-def _trading_day_chunks(sorted_days: list[date], n: int) -> list[tuple[date, date]]:
-    """Partition sorted trading days into ``n`` contiguous index blocks; each block is [first, last] date."""
-    if not sorted_days:
-        return []
-    if n <= 1:
-        return [(sorted_days[0], sorted_days[-1])]
-    L = len(sorted_days)
-    base, rem = divmod(L, n)
-    out: list[tuple[date, date]] = []
-    idx = 0
-    for i in range(n):
-        take = base + (1 if i < rem else 0)
-        if take <= 0:
-            continue
-        chunk = sorted_days[idx : idx + take]
-        if chunk:
-            out.append((chunk[0], chunk[-1]))
-        idx += take
-    return out if out else [(sorted_days[0], sorted_days[-1])]
-
-
 def _merit_rolling_windows(
     db: Session,
     eval_start: date,
@@ -601,14 +558,14 @@ def _merit_rolling_windows(
     if n_splits <= 1:
         return ([(eval_start, eval_end)], split_mode)
     if split_mode == "calendar":
-        return (_calendar_splits(eval_start, eval_end, n_splits), "calendar")
+        return (split_calendar_range(eval_start, eval_end, n_splits), "calendar")
     days = _load_union_trading_days(db, trading_calendar_symbols, eval_start, eval_end)
     if not days:
         return (
-            _calendar_splits(eval_start, eval_end, n_splits),
+            split_calendar_range(eval_start, eval_end, n_splits),
             "calendar(fallback_no_trading_days_in_union)",
         )
-    return (_trading_day_chunks(days, n_splits), "trading")
+    return (split_sorted_trading_days(days, n_splits), "trading")
 
 
 def _sign_stable(values: list[float]) -> bool:

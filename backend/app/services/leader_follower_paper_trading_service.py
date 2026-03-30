@@ -17,6 +17,8 @@ from backend.app.data.repositories.price_data_repo import PriceDataRepository
 from backend.app.models.leader_follower_paper_run import LeaderFollowerPaperRun
 from backend.app.models.leader_follower_paper_trade import LeaderFollowerPaperTrade
 from backend.app.models.leader_follower_signal import LeaderFollowerSignal
+from backend.app.services.research_execution.costs import apply_round_trip_cost
+from backend.app.services.research_execution.metrics import max_drawdown_from_equity
 from backend.app.services.regime_filter_service import RegimeFilterParams, evaluate_regime_filter
 from backend.app.services.sector_confirmation_service import (
     SectorConfirmationParams,
@@ -124,26 +126,6 @@ class PaperTradingConfig:
             require_low_volatility=req_lv,
             regime_sector_strength_required=regime_sector,
         )
-
-
-def apply_round_trip_cost(gross_return_pct: float, per_trade_cost_pct: float) -> float:
-    """Subtract one round-trip cost (percentage points) from gross return."""
-    return gross_return_pct - per_trade_cost_pct
-
-
-def max_drawdown_from_equity(equities: list[float]) -> float:
-    """Return max peak-to-trough drawdown as a positive percentage of peak (0–100 scale)."""
-    if not equities:
-        return 0.0
-    peak = equities[0]
-    max_dd = 0.0
-    for eq in equities:
-        if eq > peak:
-            peak = eq
-        dd = (peak - eq) / peak * 100.0 if peak > 0 else 0.0
-        if dd > max_dd:
-            max_dd = dd
-    return max_dd
 
 
 def _utc_noon(d: date) -> datetime:

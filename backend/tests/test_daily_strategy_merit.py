@@ -8,13 +8,15 @@ import pytest
 
 from backend.app.services.daily_frequency_strategy_research import (
     S2_BUCKET_KEYS,
-    _calendar_splits,
     _rollup_s1_merit_rolling,
     _rollup_s2_merit_rolling,
     _sign_stable,
     _strategy_merit_bundle_summary,
     _top5_concentration,
-    _trading_day_chunks,
+)
+from backend.app.services.research_execution.window_splits import (
+    split_calendar_range,
+    split_sorted_trading_days,
 )
 
 
@@ -38,7 +40,7 @@ def test_top5_concentration_empty() -> None:
 @pytest.mark.unit
 def test_calendar_splits_three_segments() -> None:
     start, end = date(2020, 1, 1), date(2020, 1, 10)
-    parts = _calendar_splits(start, end, 3)
+    parts = split_calendar_range(start, end, 3)
     assert len(parts) == 3
     assert parts[0][0] == start
     assert parts[-1][1] == end
@@ -87,7 +89,7 @@ def test_rollup_rolling_detects_sign_flip() -> None:
 @pytest.mark.unit
 def test_trading_day_chunks_even_split() -> None:
     days = [date(2020, 1, i) for i in range(1, 11)]
-    parts = _trading_day_chunks(days, 2)
+    parts = split_sorted_trading_days(days, 2)
     assert len(parts) == 2
     assert parts[0] == (days[0], days[4])
     assert parts[1] == (days[5], days[9])
