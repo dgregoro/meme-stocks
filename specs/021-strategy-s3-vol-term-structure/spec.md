@@ -1,8 +1,8 @@
 # Feature Specification: Daily strategy S3 — Volatility term structure regime
 
-**Feature Branch**: `021-strategy-s3-vol-term-structure`  
-**Created**: 2026-03-29  
-**Status**: Draft  
+**Feature Branch**: `021-strategy-s3-vol-term-structure`
+**Created**: 2026-03-29
+**Status**: Draft
 **Input**: Implement **S3** from the strategy program (`docs/STRATEGY_EXPLORATION.md`, `docs/STRATEGY_TESTING_PLAN.md` §3 Phase B): daily **VIX** vs **medium-term implied vol** (e.g. **VIX3M**) to label **regimes**, then evaluate **regime-conditional equity** behavior with the same operational discipline as **S1/S2** (preflight, checklist, optional merit persistence).
 
 ## Clarifications
@@ -130,9 +130,9 @@ As a **researcher**, I want **`s3-merit`** and **`eval-bundle --strategy s3`** t
 
 ## References
 
-- `docs/STRATEGY_EXPLORATION.md` — S3 idea, results table  
-- `docs/STRATEGY_TESTING_PLAN.md` — §3 Phase B, S3 subsection  
-- `docs/SIGNAL_EVALUATION_CHECKLIST.md` — merit gate  
-- `specs/019-strategy-eval-data-preflight` — equity readiness  
-- `specs/020-shared-research-execution` — shared costs / splits / envelope  
-- `backend/app/services/daily_frequency_strategy_research.py` — S1/S2 patterns to mirror  
+- `docs/STRATEGY_EXPLORATION.md` — S3 idea, results table
+- `docs/STRATEGY_TESTING_PLAN.md` — §3 Phase B, S3 subsection
+- `docs/SIGNAL_EVALUATION_CHECKLIST.md` — merit gate
+- `specs/019-strategy-eval-data-preflight` — equity readiness
+- `specs/020-shared-research-execution` — shared costs / splits / envelope
+- `backend/app/services/daily_frequency_strategy_research.py` — S1/S2 patterns to mirror

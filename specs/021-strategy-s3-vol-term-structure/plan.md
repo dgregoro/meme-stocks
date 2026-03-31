@@ -1,7 +1,7 @@
 # Implementation plan: 021 — Strategy S3 (volatility term structure)
 
-**Branch:** `021-strategy-s3-vol-term-structure`  
-**Date:** 2026-03-29  
+**Branch:** `021-strategy-s3-vol-term-structure`
+**Date:** 2026-03-29
 **Spec:** [spec.md](./spec.md)
 
 ## Summary
