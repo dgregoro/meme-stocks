@@ -90,7 +90,7 @@ cd frontend && npm run dev
 | 2.4 | Add volume confirmation to patterns | PLAN.md tech debt | Small | ✅ Done |
 | 2.5 | Implement combined-signal alerts | PLAN.md tech debt, PRD FR-3.7 | Medium | ✅ Complete |
 | 2.6 | Fix any deprecation warnings | Test output | Small | ✅ Done in Phase 1 |
-| 2.7 | Increase test coverage to 80%+ | Quality framework | Medium | Not Started |
+| 2.7 | Increase test coverage to 80%+ | Quality framework | Medium | ✅ Done (Mar 2026; `pytest --cov=backend/app --cov-fail-under=80`) |
 
 ### Technical Debt Checklist
 
@@ -167,8 +167,8 @@ if alignment_score > COMBINED_SIGNAL_THRESHOLD and confidence > 0.7:
 **Files**: `backend/app/services/activity_detector.py`, `backend/app/services/notification_service.py`
 
 ### Success Criteria
-- [ ] Remaining Phase 2 items (e.g. 2.7 coverage) and PLAN follow-ups
-- [ ] Test coverage ≥ 80%
+- [x] Task 2.7: `backend/app` line coverage ≥ 80% (enforced via `--cov-fail-under=80` in CI-style runs)
+- [ ] Remaining Phase 2 checklist items (e.g. naming/injection tech debt) and PLAN follow-ups
 - [ ] No deprecation warnings in test output
 - [ ] Quality score improved from baseline
 
