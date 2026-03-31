@@ -38,3 +38,13 @@ def test_price_data_hint_need_more_bars() -> None:
         repo_cls.return_value.get.return_value = stock
         h = _price_data_hint(db, "SPY", 50, 50)
         assert "more trading days" in h
+
+
+@pytest.mark.unit
+def test_price_data_hint_rows_fail_validation() -> None:
+    db = MagicMock()
+    stock = MagicMock()
+    with patch("backend.app.services.daily_frequency_strategy_research.StockRepository") as repo_cls:
+        repo_cls.return_value.get.return_value = stock
+        h = _price_data_hint(db, "SPY", 5, 0)
+        assert "none passed validation" in h

@@ -7,6 +7,7 @@ import json
 import os
 import tempfile
 from datetime import date
+from unittest.mock import patch
 
 import pytest
 from sqlalchemy import create_engine
@@ -16,7 +17,7 @@ from backend.app.data.database import Base
 from backend.app.models import price_data  # noqa: F401
 from backend.app.models import price_labels  # noqa: F401
 from backend.app.models import stock  # noqa: F401
-from backend.app.services.dataset_builder_service import build_training_dataset
+from backend.app.services.dataset_builder_service import _get_git_sha, build_training_dataset
 from backend.app.services.label_service import compute_and_store_forward_returns
 
 
@@ -32,6 +33,13 @@ def _make_price(symbol: str, d: date, close: float, volume: int = 1000):
         close=close,
         volume=volume,
     )
+
+
+@pytest.mark.unit
+def test_get_git_sha_env_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GIT_SHA", "abc123f")
+    with patch("shutil.which", return_value=None):
+        assert _get_git_sha() == "abc123f"
 
 
 @pytest.mark.integration

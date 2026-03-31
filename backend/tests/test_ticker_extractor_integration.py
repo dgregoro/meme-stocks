@@ -9,6 +9,7 @@ import pytest
 from backend.app.utils.ticker_extractor import (
     clear_symbol_universe_cache,
     extract_tickers,
+    load_symbol_universe_from_db,
 )
 
 
@@ -145,3 +146,77 @@ def test_toggle_off_returns_old_behavior() -> None:
     # Both should exclude ON in "ON the table"
     assert "ON" not in tickers_off
     assert "ON" not in tickers_on
+
+
+@pytest.mark.unit
+def test_legacy_path_exchange_prefix_keeps_symbol() -> None:
+    """NYSE:/NASDAQ: prefix short-circuits dangerous-symbol policy (legacy scorer)."""
+    clear_symbol_universe_cache()
+    with patch("backend.app.utils.ticker_extractor.load_symbol_universe_from_db", return_value=set()):
+        with patch("backend.app.config.get_settings") as mock_get_settings:
+            mock_get_settings.return_value.ticker_disambiguation_enabled = False
+            tickers = extract_tickers(
+                "NASDAQ:ZM beats estimates",
+                known_symbols={"ZM"},
+                use_symbol_universe=False,
+            )
+    assert "ZM" in tickers
+
+
+@pytest.mark.unit
+def test_load_symbol_universe_from_db_session_failure_returns_empty() -> None:
+    clear_symbol_universe_cache()
+    with patch("backend.app.data.database.SessionLocal", side_effect=RuntimeError("db unavailable")):
+        out = load_symbol_universe_from_db()
+    assert out == set()
+    clear_symbol_universe_cache()
+
+
+@pytest.mark.unit
+def test_extract_tickers_optional_ner_union(monkeypatch: pytest.MonkeyPatch) -> None:
+    clear_symbol_universe_cache()
+    monkeypatch.setenv("ENABLE_TICKER_NER", "true")
+    from backend.app.config import get_settings
+
+    get_settings.cache_clear()
+    try:
+        with patch("backend.app.utils.ticker_extractor.load_symbol_universe_from_db", return_value={"PLTR"}):
+            with patch("backend.app.utils.ticker_ner.extract_ner_candidates", return_value={"PLTR"}):
+                tickers = extract_tickers("long PLTR", use_symbol_universe=True)
+        assert "PLTR" in tickers
+    finally:
+        get_settings.cache_clear()
+        clear_symbol_universe_cache()
+
+
+@pytest.mark.unit
+def test_legacy_path_finance_keyword_and_ticker_cluster() -> None:
+    clear_symbol_universe_cache()
+    with patch("backend.app.utils.ticker_extractor.load_symbol_universe_from_db", return_value=set()):
+        with patch("backend.app.config.get_settings") as mock_get_settings:
+            mock_get_settings.return_value.ticker_disambiguation_enabled = False
+            result = extract_tickers(
+                "NVDA AMD MSFT stock story with +2% move",
+                known_symbols={"NVDA", "AMD", "MSFT"},
+                use_symbol_universe=False,
+            )
+    assert isinstance(result, set)
+    assert {"NVDA", "AMD", "MSFT"} <= result
+
+
+@pytest.mark.unit
+def test_legacy_debug_returns_scored_details() -> None:
+    clear_symbol_universe_cache()
+    with patch("backend.app.utils.ticker_extractor.load_symbol_universe_from_db", return_value=set()):
+        with patch("backend.app.config.get_settings") as mock_get_settings:
+            mock_get_settings.return_value.ticker_disambiguation_enabled = False
+            out = extract_tickers(
+                "AAPL up +3% today",
+                known_symbols={"AAPL"},
+                use_symbol_universe=False,
+                debug=True,
+            )
+    assert isinstance(out, tuple)
+    tickers, details = out
+    assert "AAPL" in tickers
+    assert any(isinstance(d, dict) and d.get("candidate") == "AAPL" for d in details)

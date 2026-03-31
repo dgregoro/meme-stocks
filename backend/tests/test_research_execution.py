@@ -33,10 +33,20 @@ def test_max_drawdown() -> None:
 
 
 @pytest.mark.unit
+def test_max_drawdown_empty() -> None:
+    assert max_drawdown_from_equity([]) == 0.0
+
+
+@pytest.mark.unit
 def test_compound_equity() -> None:
     eq = compound_equity_from_period_returns([0.01, -0.02, 0.05])
     assert eq[0] == pytest.approx(1.0)
     assert eq[-1] == pytest.approx(1.01 * 0.98 * 1.05)
+
+
+@pytest.mark.unit
+def test_compound_equity_empty_inputs() -> None:
+    assert compound_equity_from_period_returns([]) == [1.0]
 
 
 @pytest.mark.unit
@@ -46,6 +56,27 @@ def test_split_calendar_range_three() -> None:
     assert len(parts) == 3
     assert parts[0][0] == start
     assert parts[-1][1] == end
+
+
+@pytest.mark.unit
+def test_split_calendar_range_single_and_inverted() -> None:
+    a, b = date(2020, 1, 1), date(2020, 1, 5)
+    assert split_calendar_range(a, b, 1) == [(a, b)]
+    with pytest.raises(ValueError, match="start"):
+        split_calendar_range(b, a, 3)
+
+
+@pytest.mark.unit
+def test_split_calendar_range_more_chunks_than_days() -> None:
+    start, end = date(2020, 1, 1), date(2020, 1, 3)
+    assert split_calendar_range(start, end, 10) == [(start, end)]
+
+
+@pytest.mark.unit
+def test_split_sorted_trading_days_empty_and_single_block() -> None:
+    assert split_sorted_trading_days([], 3) == []
+    one = [date(2020, 1, 1)]
+    assert split_sorted_trading_days(one, 5) == [(one[0], one[0])]
 
 
 @pytest.mark.unit

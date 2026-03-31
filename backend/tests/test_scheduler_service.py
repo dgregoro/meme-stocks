@@ -153,6 +153,28 @@ def test_catch_up_runs_missed_jobs(mock_yahoo_class, db_session, sample_stock):
         mock_notif.assert_not_called()
 
 
+@patch("backend.app.services.scheduler_service.JobExecutionRepository")
+@patch("backend.app.services.scheduler_service.SessionLocal")
+@patch("backend.app.services.scheduler_service.YahooFinanceService")
+def test_record_job_failure_swallows_repo_errors(
+    mock_yahoo_class,
+    mock_session_local,
+    mock_job_repo_cls,
+):
+    """If persisting failure record fails, scheduler still closes DB and logs."""
+    mock_db = MagicMock()
+    mock_session_local.return_value = mock_db
+    mock_job_repo = MagicMock()
+    mock_job_repo.record_run.side_effect = RuntimeError("db down")
+    mock_job_repo_cls.return_value = mock_job_repo
+
+    scheduler = SchedulerService()
+    scheduler._record_job_failure("test_job", ValueError("boom"))
+
+    mock_db.close.assert_called_once()
+    mock_job_repo.record_run.assert_called_once()
+
+
 @patch("backend.app.services.scheduler_service.YahooFinanceService")
 def test_scheduler_start_and_shutdown(mock_yahoo_class):
     """Test scheduler start and shutdown."""
