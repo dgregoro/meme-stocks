@@ -54,19 +54,24 @@ class YahooVolIndexClient:
                 raise ExternalAPIError("Yahoo vol index response missing Close column")
             return df["Close"]
 
-        s1 = _close_series(h1)
-        s2 = _close_series(h2)
-        common = s1.index.intersection(s2.index)
+        def _closes_by_calendar_day(frame: pd.DataFrame) -> dict[date, float]:
+            """Map UTC calendar date -> close; Yahoo often returns tz-aware indices that differ per symbol."""
+            s = _close_series(frame)
+            by_day: dict[date, float] = {}
+            for idx, raw in s.items():
+                ts = pd.Timestamp(idx)
+                cal = ts.tz_convert("UTC").date() if ts.tzinfo is not None else ts.date()
+                try:
+                    by_day[cal] = float(raw)
+                except (TypeError, ValueError) as exc:
+                    raise ExternalAPIError(f"Malformed Yahoo close for vol index on {cal}") from exc
+            return by_day
+
+        d1 = _closes_by_calendar_day(h1)
+        d2 = _closes_by_calendar_day(h2)
         out: list[tuple[date, float, float]] = []
-        for idx in common:
-            ts = pd.Timestamp(idx)
-            d = ts.date()
-            try:
-                v = float(s1.loc[idx])
-                w = float(s2.loc[idx])
-            except (TypeError, ValueError) as exc:
-                raise ExternalAPIError(f"Malformed Yahoo close for vol index on {d}") from exc
+        for cal in sorted(set(d1) & set(d2)):
+            v, w = d1[cal], d2[cal]
             if v > 0 and w > 0:
-                out.append((d, v, w))
-        out.sort(key=lambda t: t[0])
+                out.append((cal, v, w))
         return out
