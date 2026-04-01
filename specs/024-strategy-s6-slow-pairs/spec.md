@@ -1,8 +1,8 @@
 # Feature Specification: Daily strategy S6 — Slow pairs / relative value
 
-**Feature Branch**: `024-strategy-s6-slow-pairs`  
-**Created**: 2026-03-30  
-**Status**: Spec only — **not implemented**  
+**Feature Branch**: `024-strategy-s6-slow-pairs`
+**Created**: 2026-03-30
+**Status**: Spec only — **not implemented**
 **Input**: `docs/STRATEGY_EXPLORATION.md` S6: **two (or few)** daily series, cointegration / spread dynamics, **corporate-action-aware** returns where applicable.
 
 ## Problem

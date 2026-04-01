@@ -1,8 +1,8 @@
 # Feature Specification: Daily strategy S4 — Calendar / scheduled-event flags
 
-**Feature Branch**: `022-strategy-s4-calendar-events`  
-**Created**: 2026-03-30  
-**Status**: Implemented (core parity with S1–S3 CLI)  
+**Feature Branch**: `022-strategy-s4-calendar-events`
+**Created**: 2026-03-30
+**Status**: Implemented (core parity with S1–S3 CLI)
 **Input**: **S4** from `docs/STRATEGY_EXPLORATION.md`: pre-registered **calendar** flags (no exchange holiday calendar) vs **forward equity returns**, with the same operational shell as S2 (baseline, pooled merit, checklist, rolling stability, preflight, persistence).
 
 ## Summary

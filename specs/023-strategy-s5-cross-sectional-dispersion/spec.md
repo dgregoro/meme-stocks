@@ -1,8 +1,8 @@
 # Feature Specification: Daily strategy S5 — Cross-sectional dispersion
 
-**Feature Branch**: `023-strategy-s5-cross-sectional-dispersion`  
-**Created**: 2026-03-30  
-**Status**: Spec only — **not implemented** in product CLI  
+**Feature Branch**: `023-strategy-s5-cross-sectional-dispersion`
+**Created**: 2026-03-30
+**Status**: Spec only — **not implemented** in product CLI
 **Input**: `docs/STRATEGY_EXPLORATION.md` S5: panel-level dispersion (e.g. dispersion of daily returns across a **defined universe**) vs forward single-name or portfolio outcomes.
 
 ## Problem

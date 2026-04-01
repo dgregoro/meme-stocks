@@ -1,8 +1,8 @@
 # Feature Specification: Daily strategy S7 — Rule discovery on daily features
 
-**Feature Branch**: `025-strategy-s7-rule-discovery`  
-**Created**: 2026-03-30  
-**Status**: Spec only — **not implemented**  
+**Feature Branch**: `025-strategy-s7-rule-discovery`
+**Created**: 2026-03-30
+**Status**: Spec only — **not implemented**
 **Input**: `docs/STRATEGY_EXPLORATION.md` S7: search over rules on a daily feature matrix with **strict hold-out**, **complexity limits**, and explicit **multiple-testing / overfitting** controls.
 
 ## Problem
