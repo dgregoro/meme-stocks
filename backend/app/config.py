@@ -185,6 +185,12 @@ class Settings(BaseSettings):
     s3_regime_min_history_days: int = 252
     s3_regime_n_buckets: int = 4
     s3_macro_backfill_calendar_buffer_days: int = 420
+
+    # Daily-frequency S4: calendar flags (022); calendar month boundaries, not NYSE holiday calendar
+    s4_include_opex_week: bool = True
+    s4_include_calendar_month_end: bool = True
+    s4_include_quarter_end_calendar: bool = True
+
     # Default round-trip cost for documentation / ResearchRunEnvelope (actual sims use their own fields)
     research_default_round_trip_cost_bps: float = 10.0
 

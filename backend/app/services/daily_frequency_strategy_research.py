@@ -1,6 +1,6 @@
-"""Daily-frequency strategy research (STRATEGY_EXPLORATION S1, S2).
+"""Daily-frequency strategy research (STRATEGY_EXPLORATION S1–S4).
 
-Pure feature construction and forward-return summaries from daily OHLCV only.
+Pure feature construction and forward-return summaries from daily OHLCV (S4 adds calendar flags).
 See docs/STRATEGY_TESTING_PLAN.md and docs/STRATEGY_EXPLORATION.md.
 """
 
@@ -25,6 +25,12 @@ from backend.app.services.research_execution.window_splits import (
 from backend.app.data.repositories.stock_repo import StockRepository
 from backend.app.models.price_data import PriceData
 from backend.app.services.leader_follower_evaluation_service import compute_forward_return
+from backend.app.services.s4_calendar_flags import (
+    is_calendar_month_end,
+    is_opex_week,
+    is_quarter_end_calendar,
+    s4_bucket_label,
+)
 from backend.app.services.s3_vol_term_regime import (
     compute_s3_feature,
     prior_expanding_quantile_regimes,
@@ -34,7 +40,7 @@ from backend.app.services.s3_vol_term_regime import (
 logger = logging.getLogger(__name__)
 
 SplitMode = Literal["calendar", "trading"]
-StrategyMeritId = Literal["s1", "s2", "s3"]
+StrategyMeritId = Literal["s1", "s2", "s3", "s4"]
 
 
 @dataclass(frozen=True)
@@ -282,6 +288,18 @@ class S3WindowSample:
     counts: dict[str, int]
 
 
+S4_BUCKET_KEYS: tuple[str, ...] = tuple(f"cal_{a}{b}{c}" for a in (0, 1) for b in (0, 1) for c in (0, 1))
+
+
+@dataclass(frozen=True)
+class S4WindowSample:
+    """Calendar-flag bucket forward returns + baseline for one symbol (S4)."""
+
+    bucket_returns: dict[str, dict[str, list[float]]]
+    baseline_returns: dict[str, list[float]]
+    counts: dict[str, int]
+
+
 def _load_s3_feature_by_date(
     db: Session,
     *,
@@ -482,9 +500,69 @@ def _compute_s2_window_sample(
     return S2WindowSample(bucket_returns=by_bucket, baseline_returns=baseline, counts=counts)
 
 
+def _compute_s4_window_sample(
+    bars: list[DailyBar],
+    *,
+    horizons: tuple[int, ...],
+    since: date | None,
+    until: date | None,
+    settings: Any | None = None,
+) -> S4WindowSample | None:
+    """Calendar-flag buckets (OpEx week, calendar month-end, calendar quarter-end union) vs baseline."""
+    st = settings if settings is not None else get_settings()
+    min_needed = max(horizons) + 5
+    if len(bars) < min_needed:
+        return None
+
+    inc_o = bool(getattr(st, "s4_include_opex_week", True))
+    inc_m = bool(getattr(st, "s4_include_calendar_month_end", True))
+    inc_q = bool(getattr(st, "s4_include_quarter_end_calendar", True))
+    if not (inc_o or inc_m or inc_q):
+        return None
+
+    by_bucket: dict[str, dict[str, list[float]]] = {k: {str(h): [] for h in horizons} for k in S4_BUCKET_KEYS}
+    baseline: dict[str, list[float]] = {str(h): [] for h in horizons}
+    counts: dict[str, int] = {k: 0 for k in S4_BUCKET_KEYS}
+    price_one = _price_close_dict(bars)
+    dates = [b.d for b in bars]
+
+    for i in range(len(bars)):
+        d = dates[i]
+        if since is not None and d < since:
+            continue
+        if until is not None and d > until:
+            continue
+        forwards: dict[int, float] = {}
+        for h in horizons:
+            fr = compute_forward_return("_series", d, h, price_one)
+            if fr is not None:
+                forwards[h] = fr
+        for h, fr in forwards.items():
+            baseline[str(h)].append(fr)
+
+        opex = is_opex_week(d) if inc_o else False
+        m_end = is_calendar_month_end(d) if inc_m else False
+        q_end = is_quarter_end_calendar(d) if inc_q else False
+        if not (opex or m_end or q_end):
+            continue
+        label = s4_bucket_label(
+            opex_week=opex,
+            month_end=m_end,
+            quarter_end=q_end,
+            include_opex=inc_o,
+            include_month_end=inc_m,
+            include_quarter_end=inc_q,
+        )
+        counts[label] = counts.get(label, 0) + 1
+        for h, fr in forwards.items():
+            by_bucket[label][str(h)].append(fr)
+
+    return S4WindowSample(bucket_returns=by_bucket, baseline_returns=baseline, counts=counts)
+
+
 @dataclass(frozen=True)
 class DailyStrategySymbolDataAssessment:
-    """Result of a read-only data sufficiency check for S1/S2/S3 daily strategy eval."""
+    """Result of a read-only data sufficiency check for S1–S4 daily strategy eval."""
 
     symbol: str
     status: Literal["ready", "missing_stock", "insufficient_history"]
@@ -495,7 +573,7 @@ class DailyStrategySymbolDataAssessment:
 
 
 def daily_strategy_min_valid_bars(strategy: StrategyMeritId) -> int:
-    """Minimum valid daily bars required (same contract as _compute_s1/_compute_s2/_compute_s3)."""
+    """Minimum valid daily bars required (same contract as _compute_s1/_compute_s2/_compute_s3/_compute_s4)."""
     settings = get_settings()
     horizons = _parse_horizons_setting(settings.daily_strategy_horizons)
     if strategy == "s1":
@@ -504,6 +582,8 @@ def daily_strategy_min_valid_bars(strategy: StrategyMeritId) -> int:
         min_prior = max(10, settings.daily_strategy_regime_min_prior_days)
         return max(vol_w, vz_w) + min_prior + max(horizons) + 5
     if strategy == "s3":
+        return max(horizons) + 5
+    if strategy == "s4":
         return max(horizons) + 5
     ma_w = max(2, settings.daily_strategy_gap_ma_window)
     return ma_w + max(horizons) + 5
@@ -518,7 +598,7 @@ def assess_daily_strategy_symbol_data(
 ) -> DailyStrategySymbolDataAssessment:
     """Check whether ``price_data`` and ``stocks`` support evaluation for one symbol.
 
-    Uses the same feature windows as merit / single-symbol eval (S1/S2/S3 compute paths).
+    Uses the same feature windows as merit / single-symbol eval (S1–S4 compute paths).
     """
     symu = symbol.strip().upper()
     stock_repo = StockRepository(db)
@@ -616,6 +696,54 @@ def assess_daily_strategy_symbol_data(
             until=eval_end,
         )
         if s3_sample is None:
+            return DailyStrategySymbolDataAssessment(
+                symbol=symu,
+                status="insufficient_history",
+                message=_price_data_hint(db, symu, len(rows), len(bars)),
+                min_bars_required=min_need,
+                valid_bar_count=len(bars),
+                raw_price_row_count=len(rows),
+            )
+        return DailyStrategySymbolDataAssessment(
+            symbol=symu,
+            status="ready",
+            message=None,
+            min_bars_required=min_need,
+            valid_bar_count=len(bars),
+            raw_price_row_count=len(rows),
+        )
+
+    if strategy == "s4":
+        inc_o = bool(getattr(settings, "s4_include_opex_week", True))
+        inc_m = bool(getattr(settings, "s4_include_calendar_month_end", True))
+        inc_q = bool(getattr(settings, "s4_include_quarter_end_calendar", True))
+        if not (inc_o or inc_m or inc_q):
+            return DailyStrategySymbolDataAssessment(
+                symbol=symu,
+                status="insufficient_history",
+                message="S4: all calendar dimensions disabled (s4_include_* config)",
+                min_bars_required=min_need,
+                valid_bar_count=len(bars),
+                raw_price_row_count=len(rows),
+            )
+        horizons = _parse_horizons_setting(settings.daily_strategy_horizons)
+        if len(bars) < min_need:
+            return DailyStrategySymbolDataAssessment(
+                symbol=symu,
+                status="insufficient_history",
+                message=_price_data_hint(db, symu, len(rows), len(bars)),
+                min_bars_required=min_need,
+                valid_bar_count=len(bars),
+                raw_price_row_count=len(rows),
+            )
+        s4_sample = _compute_s4_window_sample(
+            bars,
+            horizons=horizons,
+            since=eval_start,
+            until=eval_end,
+            settings=settings,
+        )
+        if s4_sample is None:
             return DailyStrategySymbolDataAssessment(
                 symbol=symu,
                 status="insufficient_history",
@@ -825,6 +953,52 @@ def _rollup_s2_merit_rolling(
         "instability_failures": instability_detail,
         "rolling_pass": rolling_pass,
         "note": "Same interpretation as S1 rollup; buckets = gap ecology regimes.",
+    }
+
+
+def _rollup_s4_merit_rolling(
+    split_payloads: list[dict[str, Any]],
+    *,
+    min_events_per_bucket: int,
+    horizons: tuple[int, ...],
+) -> dict[str, Any]:
+    """Cross-split excess stability for S4 calendar-flag buckets (same pattern as S2)."""
+    all_splits_pass = all(p["report"].get("checklist", {}).get("pass") is True for p in split_payloads)
+
+    excess_sign_stable: dict[str, dict[str, bool | str]] = {b: {} for b in S4_BUCKET_KEYS}
+    instability_detail: list[str] = []
+
+    for bkt in S4_BUCKET_KEYS:
+        for hk in map(str, horizons):
+            excesses: list[float] = []
+            for p in split_payloads:
+                rep = p["report"]
+                ex = rep.get("vs_baseline_avg_pct", {}).get(bkt, {}).get(hk, {}).get("avg_excess_vs_baseline_pct")
+                n = rep.get("by_bucket", {}).get(bkt, {}).get(hk, {}).get("evaluable_count", 0)
+                if ex is not None and n >= min_events_per_bucket:
+                    excesses.append(float(ex))
+            if len(excesses) < 2:
+                excess_sign_stable[bkt][hk] = "skipped_not_enough_splits_with_events"
+            else:
+                ok = _sign_stable(excesses)
+                excess_sign_stable[bkt][hk] = ok
+                if not ok:
+                    instability_detail.append(
+                        f"{bkt} {hk}d: excess vs baseline flips sign across splits "
+                        f"(values={','.join(str(round(x, 4)) for x in excesses)})"
+                    )
+
+    strict_stable_required = [
+        (b, hk) for b in S4_BUCKET_KEYS for hk in map(str, horizons) if excess_sign_stable[b].get(hk) is False
+    ]
+    rolling_pass = all_splits_pass and not strict_stable_required
+
+    return {
+        "all_splits_checklist_pass": all_splits_pass,
+        "excess_vs_baseline_sign_stable": excess_sign_stable,
+        "instability_failures": instability_detail,
+        "rolling_pass": rolling_pass,
+        "note": "Same interpretation as S2 rollup; buckets = calendar flag unions (cal_abc).",
     }
 
 
@@ -1193,6 +1367,163 @@ def run_s2_merit_rolling_report(
     }
 
 
+def run_s4_merit_report(
+    db: Session,
+    symbols: list[str],
+    eval_start: date,
+    eval_end: date,
+) -> dict[str, Any]:
+    """Pooled S4 calendar-flag buckets over a fixed window + baseline + checklist (parallel to S2)."""
+    settings = get_settings()
+    horizons = _parse_horizons_setting(settings.daily_strategy_horizons)
+    min_ev = max(1, settings.daily_strategy_merit_min_events_per_regime)
+    conc_max = float(settings.daily_strategy_merit_concentration_top5_max_pct)
+    inc_o = bool(getattr(settings, "s4_include_opex_week", True))
+    inc_m = bool(getattr(settings, "s4_include_calendar_month_end", True))
+    inc_q = bool(getattr(settings, "s4_include_quarter_end_calendar", True))
+
+    repo = PriceDataRepository(db)
+    pooled_bucket: dict[str, dict[str, list[float]]] = {k: {str(h): [] for h in horizons} for k in S4_BUCKET_KEYS}
+    pooled_base: dict[str, list[float]] = {str(h): [] for h in horizons}
+    pooled_counts: dict[str, int] = {k: 0 for k in S4_BUCKET_KEYS}
+    bucket_symbol_events: dict[str, dict[str, int]] = {k: {} for k in S4_BUCKET_KEYS}
+    skipped: list[dict[str, str]] = []
+
+    for sym in symbols:
+        symu = sym.strip().upper()
+        rows = repo.list_for_stock(symu)
+        bars = bars_from_price_rows(rows)
+        sample = _compute_s4_window_sample(
+            bars,
+            horizons=horizons,
+            since=eval_start,
+            until=eval_end,
+            settings=settings,
+        )
+        if sample is None:
+            skipped.append(
+                {
+                    "symbol": symu,
+                    "reason": "insufficient_bars_or_no_eval_days",
+                    "hint": _price_data_hint(db, symu, len(rows), len(bars)),
+                }
+            )
+            continue
+        for bkt in S4_BUCKET_KEYS:
+            pooled_counts[bkt] += sample.counts.get(bkt, 0)
+            for sy in sample.bucket_returns[bkt]:
+                pooled_bucket[bkt][sy].extend(sample.bucket_returns[bkt][sy])
+            n_ev = sample.counts.get(bkt, 0)
+            if n_ev:
+                bucket_symbol_events[bkt][symu] = bucket_symbol_events[bkt].get(symu, 0) + n_ev
+        for hk in pooled_base:
+            pooled_base[hk].extend(sample.baseline_returns.get(hk, []))
+
+    baseline_metrics = {hk: metrics_from_returns(rs) for hk, rs in pooled_base.items()}
+    bucket_metrics: dict[str, Any] = {}
+    vs_baseline: dict[str, Any] = {}
+    conc_by_bucket: dict[str, float] = {}
+    for bkt, hmap in pooled_bucket.items():
+        bucket_metrics[bkt] = {hk: metrics_from_returns(rs) for hk, rs in hmap.items()}
+        vs_baseline[bkt] = {}
+        conc_by_bucket[bkt] = _top5_concentration(bucket_symbol_events[bkt])
+        for hk in hmap:
+            bm_k = bucket_metrics[bkt][hk]
+            bm = baseline_metrics.get(hk, {})
+            ravg = bm_k.get("avg_return_pct", 0.0)
+            bavg = bm.get("avg_return_pct", 0.0)
+            vs_baseline[bkt][hk] = {
+                "avg_excess_vs_baseline_pct": round(ravg - bavg, 4),
+                "baseline_avg_return_pct": bavg,
+            }
+
+    checklist_failures: list[str] = []
+    if not (inc_o or inc_m or inc_q):
+        checklist_failures.append("all S4 calendar dimensions disabled in config")
+    for bkt in S4_BUCKET_KEYS:
+        for hk in map(str, horizons):
+            bm_k = bucket_metrics[bkt][hk]
+            n = bm_k.get("evaluable_count", 0)
+            if n < min_ev:
+                checklist_failures.append(f"{bkt} horizon {hk}: evaluable_count {n} < {min_ev}")
+            med = bm_k.get("median_return_pct")
+            avg = bm_k.get("avg_return_pct")
+            if n >= 10 and med is not None and avg is not None and med * avg < 0:
+                checklist_failures.append(f"{bkt} horizon {hk}: median and avg disagree in sign")
+        n_sym = len({s for s in bucket_symbol_events[bkt] if bucket_symbol_events[bkt][s] > 0})
+        if n_sym > 1 and conc_by_bucket[bkt] > conc_max and pooled_counts.get(bkt, 0) > 0:
+            checklist_failures.append(f"{bkt}: top-5 symbol concentration {conc_by_bucket[bkt]} > {conc_max}")
+
+    return {
+        "kind": "s4_merit_report",
+        "eval_window": {"start": str(eval_start), "end": str(eval_end)},
+        "symbols_requested": [s.strip().upper() for s in symbols],
+        "symbols_with_data": sorted({s for ev in bucket_symbol_events.values() for s in ev}),
+        "symbols_skipped": skipped,
+        "params": {
+            "s4_include_opex_week": inc_o,
+            "s4_include_calendar_month_end": inc_m,
+            "s4_include_quarter_end_calendar": inc_q,
+            "merit_min_events_per_bucket": min_ev,
+            "merit_concentration_top5_max_pct": conc_max,
+        },
+        "horizons": list(horizons),
+        "pooled_counts": pooled_counts,
+        "concentration_top5_by_bucket": conc_by_bucket,
+        "baseline_metrics": baseline_metrics,
+        "by_bucket": bucket_metrics,
+        "vs_baseline_avg_pct": vs_baseline,
+        "checklist": {
+            "pass": len(checklist_failures) == 0,
+            "failures": checklist_failures,
+            "note": "Minimum bar from SIGNAL_EVALUATION_CHECKLIST; passing does not imply tradable edge.",
+        },
+    }
+
+
+def run_s4_merit_rolling_report(
+    db: Session,
+    symbols: list[str],
+    eval_start: date,
+    eval_end: date,
+    *,
+    n_splits: int,
+    split_mode: SplitMode = "calendar",
+    trading_calendar_symbols: Sequence[str] | None = None,
+) -> dict[str, Any]:
+    """Rolling S4 merit (calendar or trading splits)."""
+    n_splits = max(1, int(n_splits))
+    cal_syms = (
+        list(trading_calendar_symbols) if trading_calendar_symbols is not None else [s.strip().upper() for s in symbols]
+    )
+    windows, mode_used = _merit_rolling_windows(db, eval_start, eval_end, n_splits, split_mode, cal_syms)
+    settings = get_settings()
+    min_ev = max(1, settings.daily_strategy_merit_min_events_per_regime)
+    horizons = _parse_horizons_setting(settings.daily_strategy_horizons)
+
+    split_payloads: list[dict[str, Any]] = []
+    for ws, we in windows:
+        rep = run_s4_merit_report(db, symbols, ws, we)
+        split_payloads.append({"eval_window": {"start": str(ws), "end": str(we)}, "report": rep})
+
+    rollup = _rollup_s4_merit_rolling(
+        split_payloads,
+        min_events_per_bucket=min_ev,
+        horizons=horizons,
+    )
+
+    return {
+        "kind": "s4_merit_report_rolling",
+        "n_splits": len(windows),
+        "split_mode_requested": split_mode,
+        "split_mode_used": mode_used,
+        "parent_window": {"start": str(eval_start), "end": str(eval_end)},
+        "windows": [f"{a}..{b}" for a, b in windows],
+        "splits": split_payloads,
+        "rollup": rollup,
+    }
+
+
 def run_s3_merit_report(
     db: Session,
     symbols: list[str],
@@ -1401,7 +1732,7 @@ def run_strategy_merit_bundle(
 ) -> dict[str, Any]:
     """One-shot strategy evaluation: pooled merit on **[eval_start, eval_end]** plus optional rolling stability.
 
-    Use this as the default automation entrypoint for S1/S2 before deeper manual review.
+    Use this as the default automation entrypoint for S1–S4 before deeper manual review.
     """
     rs = int(rolling_splits)
     cal_override = list(trading_calendar_symbols) if trading_calendar_symbols is not None else None
@@ -1437,6 +1768,19 @@ def run_strategy_merit_bundle(
         rolling = None
         if rs >= 2:
             rolling = run_s3_merit_rolling_report(
+                db,
+                symbols,
+                eval_start,
+                eval_end,
+                n_splits=rs,
+                split_mode=split_mode,
+                trading_calendar_symbols=cal_override,
+            )
+    elif strategy == "s4":
+        single = run_s4_merit_report(db, symbols, eval_start, eval_end)
+        rolling = None
+        if rs >= 2:
+            rolling = run_s4_merit_rolling_report(
                 db,
                 symbols,
                 eval_start,
@@ -1586,6 +1930,74 @@ def run_s2_evaluation(
         "symbol": symbol,
         "date_range": {"start": str(since) if since else None, "end": str(until) if until else None},
         "params": {"gap_ma_window": ma_w},
+        "horizons": list(horizons),
+        "counts": sample.counts,
+        "by_bucket": summary_by,
+    }
+
+
+def run_s4_evaluation(
+    db: Session,
+    symbol: str,
+    since: date | None,
+    until: date | None,
+) -> dict[str, Any]:
+    """S4: calendar-flag buckets (OpEx week, month-end, quarter-end) vs forward returns from signal close."""
+    settings = get_settings()
+    horizons = _parse_horizons_setting(settings.daily_strategy_horizons)
+    inc_o = bool(getattr(settings, "s4_include_opex_week", True))
+    inc_m = bool(getattr(settings, "s4_include_calendar_month_end", True))
+    inc_q = bool(getattr(settings, "s4_include_quarter_end_calendar", True))
+
+    repo = PriceDataRepository(db)
+    rows_buf = repo.list_for_stock(symbol)
+    bars = bars_from_price_rows(rows_buf)
+    min_s4 = max(horizons) + 5
+    if len(bars) < min_s4:
+        return _empty_summary(
+            "S4_calendar_events",
+            symbol,
+            since,
+            until,
+            horizons,
+            hint=_price_data_hint(db, symbol, len(rows_buf), len(bars)),
+        )
+    if not (inc_o or inc_m or inc_q):
+        return _empty_summary(
+            "S4_calendar_events",
+            symbol,
+            since,
+            until,
+            horizons,
+            hint="S4: all calendar dimensions disabled (s4_include_* config)",
+        )
+
+    sample = _compute_s4_window_sample(bars, horizons=horizons, since=since, until=until, settings=settings)
+    if sample is None:
+        return _empty_summary(
+            "S4_calendar_events",
+            symbol,
+            since,
+            until,
+            horizons,
+            hint="Internal error: S4 sample computation returned None after size check.",
+        )
+
+    summary_by: dict[str, Any] = {}
+    for bname, hmap in sample.bucket_returns.items():
+        summary_by[bname] = {}
+        for hk, rs in hmap.items():
+            summary_by[bname][hk] = metrics_from_returns(rs)
+
+    return {
+        "strategy": "S4_calendar_events",
+        "symbol": symbol,
+        "date_range": {"start": str(since) if since else None, "end": str(until) if until else None},
+        "params": {
+            "s4_include_opex_week": inc_o,
+            "s4_include_calendar_month_end": inc_m,
+            "s4_include_quarter_end_calendar": inc_q,
+        },
         "horizons": list(horizons),
         "counts": sample.counts,
         "by_bucket": summary_by,

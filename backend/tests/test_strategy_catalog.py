@@ -28,10 +28,13 @@ def test_build_strategy_list_rows_defaults() -> None:
     rows = build_strategy_list_rows(None)
     s1 = next(r for r in rows if r.strategy_id == "S1")
     s3 = next(r for r in rows if r.strategy_id == "S3")
+    s4 = next(r for r in rows if r.strategy_id == "S4")
     assert s1.tooling == "implemented"
     assert s1.evidence == "not_tested"
     assert s3.tooling == "implemented"
     assert s3.evidence == "not_tested"
+    assert s4.tooling == "implemented"
+    assert s4.cli_hint is not None
 
 
 @pytest.mark.unit
