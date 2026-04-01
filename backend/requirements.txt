@@ -23,6 +23,8 @@ pygments @ https://github.com/pygments/pygments/archive/24b8aa76c6cd6d70f39c6dd6
 black
 flake8
 mypy
+types-PyYAML
+types-requests
 python-dotenv
 backoff
 apscheduler

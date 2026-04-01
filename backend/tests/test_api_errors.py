@@ -29,5 +29,6 @@ def test_raise_api_error_http_exception() -> None:
         raise_api_error(418, "TEAPOT", "short", {"cup": True})
     assert excinfo.value.status_code == 418
     detail = excinfo.value.detail
+    assert isinstance(detail, dict)
     assert detail["error_type"] == "TEAPOT"
     assert detail["details"] == {"cup": True}

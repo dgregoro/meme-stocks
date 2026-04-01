@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from datetime import date
-from typing import Sequence
+from typing import Any, Sequence, cast
 
 from sqlalchemy import Select, delete, func, select
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -53,7 +54,7 @@ class VolumeSpikeEventRepository:
         if symbols:
             stmt = stmt.where(VolumeSpikeEvent.symbol.in_(tuple(symbols)))
         try:
-            res = self._session.execute(stmt)
+            res = cast(CursorResult[Any], self._session.execute(stmt))
             return int(res.rowcount or 0)
         except SQLAlchemyError as exc:  # pragma: no cover
             raise DataAccessError("Failed to delete volume spike events in range") from exc
