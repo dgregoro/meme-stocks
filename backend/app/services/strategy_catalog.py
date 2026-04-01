@@ -60,11 +60,11 @@ STRATEGY_DEFINITIONS: tuple[StrategyDefinition, ...] = (
     StrategyDefinition(
         "S4",
         "Calendar / scheduled-event skeleton",
-        "Scheduled calendar flags (e.g. OpEx, FOMC) interact with returns; pre-register "
-        "flags and avoid post-hoc flag shopping.",
+        "Scheduled calendar flags (OpEx week, calendar month-end, calendar quarter-end) "
+        "interact with returns; pre-register flags and avoid post-hoc flag shopping.",
         "Daily returns + calendar flags",
-        "planned",
-        None,
+        "implemented",
+        "evaluate daily-strategy s4 | s4-merit | eval-bundle --strategy s4",
     ),
     StrategyDefinition(
         "S5",

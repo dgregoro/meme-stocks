@@ -8,9 +8,11 @@ import pytest
 
 from backend.app.services.daily_frequency_strategy_research import (
     S2_BUCKET_KEYS,
+    S4_BUCKET_KEYS,
     _rollup_s1_merit_rolling,
     _rollup_s2_merit_rolling,
     _rollup_s3_merit_rolling,
+    _rollup_s4_merit_rolling,
     _sign_stable,
     _strategy_merit_bundle_summary,
     _top5_concentration,
@@ -146,6 +148,29 @@ def test_rollup_s2_detects_sign_flip() -> None:
     r = _rollup_s2_merit_rolling(fake, min_events_per_bucket=50, horizons=horizons)
     assert r["rolling_pass"] is False
     assert S2_BUCKET_KEYS[0] == "gap_up_uptrend"
+
+
+def test_rollup_s4_detects_sign_flip() -> None:
+    horizons = (1,)
+    bk = S4_BUCKET_KEYS[0]
+    fake = [
+        {
+            "report": {
+                "checklist": {"pass": True},
+                "vs_baseline_avg_pct": {bk: {"1": {"avg_excess_vs_baseline_pct": 0.4}}},
+                "by_bucket": {bk: {"1": {"evaluable_count": 55}}},
+            }
+        },
+        {
+            "report": {
+                "checklist": {"pass": True},
+                "vs_baseline_avg_pct": {bk: {"1": {"avg_excess_vs_baseline_pct": -0.2}}},
+                "by_bucket": {bk: {"1": {"evaluable_count": 55}}},
+            }
+        },
+    ]
+    r = _rollup_s4_merit_rolling(fake, min_events_per_bucket=50, horizons=horizons)
+    assert r["rolling_pass"] is False
 
 
 def test_rollup_rolling_passes_when_stable() -> None:

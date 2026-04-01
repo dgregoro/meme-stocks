@@ -22,10 +22,15 @@ def _flags_from_report(report: dict[str, Any]) -> tuple[bool | None, bool | None
     cp: bool | None = None
     rp: bool | None = None
     ag: bool | None = None
-    if kind in ("s1_merit_report", "s2_merit_report", "s3_merit_report"):
+    if kind in ("s1_merit_report", "s2_merit_report", "s3_merit_report", "s4_merit_report"):
         raw = report.get("checklist", {}).get("pass")
         cp = bool(raw) if raw is not None else None
-    elif kind in ("s1_merit_report_rolling", "s2_merit_report_rolling", "s3_merit_report_rolling"):
+    elif kind in (
+        "s1_merit_report_rolling",
+        "s2_merit_report_rolling",
+        "s3_merit_report_rolling",
+        "s4_merit_report_rolling",
+    ):
         raw = report.get("rollup", {}).get("rolling_pass")
         rp = bool(raw) if raw is not None else None
     elif kind == "strategy_merit_bundle":
@@ -51,6 +56,8 @@ def _strategy_id_from_report(report: dict[str, Any]) -> str:
         return "s2"
     if isinstance(kind, str) and kind.startswith("s3_"):
         return "s3"
+    if isinstance(kind, str) and kind.startswith("s4_"):
+        return "s4"
     return "unknown"
 
 
@@ -66,7 +73,12 @@ def _eval_window(report: dict[str, Any]) -> tuple[Any, Any]:
 
 def _n_splits(report: dict[str, Any]) -> int:
     kind = report.get("kind")
-    if kind in ("s1_merit_report_rolling", "s2_merit_report_rolling", "s3_merit_report_rolling"):
+    if kind in (
+        "s1_merit_report_rolling",
+        "s2_merit_report_rolling",
+        "s3_merit_report_rolling",
+        "s4_merit_report_rolling",
+    ):
         return int(report.get("n_splits") or 1)
     if kind == "strategy_merit_bundle":
         return max(1, int(report.get("rolling_splits_configured") or 1))
@@ -75,7 +87,12 @@ def _n_splits(report: dict[str, Any]) -> int:
 
 def _split_mode(report: dict[str, Any]) -> str | None:
     kind = report.get("kind")
-    if kind in ("s1_merit_report_rolling", "s2_merit_report_rolling", "s3_merit_report_rolling"):
+    if kind in (
+        "s1_merit_report_rolling",
+        "s2_merit_report_rolling",
+        "s3_merit_report_rolling",
+        "s4_merit_report_rolling",
+    ):
         sm = report.get("split_mode_requested")
         return str(sm) if sm is not None else None
     if kind == "strategy_merit_bundle":

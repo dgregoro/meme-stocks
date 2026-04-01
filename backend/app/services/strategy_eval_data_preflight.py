@@ -94,9 +94,10 @@ def run_strategy_eval_data_preflight(
     mode: PreflightMode = "check",
     all_stocks_ensure: bool = False,
 ) -> StrategyEvalPreflightResult:
-    """Verify (and optionally fetch) prerequisites for S1/S2/S3 daily-strategy evaluation.
+    """Verify (and optionally fetch) prerequisites for S1–S4 daily-strategy evaluation.
 
     S3 additionally requires persisted VIX/VIX3M observations (``backfill vol-term`` / Yahoo).
+    S4 uses OHLCV only (calendar flags are computed from bar dates).
 
     * ``mode="check"``: read-only; no Alpaca.
     * ``mode="ensure"``: create missing ``stocks`` rows, then Alpaca daily backfill for symbols

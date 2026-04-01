@@ -1,4 +1,4 @@
-"""Tests for run_s1/s2/s3_evaluation entrypoints (data sufficiency + happy path)."""
+"""Tests for run_s1/s2/s3/s4 evaluation and merit entrypoints (data sufficiency + happy path)."""
 
 from __future__ import annotations
 
@@ -25,6 +25,9 @@ from backend.app.services.daily_frequency_strategy_research import (
     run_s3_evaluation,
     run_s3_merit_report,
     run_s3_merit_rolling_report,
+    run_s4_evaluation,
+    run_s4_merit_report,
+    run_s4_merit_rolling_report,
     run_strategy_merit_bundle,
 )
 
@@ -414,6 +417,110 @@ def test_run_strategy_merit_bundle_s2_and_s3(monkeypatch: pytest.MonkeyPatch) ->
             split_mode="calendar",
         )
         assert b3["rolling"] is not None
+    finally:
+        db.close()
+        get_settings.cache_clear()
+
+
+@pytest.mark.unit
+def test_run_s4_evaluation_insufficient(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DAILY_STRATEGY_HORIZONS", "1")
+    get_settings.cache_clear()
+    db = _session()
+    try:
+        db.add(Stock(symbol="S4X", name="S", sector=None, market_cap=None))
+        _seed_ohlcv(db, "S4X", date(2024, 1, 2), 5)
+        db.commit()
+        out = run_s4_evaluation(db, "S4X", None, None)
+        assert out.get("error") == "insufficient_price_data"
+    finally:
+        db.close()
+        get_settings.cache_clear()
+
+
+@pytest.mark.unit
+def test_run_s4_evaluation_success(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DAILY_STRATEGY_HORIZONS", "1")
+    get_settings.cache_clear()
+    db = _session()
+    try:
+        db.add(Stock(symbol="S4OK", name="S", sector=None, market_cap=None))
+        _seed_ohlcv(db, "S4OK", date(2024, 1, 2), 130)
+        db.commit()
+        out = run_s4_evaluation(db, "S4OK", date(2024, 2, 1), date(2024, 6, 30))
+        assert out.get("error") is None
+        assert out["strategy"] == "S4_calendar_events"
+        assert "cal_000" in out["by_bucket"]
+        assert sum(out["counts"].values()) > 0
+    finally:
+        db.close()
+        get_settings.cache_clear()
+
+
+@pytest.mark.unit
+def test_run_s4_merit_report_pooled(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DAILY_STRATEGY_HORIZONS", "1")
+    monkeypatch.setenv("DAILY_STRATEGY_MERIT_MIN_EVENTS_PER_REGIME", "1")
+    get_settings.cache_clear()
+    db = _session()
+    try:
+        db.add(Stock(symbol="M4", name="M", sector=None, market_cap=None))
+        _seed_ohlcv(db, "M4", date(2024, 1, 2), 130)
+        db.commit()
+        rep = run_s4_merit_report(db, ["M4"], date(2024, 2, 1), date(2024, 5, 31))
+        assert rep["kind"] == "s4_merit_report"
+        assert "by_bucket" in rep
+    finally:
+        db.close()
+        get_settings.cache_clear()
+
+
+@pytest.mark.unit
+def test_run_s4_merit_rolling_calendar(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DAILY_STRATEGY_HORIZONS", "1")
+    monkeypatch.setenv("DAILY_STRATEGY_MERIT_MIN_EVENTS_PER_REGIME", "1")
+    get_settings.cache_clear()
+    db = _session()
+    try:
+        db.add(Stock(symbol="M4R", name="M", sector=None, market_cap=None))
+        _seed_ohlcv(db, "M4R", date(2024, 1, 2), 160)
+        db.commit()
+        roll = run_s4_merit_rolling_report(
+            db,
+            ["M4R"],
+            date(2024, 2, 1),
+            date(2024, 6, 28),
+            n_splits=2,
+            split_mode="calendar",
+        )
+        assert roll["kind"] == "s4_merit_report_rolling"
+        assert len(roll["splits"]) == 2
+    finally:
+        db.close()
+        get_settings.cache_clear()
+
+
+@pytest.mark.unit
+def test_run_strategy_merit_bundle_s4(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DAILY_STRATEGY_HORIZONS", "1")
+    monkeypatch.setenv("DAILY_STRATEGY_MERIT_MIN_EVENTS_PER_REGIME", "1")
+    get_settings.cache_clear()
+    db = _session()
+    try:
+        db.add(Stock(symbol="SB4", name="S", sector=None, market_cap=None))
+        _seed_ohlcv(db, "SB4", date(2024, 1, 2), 130)
+        db.commit()
+        b4 = run_strategy_merit_bundle(
+            db,
+            "s4",
+            ["SB4"],
+            date(2024, 2, 1),
+            date(2024, 5, 31),
+            rolling_splits=2,
+            split_mode="calendar",
+        )
+        assert b4["strategy"] == "s4"
+        assert b4["rolling"] is not None
     finally:
         db.close()
         get_settings.cache_clear()

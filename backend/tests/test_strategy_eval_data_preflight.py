@@ -70,6 +70,16 @@ def test_daily_strategy_min_valid_bars_s3_uses_horizons_only(monkeypatch: pytest
 
 
 @pytest.mark.unit
+def test_daily_strategy_min_valid_bars_s4_matches_s3_horizon_floor(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DAILY_STRATEGY_HORIZONS", "1,5")
+    get_settings.cache_clear()
+    try:
+        assert daily_strategy_min_valid_bars("s4") == daily_strategy_min_valid_bars("s3")
+    finally:
+        get_settings.cache_clear()
+
+
+@pytest.mark.unit
 def test_assess_missing_stock(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DAILY_STRATEGY_REGIME_MIN_PRIOR_DAYS", "10")
     monkeypatch.setenv("DAILY_STRATEGY_REGIME_LOOKBACK_DAYS", "20")
