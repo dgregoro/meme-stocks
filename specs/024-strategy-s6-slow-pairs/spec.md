@@ -2,15 +2,21 @@
 
 **Feature Branch**: `024-strategy-s6-slow-pairs`
 **Created**: 2026-03-30
-**Status**: Spec only — **not implemented**
-**Input**: `docs/STRATEGY_EXPLORATION.md` S6: **two (or few)** daily series, cointegration / spread dynamics, **corporate-action-aware** returns where applicable.
+**Status**: Spec / scaffold only — **not implemented** in product CLI
+**Input**: `docs/STRATEGY_EXPLORATION.md` S6: mean reversion of a spread between liquid peers (rolling beta, spread z-score); two-leg execution and corporate-action awareness.
 
 ## Problem
 
-Pair research needs **aligned returns**, **split/dividend** policy, and often **two-leg execution** assumptions. Not covered by single-name S1–S4 machinery.
+S1–S5 are **single-name or panel** patterns. S6 is **two-(few-)leg**: spread construction, stationarity / z-entry, and explicit **costs + divergence** handling. Implementation must not pretend splits/dividends are free.
+
+## Out of scope (initial slice)
+
+- Intraday execution or partial fills.
+- Full survivorship-bias-free ETF pair universes (may start with explicit CLI `--leg-a` / `--leg-b`).
 
 ## Acceptance (when implemented)
 
-- Explicit data alignment and CA handling documented (v1 may be “adjusted close only” with warnings).
-- CLI / merit hooks consistent with research execution envelope where applicable.
-- Tests on synthetic spread with known mean reversion (mocked).
+- Documented spread definition (price vs log, beta estimation window, min history).
+- Causal labeling: beta and z-score use data **strictly before** signal day where applicable.
+- CLI parity target: `s6`, `s6-merit`, `eval-bundle --strategy s6` following S5 patterns (pair universe contract TBD).
+- Tests: synthetic two-name series; no network.
