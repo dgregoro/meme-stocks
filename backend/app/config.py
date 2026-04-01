@@ -204,6 +204,10 @@ class Settings(BaseSettings):
     s6_regime_n_buckets: int = 4
     s6_load_buffer_calendar_days: int = 400
 
+    # S7 rule discovery (025): bounded quantile grid; cap candidates; not merit / eval-bundle
+    s7_rule_discovery_n_quantiles: int = 10
+    s7_rule_discovery_max_rules: int = 20_000
+
     # Default round-trip cost for documentation / ResearchRunEnvelope (actual sims use their own fields)
     research_default_round_trip_cost_bps: float = 10.0
 

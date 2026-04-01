@@ -23,6 +23,11 @@ def register_research(app: typer.Typer) -> None:
     recipe_app = typer.Typer(help="Load and run declarative research recipes.")
     research_app.add_typer(recipe_app, name="recipe")
 
+    rule_discovery_app = typer.Typer(
+        help="S7 bounded rule discovery (hold-out quantile grid; high false-discovery risk). Not eval-bundle.",
+    )
+    research_app.add_typer(rule_discovery_app, name="rule-discovery")
+
     @recipe_app.command("run")
     def research_recipe_run(
         recipe_path: str = typer.Argument(..., help="Path to recipe YAML file"),
@@ -214,3 +219,81 @@ def register_research(app: typer.Typer) -> None:
 
         if result.errors:
             typer.echo(f"Warning: {len(result.errors)} error(s) during cap lookup; see JSON", err=True)
+
+    @rule_discovery_app.command("build-matrix")
+    def research_rule_discovery_build_matrix(
+        symbol: str = typer.Option(..., "--symbol", "-s", help="Ticker"),
+        start: str = typer.Option(..., "--start", help="YYYY-MM-DD (inclusive)"),
+        end: str = typer.Option(..., "--end", help="YYYY-MM-DD (inclusive)"),
+        horizon: int = typer.Option(..., "--horizon", "-h", help="Forward return horizon (trading days)", min=1),
+        output: str = typer.Option(..., "--output", "-o", help="Write CSV here"),
+    ) -> None:
+        """Build deterministic S7 daily feature + forward-label CSV from price_data (read-only)."""
+        from backend.app.data.database import SessionLocal, init_db
+        from backend.app.services.s7_rule_discovery.feature_matrix import (
+            build_feature_matrix_rows,
+            write_matrix_csv,
+        )
+
+        typer.echo(
+            "S7 matrix: exploratory only; rolling features use same windows as S1-style settings.",
+            err=True,
+        )
+        init_db()
+        db = SessionLocal()
+        try:
+            s_d = parse_cli_date(start)
+            e_d = parse_cli_date(end)
+            rows, label = build_feature_matrix_rows(db, symbol, s_d, e_d, horizon)
+            outp = Path(output).resolve()
+            write_matrix_csv(outp, rows, label)
+        except ValueError as exc:
+            typer.echo(str(exc), err=True)
+            raise typer.Exit(1) from exc
+        finally:
+            db.close()
+        typer.echo(f"Wrote {len(rows)} rows label={label} -> {outp}", err=True)
+
+    @rule_discovery_app.command("run-search")
+    def research_rule_discovery_run_search(
+        matrix_path: str = typer.Option(..., "--matrix", "-m", help="CSV from build-matrix"),
+        train_end: str = typer.Option(..., "--train-end", help="Last inclusive train date YYYY-MM-DD"),
+        ack_overfitting_risk: bool = typer.Option(
+            False,
+            "--ack-overfitting-risk",
+            help="Required opt-in: acknowledges multiple-testing / overfitting hazard",
+        ),
+        label: str | None = typer.Option(
+            None,
+            "--label",
+            help="Label column (default: infer single fwd_*_pct from CSV)",
+        ),
+        output: str | None = typer.Option(None, "--output", "-o", help="Write JSON here (stdout if omitted)"),
+    ) -> None:
+        """Run pre-registered quantile grid; requires --ack-overfitting-risk."""
+        from backend.app.services.s7_rule_discovery.grid_search import run_search_from_matrix_path
+
+        if not ack_overfitting_risk:
+            typer.echo(
+                "Error: refuse to run without --ack-overfitting-risk (S7 is exploratory; see spec 025).",
+                err=True,
+            )
+            raise typer.Exit(1)
+        typer.echo(
+            "S7 search: results are not merit gates; treat as hypothesis generation only.",
+            err=True,
+        )
+        path = Path(matrix_path).resolve()
+        te = parse_cli_date(train_end)
+        try:
+            payload = run_search_from_matrix_path(path, train_end=te, label_key=label, ack_overfitting_risk=True)
+        except (FileNotFoundError, ValueError) as exc:
+            typer.echo(str(exc), err=True)
+            raise typer.Exit(1) from exc
+        text = json.dumps(payload, indent=2, default=str)
+        if output:
+            outp = Path(output).resolve()
+            outp.parent.mkdir(parents=True, exist_ok=True)
+            outp.write_text(text, encoding="utf-8")
+            typer.echo(f"Wrote JSON -> {outp}", err=True)
+        typer.echo(text)
