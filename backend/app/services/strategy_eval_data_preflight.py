@@ -80,7 +80,35 @@ def _assess_all(
     strategy: StrategyMeritId,
     eval_start: date | None,
     eval_end: date | None,
+    *,
+    pair_leg_b: str | None = None,
 ) -> list[DailyStrategySymbolDataAssessment]:
+    panel = list(dict.fromkeys(symbols))
+    if strategy == "s5":
+        return [
+            assess_daily_strategy_symbol_data(
+                db,
+                sym,
+                strategy,
+                eval_start,
+                eval_end,
+                panel_universe=panel,
+            )
+            for sym in symbols
+        ]
+    if strategy == "s6":
+        lb = str(pair_leg_b).strip().upper() if pair_leg_b and str(pair_leg_b).strip() else ""
+        return [
+            assess_daily_strategy_symbol_data(
+                db,
+                sym,
+                strategy,
+                eval_start,
+                eval_end,
+                pair_leg_b=lb or None,
+            )
+            for sym in symbols
+        ]
     return [assess_daily_strategy_symbol_data(db, sym, strategy, eval_start, eval_end) for sym in symbols]
 
 
@@ -93,11 +121,14 @@ def run_strategy_eval_data_preflight(
     *,
     mode: PreflightMode = "check",
     all_stocks_ensure: bool = False,
+    pair_leg_b: str | None = None,
 ) -> StrategyEvalPreflightResult:
-    """Verify (and optionally fetch) prerequisites for S1–S4 daily-strategy evaluation.
+    """Verify (and optionally fetch) prerequisites for S1–S6 daily-strategy evaluation.
 
     S3 additionally requires persisted VIX/VIX3M observations (``backfill vol-term`` / Yahoo).
     S4 uses OHLCV only (calendar flags are computed from bar dates).
+    S5 uses the **full symbol list** as the cross-section panel on each assess call (merit/preflight pass).
+    S6 uses ``pair_leg_b`` as leg B for each symbol (leg A); ensure mode also seeds/backfills leg B.
 
     * ``mode="check"``: read-only; no Alpaca.
     * ``mode="ensure"``: create missing ``stocks`` rows, then Alpaca daily backfill for symbols
@@ -108,6 +139,11 @@ def run_strategy_eval_data_preflight(
     ``daily_strategy_ensure_data_max_symbols`` to avoid accidental mass API use.
     """
     syms = _dedupe_symbols(symbols)
+    leg_b_u = str(pair_leg_b).strip().upper() if pair_leg_b and str(pair_leg_b).strip() else None
+    seed_symbol_set = list(syms)
+    if strategy == "s6" and leg_b_u:
+        seed_symbol_set = list(dict.fromkeys(seed_symbol_set + [leg_b_u]))
+
     actions: list[str] = []
     errors: list[str] = []
     settings = get_settings()
@@ -157,11 +193,13 @@ def run_strategy_eval_data_preflight(
                 errors.append(msg)
                 logger.warning("preflight vol-term backfill failed: %s", exc)
 
-    assessments = _assess_all(db, syms, strategy, eval_start, eval_end)
+    assessments = _assess_all(db, syms, strategy, eval_start, eval_end, pair_leg_b=leg_b_u)
     all_ready = all(a.status == "ready" for a in assessments)
 
     if mode == "ensure" and not all_ready:
         need_fetch = [a.symbol for a in assessments if a.status != "ready"]
+        if strategy == "s6" and leg_b_u:
+            need_fetch = list(dict.fromkeys(need_fetch + [leg_b_u]))
         bf_start, bf_end = _backfill_date_range(eval_start, eval_end)
         try:
             from backend.app.services.leader_follower_replay_service import (
@@ -181,7 +219,7 @@ def run_strategy_eval_data_preflight(
             errors.append(msg)
             logger.warning("preflight backfill failed: %s", exc)
 
-        assessments = _assess_all(db, syms, strategy, eval_start, eval_end)
+        assessments = _assess_all(db, syms, strategy, eval_start, eval_end, pair_leg_b=leg_b_u)
         all_ready = all(a.status == "ready" for a in assessments)
 
     if all_ready:

@@ -22,7 +22,14 @@ def _flags_from_report(report: dict[str, Any]) -> tuple[bool | None, bool | None
     cp: bool | None = None
     rp: bool | None = None
     ag: bool | None = None
-    if kind in ("s1_merit_report", "s2_merit_report", "s3_merit_report", "s4_merit_report"):
+    if kind in (
+        "s1_merit_report",
+        "s2_merit_report",
+        "s3_merit_report",
+        "s4_merit_report",
+        "s5_merit_report",
+        "s6_merit_report",
+    ):
         raw = report.get("checklist", {}).get("pass")
         cp = bool(raw) if raw is not None else None
     elif kind in (
@@ -30,6 +37,8 @@ def _flags_from_report(report: dict[str, Any]) -> tuple[bool | None, bool | None
         "s2_merit_report_rolling",
         "s3_merit_report_rolling",
         "s4_merit_report_rolling",
+        "s5_merit_report_rolling",
+        "s6_merit_report_rolling",
     ):
         raw = report.get("rollup", {}).get("rolling_pass")
         rp = bool(raw) if raw is not None else None
@@ -58,6 +67,10 @@ def _strategy_id_from_report(report: dict[str, Any]) -> str:
         return "s3"
     if isinstance(kind, str) and kind.startswith("s4_"):
         return "s4"
+    if isinstance(kind, str) and kind.startswith("s5_"):
+        return "s5"
+    if isinstance(kind, str) and kind.startswith("s6_"):
+        return "s6"
     return "unknown"
 
 
@@ -78,6 +91,8 @@ def _n_splits(report: dict[str, Any]) -> int:
         "s2_merit_report_rolling",
         "s3_merit_report_rolling",
         "s4_merit_report_rolling",
+        "s5_merit_report_rolling",
+        "s6_merit_report_rolling",
     ):
         return int(report.get("n_splits") or 1)
     if kind == "strategy_merit_bundle":
@@ -92,6 +107,8 @@ def _split_mode(report: dict[str, Any]) -> str | None:
         "s2_merit_report_rolling",
         "s3_merit_report_rolling",
         "s4_merit_report_rolling",
+        "s5_merit_report_rolling",
+        "s6_merit_report_rolling",
     ):
         sm = report.get("split_mode_requested")
         return str(sm) if sm is not None else None

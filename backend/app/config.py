@@ -191,6 +191,19 @@ class Settings(BaseSettings):
     s4_include_calendar_month_end: bool = True
     s4_include_quarter_end_calendar: bool = True
 
+    # Daily-frequency S5: cross-sectional return dispersion panel (023); expanding quantile regimes
+    s5_min_symbols_cross_section: int = 10
+    s5_regime_min_history_days: int = 252
+    s5_regime_n_buckets: int = 4
+    s5_load_buffer_calendar_days: int = 400
+
+    # Daily-frequency S6: slow pairs — causal OLS hedge + rolling spread z + expanding quantile regimes (024)
+    s6_beta_window_days: int = 60
+    s6_zscore_window_days: int = 20
+    s6_regime_min_history_days: int = 252
+    s6_regime_n_buckets: int = 4
+    s6_load_buffer_calendar_days: int = 400
+
     # Default round-trip cost for documentation / ResearchRunEnvelope (actual sims use their own fields)
     research_default_round_trip_cost_bps: float = 10.0
 
