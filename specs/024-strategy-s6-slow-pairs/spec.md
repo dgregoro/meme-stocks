@@ -2,7 +2,7 @@
 
 **Feature Branch**: `024-strategy-s6-slow-pairs`
 **Created**: 2026-03-30
-**Status**: Spec / scaffold only — **not implemented** in product CLI
+**Status**: Implemented — `evaluate daily-strategy s6`, `s6-merit`, `eval-bundle --strategy s6 --leg-b` (+ persistence / preflight)
 **Input**: `docs/STRATEGY_EXPLORATION.md` S6: mean reversion of a spread between liquid peers (rolling beta, spread z-score); two-leg execution and corporate-action awareness.
 
 ## Problem
