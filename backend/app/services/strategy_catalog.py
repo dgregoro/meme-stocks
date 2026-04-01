@@ -79,8 +79,8 @@ STRATEGY_DEFINITIONS: tuple[StrategyDefinition, ...] = (
         "Slow pairs / relative value",
         "Two (or few) daily series with corporate-action and two-leg execution awareness.",
         "Paired daily returns",
-        "planned",
-        None,
+        "implemented",
+        "evaluate daily-strategy s6 --leg-b … | s6-merit --leg-b … | eval-bundle --strategy s6 --leg-b …",
     ),
     StrategyDefinition(
         "S7",

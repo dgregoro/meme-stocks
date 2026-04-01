@@ -75,6 +75,23 @@ def test_build_merit_run_row_s5() -> None:
 
 
 @pytest.mark.unit
+def test_build_merit_run_row_s6_rolling() -> None:
+    rep = {
+        "kind": "s6_merit_report_rolling",
+        "parent_window": {"start": "2024-01-01", "end": "2024-06-01"},
+        "symbols_requested": ["AAA", "BBB"],
+        "n_splits": 2,
+        "split_mode_requested": "calendar",
+        "rollup": {"rolling_pass": True},
+    }
+    row = build_merit_run_row(rep)
+    assert row.strategy_id == "s6"
+    assert row.n_splits == 2
+    assert row.split_mode == "calendar"
+    assert row.rolling_pass is True
+
+
+@pytest.mark.unit
 def test_build_merit_run_row_s3() -> None:
     rep = {
         "kind": "s3_merit_report",

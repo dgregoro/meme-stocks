@@ -118,6 +118,7 @@ def _daily_strategy_preflight_phase(
     preflight_only: bool,
     ensure_data: bool,
     all_stocks: bool,
+    pair_leg_b: str | None = None,
 ) -> None:
     """Run spec-019 preflight; exit on failure. ``preflight_only`` prints JSON and exits."""
     from backend.app.services.daily_frequency_strategy_research import StrategyMeritId
@@ -140,6 +141,7 @@ def _daily_strategy_preflight_phase(
         eval_end,
         mode=mode,
         all_stocks_ensure=bool(ensure_data and all_stocks),
+        pair_leg_b=pair_leg_b,
     )
 
     if preflight_only:
@@ -163,7 +165,7 @@ def register_evaluate(app: typer.Typer) -> None:
     evaluate_app = typer.Typer(help="On-demand research evaluation summaries (read-only).")
     app.add_typer(evaluate_app, name="evaluate")
 
-    daily_strat = typer.Typer(help="Daily OHLCV strategies (S1–S5); see docs/STRATEGY_TESTING_PLAN.md.")
+    daily_strat = typer.Typer(help="Daily OHLCV strategies (S1–S6); see docs/STRATEGY_TESTING_PLAN.md.")
     evaluate_app.add_typer(daily_strat, name="daily-strategy")
 
     @daily_strat.command("eval-bundle")
@@ -171,7 +173,12 @@ def register_evaluate(app: typer.Typer) -> None:
         strategy: str = typer.Option(
             ...,
             "--strategy",
-            help="s1 (vol mismatch) | s2 (gap ecology) | s3 (VIX/VIX3M) | s4 (calendar flags)",
+            help="s1 | s2 | s3 | s4 | s5 | s6 (s6 requires --leg-b)",
+        ),
+        leg_b: str | None = typer.Option(
+            None,
+            "--leg-b",
+            help="S6 only: fixed leg B ticker (required when --strategy s6)",
         ),
         start: str = typer.Option(..., "--start", help="Eval window start (YYYY-MM-DD)"),
         end: str = typer.Option(..., "--end", help="Eval window end (YYYY-MM-DD)"),
@@ -237,9 +244,15 @@ def register_evaluate(app: typer.Typer) -> None:
         )
 
         strat = strategy.strip().lower()
-        if strat not in ("s1", "s2", "s3", "s4", "s5"):
-            typer.echo("Error: --strategy must be s1, s2, s3, s4, or s5", err=True)
+        if strat not in ("s1", "s2", "s3", "s4", "s5", "s6"):
+            typer.echo("Error: --strategy must be s1, s2, s3, s4, s5, or s6", err=True)
             raise typer.Exit(1)
+        pair_b_opt: str | None = None
+        if strat == "s6":
+            if not leg_b or not str(leg_b).strip():
+                typer.echo("Error: --leg-b is required when --strategy is s6", err=True)
+                raise typer.Exit(1)
+            pair_b_opt = str(leg_b).strip().upper()
         strategy_id = cast(StrategyMeritId, strat)
 
         start_d = parse_cli_date(start)
@@ -294,6 +307,7 @@ def register_evaluate(app: typer.Typer) -> None:
                 preflight_only=preflight_only,
                 ensure_data=ensure_data,
                 all_stocks=all_stocks,
+                pair_leg_b=pair_b_opt,
             )
             cal_override = None
             if trading_calendar_symbols:
@@ -308,6 +322,7 @@ def register_evaluate(app: typer.Typer) -> None:
                 rolling_splits=rolling_splits,
                 split_mode=split_mode_t,
                 trading_calendar_symbols=cal_override,
+                pair_leg_b=pair_b_opt,
             )
             sk_bundle = bundle.get("single_window", {}).get("symbols_skipped") or []
             if sk_bundle and not ensure_data:
@@ -926,6 +941,125 @@ def register_evaluate(app: typer.Typer) -> None:
         finally:
             db.close()
 
+    @daily_strat.command("s6-merit")
+    def evaluate_daily_s6_merit(
+        start: str = typer.Option(..., "--start", help="Eval window start (YYYY-MM-DD)"),
+        end: str = typer.Option(..., "--end", help="Eval window end (YYYY-MM-DD)"),
+        leg_b: str = typer.Option(..., "--leg-b", help="Fixed leg B ticker (pair hedge target)"),
+        symbols: str | None = typer.Option(None, "--symbols", help="Comma-separated leg A tickers"),
+        symbols_file: str | None = typer.Option(None, "--symbols-file", help="Path to tickers (one per line)"),
+        all_stocks: bool = typer.Option(False, "--all-stocks", help="Use all symbols in stocks table as leg A list"),
+        splits: int = typer.Option(1, "--splits", min=1, max=24),
+        append_jsonl: str | None = typer.Option(None, "--append-jsonl"),
+        split_mode: str = typer.Option("calendar", "--split-mode"),
+        trading_calendar_symbols: str | None = typer.Option(
+            None,
+            "--trading-calendar-symbols",
+        ),
+        preflight_only: bool = typer.Option(False, "--preflight-only"),
+        ensure_data: bool = typer.Option(
+            False,
+            "--ensure-data",
+            help="Before merit run: create missing stock rows and Alpaca backfill if needed",
+        ),
+        no_persist: bool = typer.Option(
+            False,
+            "--no-persist",
+            help="Do not store this run in daily_strategy_merit_runs",
+        ),
+    ) -> None:
+        """Pooled S6 pair spread z regimes: each leg A vs fixed leg B (--leg-b)."""
+        from backend.app.data.repositories.stock_repo import StockRepository
+        from backend.app.services.daily_frequency_strategy_research import (
+            SplitMode,
+            run_s6_merit_report,
+            run_s6_merit_rolling_report,
+        )
+
+        start_d = parse_cli_date(start)
+        end_d = parse_cli_date(end)
+        sm = split_mode.strip().lower()
+        if sm not in ("calendar", "trading"):
+            typer.echo("Error: --split-mode must be calendar or trading", err=True)
+            raise typer.Exit(1)
+        split_mode_t = cast(SplitMode, sm)
+        leg_bu = str(leg_b).strip().upper()
+
+        if start_d > end_d:
+            typer.echo("Error: --start must be on or before --end", err=True)
+            raise typer.Exit(1)
+        if symbols and symbols_file:
+            typer.echo("Error: pass either --symbols or --symbols-file, not both", err=True)
+            raise typer.Exit(1)
+        if all_stocks and (symbols or symbols_file):
+            typer.echo(
+                "Error: --all-stocks cannot be combined with --symbols or --symbols-file",
+                err=True,
+            )
+            raise typer.Exit(1)
+        if not all_stocks and not symbols and not symbols_file:
+            typer.echo("Error: pass --symbols, --symbols-file, or --all-stocks", err=True)
+            raise typer.Exit(1)
+
+        init_db()
+        db = SessionLocal()
+        try:
+            if all_stocks:
+                sym_list = [s.symbol for s in StockRepository(db).list()]
+            elif symbols_file is not None:
+                sf = Path(symbols_file)
+                if not sf.is_file():
+                    typer.echo(f"Error: --symbols-file not found: {sf}", err=True)
+                    raise typer.Exit(1)
+                sym_list = load_symbols_from_path(sf)
+                if not sym_list:
+                    typer.echo("Error: --symbols-file is empty", err=True)
+                    raise typer.Exit(1)
+            else:
+                if symbols is None:
+                    typer.echo("Error: --symbols required unless --all-stocks or --symbols-file", err=True)
+                    raise typer.Exit(1)
+                sym_list = [s.strip().upper() for s in symbols.split(",") if s.strip()]
+            cal_override = None
+            if trading_calendar_symbols:
+                cal_override = [s.strip().upper() for s in trading_calendar_symbols.split(",") if s.strip()]
+
+            _daily_strategy_preflight_phase(
+                db,
+                sym_list,
+                "s6",
+                start_d,
+                end_d,
+                preflight_only=preflight_only,
+                ensure_data=ensure_data,
+                all_stocks=all_stocks,
+                pair_leg_b=leg_bu,
+            )
+
+            if splits > 1:
+                report = run_s6_merit_rolling_report(
+                    db,
+                    sym_list,
+                    start_d,
+                    end_d,
+                    leg_b=leg_bu,
+                    n_splits=splits,
+                    split_mode=split_mode_t,
+                    trading_calendar_symbols=cal_override,
+                )
+            else:
+                report = run_s6_merit_report(db, sym_list, start_d, end_d, leg_b=leg_bu)
+
+            if report.get("symbols_skipped") and not ensure_data:
+                typer.echo(
+                    "Tip: use --preflight-only to inspect data readiness or --ensure-data to seed/backfill (Alpaca).",
+                    err=True,
+                )
+            _persist_merit_output(db, report, no_persist=no_persist)
+            _emit_merit_report_stdout_jsonl(report, splits=splits, append_jsonl=append_jsonl)
+        finally:
+            db.close()
+
     @daily_strat.command("s1")
     def evaluate_daily_s1(
         symbol: str = typer.Option(..., "--symbol", "-s", help="Stock symbol"),
@@ -1118,6 +1252,47 @@ def register_evaluate(app: typer.Typer) -> None:
                 all_stocks=False,
             )
             summary = run_s5_evaluation(db, sym_u, start_d, end_d, panel_universe=panel_dedup)
+            if summary.get("hint"):
+                typer.echo(summary["hint"], err=True)
+            typer.echo(json.dumps(summary, indent=2, default=str))
+        finally:
+            db.close()
+
+    @daily_strat.command("s6")
+    def evaluate_daily_s6(
+        symbol: str = typer.Option(..., "--symbol", "-s", help="Leg A (subject) ticker"),
+        leg_b: str = typer.Option(..., "--leg-b", help="Leg B ticker for the pair"),
+        start: str | None = typer.Option(None, "--start", help="Evaluate dates on/after (YYYY-MM-DD)"),
+        end: str | None = typer.Option(None, "--end", help="Evaluate dates on/before (YYYY-MM-DD)"),
+        preflight_only: bool = typer.Option(False, "--preflight-only"),
+        ensure_data: bool = typer.Option(
+            False,
+            "--ensure-data",
+            help="Before eval: create missing stock rows and Alpaca backfill if needed",
+        ),
+    ) -> None:
+        """S6: causal hedge spread z regimes vs forward returns on leg A (JSON)."""
+        from backend.app.services.daily_frequency_strategy_research import run_s6_evaluation
+
+        sym_a = symbol.strip().upper()
+        leg_bu = str(leg_b).strip().upper()
+        start_d = parse_cli_date(start) if start else None
+        end_d = parse_cli_date(end) if end else None
+        init_db()
+        db = SessionLocal()
+        try:
+            _daily_strategy_preflight_phase(
+                db,
+                [sym_a],
+                "s6",
+                start_d,
+                end_d,
+                preflight_only=preflight_only,
+                ensure_data=ensure_data,
+                all_stocks=False,
+                pair_leg_b=leg_bu,
+            )
+            summary = run_s6_evaluation(db, sym_a, start_d, end_d, pair_leg_b=leg_bu)
             if summary.get("hint"):
                 typer.echo(summary["hint"], err=True)
             typer.echo(json.dumps(summary, indent=2, default=str))

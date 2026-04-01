@@ -1,6 +1,6 @@
-"""Daily-frequency strategy research (STRATEGY_EXPLORATION S1–S5).
+"""Daily-frequency strategy research (STRATEGY_EXPLORATION S1–S6).
 
-Pure feature construction and forward-return summaries: S4 calendar flags; S5 cross-sectional dispersion panel.
+Pure feature construction and forward-return summaries: S4 calendar flags; S5 panel dispersion; S6 slow pairs.
 See docs/STRATEGY_TESTING_PLAN.md and docs/STRATEGY_EXPLORATION.md.
 """
 
@@ -42,11 +42,17 @@ from backend.app.services.s5_cross_sectional_dispersion import (
     load_closes_by_symbol,
     s5_regime_by_date,
 )
+from backend.app.services.s6_slow_pairs import (
+    aligned_pair_log_closes,
+    build_s6_z_feature_by_date,
+    load_pair_close_maps,
+    s6_regime_by_date,
+)
 
 logger = logging.getLogger(__name__)
 
 SplitMode = Literal["calendar", "trading"]
-StrategyMeritId = Literal["s1", "s2", "s3", "s4", "s5"]
+StrategyMeritId = Literal["s1", "s2", "s3", "s4", "s5", "s6"]
 
 
 @dataclass(frozen=True)
@@ -309,6 +315,15 @@ class S4WindowSample:
 @dataclass(frozen=True)
 class S5WindowSample:
     """Cross-sectional dispersion quantile regime forward returns + baseline (S5)."""
+
+    regime_returns: dict[str, dict[str, list[float]]]
+    baseline_returns: dict[str, list[float]]
+    counts: dict[str, int]
+
+
+@dataclass(frozen=True)
+class S6WindowSample:
+    """Slow-pair spread z-score quantile regime forward returns on leg A + baseline (S6)."""
 
     regime_returns: dict[str, dict[str, list[float]]]
     baseline_returns: dict[str, list[float]]
@@ -633,9 +648,72 @@ def _compute_s5_window_sample(
     return S5WindowSample(regime_returns=by_reg, baseline_returns=baseline, counts=counts)
 
 
+def _compute_s6_window_sample(
+    db: Session,
+    bars_a: list[DailyBar],
+    leg_a: str,
+    leg_b: str,
+    *,
+    horizons: tuple[int, ...],
+    since: date | None,
+    until: date | None,
+) -> S6WindowSample | None:
+    """Expanding quantile regimes on causal spread z vs forward returns on leg A."""
+    settings = get_settings()
+    w = max(2, int(settings.s6_beta_window_days))
+    z_w = max(2, int(settings.s6_zscore_window_days))
+    n_bk = max(2, min(20, int(settings.s6_regime_n_buckets)))
+    min_hist = max(2, int(settings.s6_regime_min_history_days))
+    buf = max(1, int(settings.s6_load_buffer_calendar_days))
+    leg_au, leg_bu = leg_a.strip().upper(), leg_b.strip().upper()
+    if leg_au == leg_bu:
+        return None
+    min_align = w + z_w + max(horizons) + 5 + min_hist
+    if len(bars_a) < min_align:
+        return None
+
+    d_first, d_last = bars_a[0].d, bars_a[-1].d
+    load_start = d_first - timedelta(days=buf)
+    ca, cb = load_pair_close_maps(db, leg_au, leg_bu, load_start=load_start, load_end=d_last)
+    dates, log_a, log_b = aligned_pair_log_closes(ca, cb)
+    if len(dates) < min_align:
+        return None
+
+    z_by_date = build_s6_z_feature_by_date(dates, log_a, log_b, beta_window=w, z_window=z_w)
+    regime_by_date = s6_regime_by_date(z_by_date, min_history=min_hist, n_buckets=n_bk)
+    bucket_keys = s3_bucket_keys(n_bk)
+    by_reg: dict[str, dict[str, list[float]]] = {k: {str(h): [] for h in horizons} for k in bucket_keys}
+    baseline: dict[str, list[float]] = {str(h): [] for h in horizons}
+    counts: dict[str, int] = {k: 0 for k in bucket_keys}
+    price_one = _price_close_dict(bars_a)
+    bar_dates = [b.d for b in bars_a]
+
+    for i in range(len(bars_a)):
+        d = bar_dates[i]
+        if since is not None and d < since:
+            continue
+        if until is not None and d > until:
+            continue
+        forwards: dict[int, float] = {}
+        for h in horizons:
+            fr = compute_forward_return("_series", d, h, price_one)
+            if fr is not None:
+                forwards[h] = fr
+        for h, fr in forwards.items():
+            baseline[str(h)].append(fr)
+        lab = regime_by_date.get(d)
+        if lab is None or lab not in by_reg:
+            continue
+        counts[lab] = counts.get(lab, 0) + 1
+        for h, fr in forwards.items():
+            by_reg[lab][str(h)].append(fr)
+
+    return S6WindowSample(regime_returns=by_reg, baseline_returns=baseline, counts=counts)
+
+
 @dataclass(frozen=True)
 class DailyStrategySymbolDataAssessment:
-    """Result of a read-only data sufficiency check for S1–S5 daily strategy eval."""
+    """Result of a read-only data sufficiency check for S1–S6 daily strategy eval."""
 
     symbol: str
     status: Literal["ready", "missing_stock", "insufficient_history"]
@@ -661,6 +739,11 @@ def daily_strategy_min_valid_bars(strategy: StrategyMeritId) -> int:
     if strategy == "s5":
         min_hist = max(2, int(settings.s5_regime_min_history_days))
         return max(horizons) + 5 + min_hist
+    if strategy == "s6":
+        w = max(2, int(settings.s6_beta_window_days))
+        z_w = max(2, int(settings.s6_zscore_window_days))
+        min_hist = max(2, int(settings.s6_regime_min_history_days))
+        return w + z_w + max(horizons) + 5 + min_hist
     ma_w = max(2, settings.daily_strategy_gap_ma_window)
     return ma_w + max(horizons) + 5
 
@@ -673,11 +756,13 @@ def assess_daily_strategy_symbol_data(
     eval_end: date | None,
     *,
     panel_universe: Sequence[str] | None = None,
+    pair_leg_b: str | None = None,
 ) -> DailyStrategySymbolDataAssessment:
     """Check whether ``price_data`` and ``stocks`` support evaluation for one symbol.
 
-    Uses the same feature windows as merit / single-symbol eval (S1–S5 compute paths).
+    Uses the same feature windows as merit / single-symbol eval (S1–S6 compute paths).
     For ``strategy=="s5"``, pass ``panel_universe`` (full symbol list); the subject must be included.
+    For ``strategy=="s6"``, pass ``pair_leg_b`` (leg B); ``symbol`` is leg A.
     """
     symu = symbol.strip().upper()
     stock_repo = StockRepository(db)
@@ -873,6 +958,120 @@ def assess_daily_strategy_symbol_data(
             until=eval_end,
         )
         if s5_sample is None:
+            return DailyStrategySymbolDataAssessment(
+                symbol=symu,
+                status="insufficient_history",
+                message=_price_data_hint(db, symu, len(rows), len(bars)),
+                min_bars_required=min_need,
+                valid_bar_count=len(bars),
+                raw_price_row_count=len(rows),
+            )
+        return DailyStrategySymbolDataAssessment(
+            symbol=symu,
+            status="ready",
+            message=None,
+            min_bars_required=min_need,
+            valid_bar_count=len(bars),
+            raw_price_row_count=len(rows),
+        )
+
+    if strategy == "s6":
+        if not pair_leg_b or not str(pair_leg_b).strip():
+            return DailyStrategySymbolDataAssessment(
+                symbol=symu,
+                status="insufficient_history",
+                message="S6: pair_leg_b (leg B ticker) is required",
+                min_bars_required=min_need,
+                valid_bar_count=len(bars),
+                raw_price_row_count=len(rows),
+            )
+        leg_b = str(pair_leg_b).strip().upper()
+        if leg_b == symu:
+            return DailyStrategySymbolDataAssessment(
+                symbol=symu,
+                status="insufficient_history",
+                message="S6: leg A and leg B must be different symbols",
+                min_bars_required=min_need,
+                valid_bar_count=len(bars),
+                raw_price_row_count=len(rows),
+            )
+        if stock_repo.get(leg_b) is None:
+            return DailyStrategySymbolDataAssessment(
+                symbol=symu,
+                status="insufficient_history",
+                message=f"S6: leg B {leg_b!r} missing from stocks table",
+                min_bars_required=min_need,
+                valid_bar_count=len(bars),
+                raw_price_row_count=len(rows),
+            )
+        w = max(2, int(settings.s6_beta_window_days))
+        z_w = max(2, int(settings.s6_zscore_window_days))
+        min_hist = max(2, int(settings.s6_regime_min_history_days))
+        buf = max(1, int(settings.s6_load_buffer_calendar_days))
+        rows_b = repo.list_for_stock(leg_b)
+        bars_b = bars_from_price_rows(rows_b)
+        if len(bars) < min_need:
+            return DailyStrategySymbolDataAssessment(
+                symbol=symu,
+                status="insufficient_history",
+                message=_price_data_hint(db, symu, len(rows), len(bars)),
+                min_bars_required=min_need,
+                valid_bar_count=len(bars),
+                raw_price_row_count=len(rows),
+            )
+        if len(bars_b) < min_need:
+            return DailyStrategySymbolDataAssessment(
+                symbol=symu,
+                status="insufficient_history",
+                message=f"S6 leg B {leg_b}: {_price_data_hint(db, leg_b, len(rows_b), len(bars_b))}",
+                min_bars_required=min_need,
+                valid_bar_count=len(bars),
+                raw_price_row_count=len(rows),
+            )
+        d_first, d_last = bars[0].d, bars[-1].d
+        load_start = d_first - timedelta(days=buf)
+        ca, cb = load_pair_close_maps(db, symu, leg_b, load_start=load_start, load_end=d_last)
+        adates, log_a, log_b = aligned_pair_log_closes(ca, cb)
+        if len(adates) < w + z_w + 5:
+            return DailyStrategySymbolDataAssessment(
+                symbol=symu,
+                status="insufficient_history",
+                message=(
+                    f"S6: insufficient overlapping calendar days between {symu} and {leg_b} "
+                    f"({len(adates)} aligned days)"
+                ),
+                min_bars_required=min_need,
+                valid_bar_count=len(bars),
+                raw_price_row_count=len(rows),
+            )
+        z_feat = build_s6_z_feature_by_date(
+            adates,
+            log_a,
+            log_b,
+            beta_window=w,
+            z_window=z_w,
+        )
+        n_qual = count_nonnull_features(z_feat, since=eval_start, until=eval_end)
+        if n_qual < min_hist:
+            return DailyStrategySymbolDataAssessment(
+                symbol=symu,
+                status="insufficient_history",
+                message=(f"S6: insufficient non-null spread z-score days in window " f"({n_qual} vs need {min_hist})"),
+                min_bars_required=min_need,
+                valid_bar_count=len(bars),
+                raw_price_row_count=len(rows),
+            )
+        horizons = _parse_horizons_setting(settings.daily_strategy_horizons)
+        s6_sample = _compute_s6_window_sample(
+            db,
+            bars,
+            symu,
+            leg_b,
+            horizons=horizons,
+            since=eval_start,
+            until=eval_end,
+        )
+        if s6_sample is None:
             return DailyStrategySymbolDataAssessment(
                 symbol=symu,
                 status="insufficient_history",
@@ -2020,6 +2219,173 @@ def run_s5_merit_rolling_report(
     }
 
 
+def run_s6_merit_report(
+    db: Session,
+    symbols: list[str],
+    eval_start: date,
+    eval_end: date,
+    *,
+    leg_b: str,
+) -> dict[str, Any]:
+    """Pooled S6 pair spread z regimes: each leg A in ``symbols`` vs fixed ``leg_b``."""
+    settings = get_settings()
+    horizons = _parse_horizons_setting(settings.daily_strategy_horizons)
+    min_ev = max(1, settings.daily_strategy_merit_min_events_per_regime)
+    conc_max = float(settings.daily_strategy_merit_concentration_top5_max_pct)
+    n_bk = max(2, min(20, int(settings.s6_regime_n_buckets)))
+    bucket_keys = s3_bucket_keys(n_bk)
+    leg_bu = leg_b.strip().upper()
+    panel_a = [s.strip().upper() for s in symbols if s.strip().upper() != leg_bu]
+    panel_a = list(dict.fromkeys(panel_a))
+
+    repo = PriceDataRepository(db)
+    pooled_regime: dict[str, dict[str, list[float]]] = {k: {str(h): [] for h in horizons} for k in bucket_keys}
+    pooled_base: dict[str, list[float]] = {str(h): [] for h in horizons}
+    pooled_counts: dict[str, int] = {k: 0 for k in bucket_keys}
+    regime_symbol_events: dict[str, dict[str, int]] = {k: {} for k in bucket_keys}
+    skipped: list[dict[str, str]] = []
+
+    for symu in panel_a:
+        rows = repo.list_for_stock(symu)
+        bars = bars_from_price_rows(rows)
+        sample = _compute_s6_window_sample(
+            db,
+            bars,
+            symu,
+            leg_bu,
+            horizons=horizons,
+            since=eval_start,
+            until=eval_end,
+        )
+        if sample is None:
+            skipped.append(
+                {
+                    "symbol": symu,
+                    "reason": "insufficient_bars_or_no_eval_days",
+                    "hint": _price_data_hint(db, symu, len(rows), len(bars)),
+                }
+            )
+            continue
+        for reg in bucket_keys:
+            pooled_counts[reg] += sample.counts.get(reg, 0)
+            for sy in sample.regime_returns[reg]:
+                pooled_regime[reg][sy].extend(sample.regime_returns[reg][sy])
+            n_ev = sample.counts.get(reg, 0)
+            if n_ev:
+                regime_symbol_events[reg][symu] = regime_symbol_events[reg].get(symu, 0) + n_ev
+        for hk in pooled_base:
+            pooled_base[hk].extend(sample.baseline_returns.get(hk, []))
+
+    baseline_metrics = {hk: metrics_from_returns(rs) for hk, rs in pooled_base.items()}
+    regime_metrics: dict[str, Any] = {}
+    vs_baseline: dict[str, Any] = {}
+    conc_by_regime: dict[str, float] = {}
+    for reg, hmap in pooled_regime.items():
+        regime_metrics[reg] = {hk: metrics_from_returns(rs) for hk, rs in hmap.items()}
+        vs_baseline[reg] = {}
+        conc_by_regime[reg] = _top5_concentration(regime_symbol_events[reg])
+        for hk in hmap:
+            rm = regime_metrics[reg][hk]
+            bm = baseline_metrics.get(hk, {})
+            ravg = rm.get("avg_return_pct", 0.0)
+            bavg = bm.get("avg_return_pct", 0.0)
+            vs_baseline[reg][hk] = {
+                "avg_excess_vs_baseline_pct": round(ravg - bavg, 4),
+                "baseline_avg_return_pct": bavg,
+            }
+
+    checklist_failures: list[str] = []
+    for reg in bucket_keys:
+        for hk in map(str, horizons):
+            rm = regime_metrics[reg][hk]
+            n = rm.get("evaluable_count", 0)
+            if n < min_ev:
+                checklist_failures.append(f"{reg} horizon {hk}: evaluable_count {n} < {min_ev}")
+            med = rm.get("median_return_pct")
+            avg = rm.get("avg_return_pct")
+            if n >= 10 and med is not None and avg is not None and med * avg < 0:
+                checklist_failures.append(f"{reg} horizon {hk}: median and avg disagree in sign")
+        n_sym = len({s for s in regime_symbol_events[reg] if regime_symbol_events[reg][s] > 0})
+        if n_sym > 1 and conc_by_regime[reg] > conc_max and pooled_counts.get(reg, 0) > 0:
+            checklist_failures.append(f"{reg}: top-5 symbol concentration {conc_by_regime[reg]} > {conc_max}")
+
+    return {
+        "kind": "s6_merit_report",
+        "eval_window": {"start": str(eval_start), "end": str(eval_end)},
+        "symbols_requested": panel_a,
+        "symbols_with_data": sorted({s for ev in regime_symbol_events.values() for s in ev}),
+        "symbols_skipped": skipped,
+        "params": {
+            "leg_b": leg_bu,
+            "s6_beta_window_days": int(settings.s6_beta_window_days),
+            "s6_zscore_window_days": int(settings.s6_zscore_window_days),
+            "s6_regime_min_history_days": int(settings.s6_regime_min_history_days),
+            "s6_regime_n_buckets": n_bk,
+            "merit_min_events_per_regime": min_ev,
+            "merit_concentration_top5_max_pct": conc_max,
+        },
+        "horizons": list(horizons),
+        "pooled_counts": pooled_counts,
+        "concentration_top5_by_regime": conc_by_regime,
+        "baseline_metrics": baseline_metrics,
+        "by_regime": regime_metrics,
+        "vs_baseline_avg_pct": vs_baseline,
+        "checklist": {
+            "pass": len(checklist_failures) == 0,
+            "failures": checklist_failures,
+            "note": "Minimum bar from SIGNAL_EVALUATION_CHECKLIST; passing does not imply tradable edge.",
+        },
+    }
+
+
+def run_s6_merit_rolling_report(
+    db: Session,
+    symbols: list[str],
+    eval_start: date,
+    eval_end: date,
+    *,
+    leg_b: str,
+    n_splits: int,
+    split_mode: SplitMode = "calendar",
+    trading_calendar_symbols: Sequence[str] | None = None,
+) -> dict[str, Any]:
+    """Rolling S6 merit (calendar or trading splits)."""
+    n_splits = max(1, int(n_splits))
+    cal_syms = (
+        list(trading_calendar_symbols) if trading_calendar_symbols is not None else [s.strip().upper() for s in symbols]
+    )
+    windows, mode_used = _merit_rolling_windows(db, eval_start, eval_end, n_splits, split_mode, cal_syms)
+    settings = get_settings()
+    min_ev = max(1, settings.daily_strategy_merit_min_events_per_regime)
+    horizons = _parse_horizons_setting(settings.daily_strategy_horizons)
+    n_bk = max(2, min(20, int(settings.s6_regime_n_buckets)))
+    bucket_keys = s3_bucket_keys(n_bk)
+    leg_bu = leg_b.strip().upper()
+
+    split_payloads: list[dict[str, Any]] = []
+    for ws, we in windows:
+        rep = run_s6_merit_report(db, symbols, ws, we, leg_b=leg_bu)
+        split_payloads.append({"eval_window": {"start": str(ws), "end": str(we)}, "report": rep})
+
+    rollup = _rollup_s3_merit_rolling(
+        split_payloads,
+        min_events_per_bucket=min_ev,
+        horizons=horizons,
+        bucket_keys=bucket_keys,
+    )
+
+    return {
+        "kind": "s6_merit_report_rolling",
+        "n_splits": len(windows),
+        "split_mode_requested": split_mode,
+        "split_mode_used": mode_used,
+        "parent_window": {"start": str(eval_start), "end": str(eval_end)},
+        "windows": [f"{a}..{b}" for a, b in windows],
+        "splits": split_payloads,
+        "rollup": rollup,
+    }
+
+
 def _strategy_merit_bundle_summary(
     strategy: StrategyMeritId,
     single: dict[str, Any],
@@ -2068,13 +2434,15 @@ def run_strategy_merit_bundle(
     rolling_splits: int = 5,
     split_mode: SplitMode = "trading",
     trading_calendar_symbols: Sequence[str] | None = None,
+    pair_leg_b: str | None = None,
 ) -> dict[str, Any]:
     """One-shot strategy evaluation: pooled merit on **[eval_start, eval_end]** plus optional rolling stability.
 
-    Use this as the default automation entrypoint for S1–S4 before deeper manual review.
+    Use this as the default automation entrypoint for S1–S6 before deeper manual review.
     """
     rs = int(rolling_splits)
     cal_override = list(trading_calendar_symbols) if trading_calendar_symbols is not None else None
+    pair_b_u = str(pair_leg_b).strip().upper() if pair_leg_b and str(pair_leg_b).strip() else None
 
     if strategy == "s1":
         single = run_s1_merit_report(db, symbols, eval_start, eval_end)
@@ -2141,6 +2509,22 @@ def run_strategy_merit_bundle(
                 split_mode=split_mode,
                 trading_calendar_symbols=cal_override,
             )
+    elif strategy == "s6":
+        if not pair_b_u:
+            raise ValueError("strategy s6 requires pair_leg_b (leg B ticker)")
+        single = run_s6_merit_report(db, symbols, eval_start, eval_end, leg_b=pair_b_u)
+        rolling = None
+        if rs >= 2:
+            rolling = run_s6_merit_rolling_report(
+                db,
+                symbols,
+                eval_start,
+                eval_end,
+                leg_b=pair_b_u,
+                n_splits=rs,
+                split_mode=split_mode,
+                trading_calendar_symbols=cal_override,
+            )
     else:
         raise ValueError(f"unknown strategy merit id: {strategy!r}")
 
@@ -2150,6 +2534,7 @@ def run_strategy_merit_bundle(
         "strategy": strategy,
         "eval_window": {"start": str(eval_start), "end": str(eval_end)},
         "symbols_requested": [s.strip().upper() for s in symbols],
+        "pair_leg_b": pair_b_u if strategy == "s6" else None,
         "rolling_splits_configured": rs,
         "split_mode": split_mode,
         "single_window": single,
@@ -2480,6 +2865,79 @@ def run_s5_evaluation(
     }
 
 
+def run_s6_evaluation(
+    db: Session,
+    symbol: str,
+    since: date | None,
+    until: date | None,
+    *,
+    pair_leg_b: str,
+) -> dict[str, Any]:
+    """S6: pair spread z-score quantile regimes vs forward returns on leg A (subject symbol)."""
+    settings = get_settings()
+    horizons = _parse_horizons_setting(settings.daily_strategy_horizons)
+    symu = symbol.strip().upper()
+    leg_b = str(pair_leg_b).strip().upper()
+
+    repo = PriceDataRepository(db)
+    rows = repo.list_for_stock(symu)
+    bars = bars_from_price_rows(rows)
+    min_needed = daily_strategy_min_valid_bars("s6")
+    if len(bars) < min_needed:
+        logger.warning(
+            "S6: insufficient bars for leg A %s (%s valid / %s raw rows, need %s)",
+            symu,
+            len(bars),
+            len(rows),
+            min_needed,
+        )
+        hint = _price_data_hint(db, symu, len(rows), len(bars))
+        return _empty_summary("S6_slow_pairs", symu, since, until, horizons, hint=hint)
+
+    sample = _compute_s6_window_sample(
+        db,
+        bars,
+        symu,
+        leg_b,
+        horizons=horizons,
+        since=since,
+        until=until,
+    )
+    if sample is None:
+        return _empty_summary(
+            "S6_slow_pairs",
+            symu,
+            since,
+            until,
+            horizons,
+            hint="S6: insufficient overlap with leg B or regime history (see s6_* config and pair_leg_b).",
+        )
+
+    summary_by: dict[str, Any] = {}
+    for reg_key, hmap in sample.regime_returns.items():
+        summary_by[reg_key] = {}
+        for hk, rs in hmap.items():
+            summary_by[reg_key][hk] = metrics_from_returns(rs)
+
+    n_bk = max(2, min(20, int(settings.s6_regime_n_buckets)))
+
+    return {
+        "strategy": "S6_slow_pairs",
+        "symbol": symu,
+        "date_range": {"start": str(since) if since else None, "end": str(until) if until else None},
+        "params": {
+            "leg_b": leg_b,
+            "s6_beta_window_days": int(settings.s6_beta_window_days),
+            "s6_zscore_window_days": int(settings.s6_zscore_window_days),
+            "s6_regime_min_history_days": int(settings.s6_regime_min_history_days),
+            "s6_regime_n_buckets": n_bk,
+        },
+        "horizons": list(horizons),
+        "counts": sample.counts,
+        "by_regime": summary_by,
+    }
+
+
 def _empty_summary(
     strategy: str,
     symbol: str,
@@ -2499,7 +2957,7 @@ def _empty_summary(
     }
     if hint:
         base["hint"] = hint
-    if "S1" in strategy or strategy.startswith("S3") or strategy.startswith("S5"):
+    if "S1" in strategy or strategy.startswith("S3") or strategy.startswith("S5") or strategy.startswith("S6"):
         base["by_regime"] = {}
     else:
         base["by_bucket"] = {}

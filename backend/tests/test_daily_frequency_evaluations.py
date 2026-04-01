@@ -1,4 +1,4 @@
-"""Tests for run_s1/s2/s3/s4/s5 evaluation and merit entrypoints (data sufficiency + happy path)."""
+"""Tests for run_s1/s2/s3/s4/s5/s6 evaluation and merit entrypoints (data sufficiency + happy path)."""
 
 from __future__ import annotations
 
@@ -31,6 +31,8 @@ from backend.app.services.daily_frequency_strategy_research import (
     run_s5_evaluation,
     run_s5_merit_report,
     run_s5_merit_rolling_report,
+    run_s6_evaluation,
+    run_s6_merit_report,
     run_strategy_merit_bundle,
 )
 
@@ -62,6 +64,34 @@ def _seed_ohlcv(db: Session, symbol: str, start: date, n: int) -> None:
                 volume=800_000 + i * 500,
             )
         )
+
+
+def _seed_s6_pair(
+    db: Session,
+    leg_a: str,
+    leg_b: str,
+    start: date,
+    n: int,
+) -> None:
+    """Two aligned series with distinct drifts for hedge residual / z."""
+    db.add(Stock(symbol=leg_a, name=leg_a, sector=None, market_cap=None))
+    db.add(Stock(symbol=leg_b, name=leg_b, sector=None, market_cap=None))
+    for i in range(n):
+        d = start + timedelta(days=i)
+        ca = 100.0 + 0.11 * i
+        cb = 95.0 + 0.09 * i
+        for sym, c in ((leg_a, ca), (leg_b, cb)):
+            db.add(
+                PriceData(
+                    stock_symbol=sym,
+                    date=d,
+                    open=c,
+                    high=c + 0.3,
+                    low=c - 0.3,
+                    close=c,
+                    volume=800_000 + i * 100,
+                )
+            )
 
 
 def _seed_s5_equity_panel(db: Session, symbols: tuple[str, ...], start: date, n: int) -> None:
@@ -637,6 +667,105 @@ def test_run_s4_merit_rolling_calendar(monkeypatch: pytest.MonkeyPatch) -> None:
         )
         assert roll["kind"] == "s4_merit_report_rolling"
         assert len(roll["splits"]) == 2
+    finally:
+        db.close()
+        get_settings.cache_clear()
+
+
+@pytest.mark.unit
+def test_run_s6_evaluation_success(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DAILY_STRATEGY_HORIZONS", "1")
+    monkeypatch.setenv("S6_BETA_WINDOW_DAYS", "5")
+    monkeypatch.setenv("S6_ZSCORE_WINDOW_DAYS", "5")
+    monkeypatch.setenv("S6_REGIME_MIN_HISTORY_DAYS", "5")
+    monkeypatch.setenv("S6_REGIME_N_BUCKETS", "4")
+    monkeypatch.setenv("S6_LOAD_BUFFER_CALENDAR_DAYS", "80")
+    get_settings.cache_clear()
+    db = _session()
+    try:
+        _seed_s6_pair(db, "SXA", "SXB", date(2024, 1, 2), 120)
+        db.commit()
+        out = run_s6_evaluation(db, "SXA", date(2024, 2, 10), date(2024, 5, 20), pair_leg_b="SXB")
+        assert out.get("error") is None
+        assert out["strategy"] == "S6_slow_pairs"
+        assert out["params"]["leg_b"] == "SXB"
+        assert out["by_regime"]
+    finally:
+        db.close()
+        get_settings.cache_clear()
+
+
+@pytest.mark.unit
+def test_run_s6_merit_report_pooled(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DAILY_STRATEGY_HORIZONS", "1")
+    monkeypatch.setenv("DAILY_STRATEGY_MERIT_MIN_EVENTS_PER_REGIME", "1")
+    monkeypatch.setenv("S6_BETA_WINDOW_DAYS", "5")
+    monkeypatch.setenv("S6_ZSCORE_WINDOW_DAYS", "5")
+    monkeypatch.setenv("S6_REGIME_MIN_HISTORY_DAYS", "5")
+    monkeypatch.setenv("S6_REGIME_N_BUCKETS", "4")
+    monkeypatch.setenv("S6_LOAD_BUFFER_CALENDAR_DAYS", "80")
+    get_settings.cache_clear()
+    db = _session()
+    try:
+        _seed_s6_pair(db, "SMA", "SMB", date(2024, 1, 2), 120)
+        db.commit()
+        rep = run_s6_merit_report(db, ["SMA", "SMB"], date(2024, 2, 10), date(2024, 5, 20), leg_b="SMB")
+        assert rep["kind"] == "s6_merit_report"
+        assert "by_regime" in rep
+    finally:
+        db.close()
+        get_settings.cache_clear()
+
+
+@pytest.mark.unit
+def test_run_strategy_merit_bundle_s6_requires_leg_b(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DAILY_STRATEGY_HORIZONS", "1")
+    get_settings.cache_clear()
+    db = _session()
+    try:
+        with pytest.raises(ValueError, match="pair_leg_b"):
+            run_strategy_merit_bundle(
+                db,
+                "s6",
+                ["X"],
+                date(2024, 2, 1),
+                date(2024, 3, 1),
+                rolling_splits=1,
+                split_mode="calendar",
+                pair_leg_b=None,
+            )
+    finally:
+        db.close()
+        get_settings.cache_clear()
+
+
+@pytest.mark.unit
+def test_run_strategy_merit_bundle_s6(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DAILY_STRATEGY_HORIZONS", "1")
+    monkeypatch.setenv("DAILY_STRATEGY_MERIT_MIN_EVENTS_PER_REGIME", "1")
+    monkeypatch.setenv("S6_BETA_WINDOW_DAYS", "5")
+    monkeypatch.setenv("S6_ZSCORE_WINDOW_DAYS", "5")
+    monkeypatch.setenv("S6_REGIME_MIN_HISTORY_DAYS", "5")
+    monkeypatch.setenv("S6_REGIME_N_BUCKETS", "4")
+    monkeypatch.setenv("S6_LOAD_BUFFER_CALENDAR_DAYS", "80")
+    get_settings.cache_clear()
+    db = _session()
+    try:
+        _seed_s6_pair(db, "B6A", "B6B", date(2024, 1, 2), 120)
+        db.commit()
+        b6 = run_strategy_merit_bundle(
+            db,
+            "s6",
+            ["B6A", "B6B"],
+            date(2024, 2, 10),
+            date(2024, 5, 20),
+            rolling_splits=1,
+            split_mode="calendar",
+            pair_leg_b="B6B",
+        )
+        assert b6["strategy"] == "s6"
+        assert b6["pair_leg_b"] == "B6B"
+        assert b6["single_window"]["kind"] == "s6_merit_report"
     finally:
         db.close()
         get_settings.cache_clear()
