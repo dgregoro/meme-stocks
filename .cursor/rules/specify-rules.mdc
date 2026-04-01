@@ -41,6 +41,8 @@ Auto-generated from all feature plans. Last updated: 2026-03-31
 - SQLite `price_data` + `stocks` only for S4; optional `daily_strategy_merit_runs` for persisted merit JSON (022-strategy-s4-calendar-events)
 - Python 3.11+ (project standard; CI may use 3.12) + FastAPI stack, SQLAlchemy, existing `daily_frequency_strategy_research`, `PriceDataRepository`, `prior_expanding_quantile_regimes` (024-strategy-s6-slow-pairs)
 - SQLite `price_data` + `stocks` only (no new tables) (024-strategy-s6-slow-pairs)
+- Python 3.11+ (CI may use 3.12) + FastAPI stack (existing), SQLAlchemy, Typer, pydantic-settings, existing `PriceDataRepository`, `DailyBar` / `bars_from_price_rows`, `realized_vol_series`, `volume_log_z_series` from `daily_frequency_strategy_research` (025-strategy-s7-rule-discovery)
+- SQLite `price_data` only for matrix build; search consumes CSV/JSON matrix files under `research_dataset_dir` policy (operator paths) (025-strategy-s7-rule-discovery)
 
 - Python 3.11 + FastAPI, SQLAlchemy, existing services (activity_detector, pattern_analyzer, sentiment_analyzer) (002-combined-signal-alerts)
 
@@ -60,6 +62,7 @@ cd src [ONLY COMMANDS FOR ACTIVE TECHNOLOGIES][ONLY COMMANDS FOR ACTIVE TECHNOLO
 Python 3.11: Follow standard conventions
 
 ## Recent Changes
+- 025-strategy-s7-rule-discovery: Added Python 3.11+ (CI may use 3.12) + FastAPI stack (existing), SQLAlchemy, Typer, pydantic-settings, existing `PriceDataRepository`, `DailyBar` / `bars_from_price_rows`, `realized_vol_series`, `volume_log_z_series` from `daily_frequency_strategy_research`
 - 024-strategy-s6-slow-pairs: Added Python 3.11+ (project standard; CI may use 3.12) + FastAPI stack, SQLAlchemy, existing `daily_frequency_strategy_research`, `PriceDataRepository`, `prior_expanding_quantile_regimes`
 - 022-strategy-s4-calendar-events: Added Python 3.11+ (project standard; CI may use 3.12) + FastAPI (app), SQLAlchemy (ORM), Typer (CLI), Pydantic / pydantic-settings (`config.py`), existing `PriceDataRepository`, `compute_forward_return` from `leader_follower_evaluation_service`
 - 020-shared-research-execution: Added Python 3.11+ (project std; CI may use 3.12) + SQLAlchemy (consumers only), Typer CLI (future commands), existing `PriceDataRepository` for planned backtest
