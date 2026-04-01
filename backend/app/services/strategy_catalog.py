@@ -71,8 +71,8 @@ STRATEGY_DEFINITIONS: tuple[StrategyDefinition, ...] = (
         "Cross-sectional dispersion",
         "Panel-level dispersion or factor-like structure across a defined universe.",
         "Panel of daily returns + universe rules",
-        "planned",
-        None,
+        "implemented",
+        "evaluate daily-strategy s5 --universe … | s5-merit | eval-bundle --strategy s5",
     ),
     StrategyDefinition(
         "S6",

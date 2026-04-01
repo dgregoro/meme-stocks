@@ -81,6 +81,19 @@ def _assess_all(
     eval_start: date | None,
     eval_end: date | None,
 ) -> list[DailyStrategySymbolDataAssessment]:
+    panel = list(dict.fromkeys(symbols))
+    if strategy == "s5":
+        return [
+            assess_daily_strategy_symbol_data(
+                db,
+                sym,
+                strategy,
+                eval_start,
+                eval_end,
+                panel_universe=panel,
+            )
+            for sym in symbols
+        ]
     return [assess_daily_strategy_symbol_data(db, sym, strategy, eval_start, eval_end) for sym in symbols]
 
 
@@ -94,10 +107,11 @@ def run_strategy_eval_data_preflight(
     mode: PreflightMode = "check",
     all_stocks_ensure: bool = False,
 ) -> StrategyEvalPreflightResult:
-    """Verify (and optionally fetch) prerequisites for S1–S4 daily-strategy evaluation.
+    """Verify (and optionally fetch) prerequisites for S1–S5 daily-strategy evaluation.
 
     S3 additionally requires persisted VIX/VIX3M observations (``backfill vol-term`` / Yahoo).
     S4 uses OHLCV only (calendar flags are computed from bar dates).
+    S5 uses the **full symbol list** as the cross-section panel on each assess call (merit/preflight pass).
 
     * ``mode="check"``: read-only; no Alpaca.
     * ``mode="ensure"``: create missing ``stocks`` rows, then Alpaca daily backfill for symbols

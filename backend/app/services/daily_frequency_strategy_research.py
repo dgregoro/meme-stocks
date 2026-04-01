@@ -1,6 +1,6 @@
-"""Daily-frequency strategy research (STRATEGY_EXPLORATION S1–S4).
+"""Daily-frequency strategy research (STRATEGY_EXPLORATION S1–S5).
 
-Pure feature construction and forward-return summaries from daily OHLCV (S4 adds calendar flags).
+Pure feature construction and forward-return summaries: S4 calendar flags; S5 cross-sectional dispersion panel.
 See docs/STRATEGY_TESTING_PLAN.md and docs/STRATEGY_EXPLORATION.md.
 """
 
@@ -36,11 +36,17 @@ from backend.app.services.s3_vol_term_regime import (
     prior_expanding_quantile_regimes,
     s3_bucket_keys,
 )
+from backend.app.services.s5_cross_sectional_dispersion import (
+    count_nonnull_features,
+    dispersion_feature_by_date,
+    load_closes_by_symbol,
+    s5_regime_by_date,
+)
 
 logger = logging.getLogger(__name__)
 
 SplitMode = Literal["calendar", "trading"]
-StrategyMeritId = Literal["s1", "s2", "s3", "s4"]
+StrategyMeritId = Literal["s1", "s2", "s3", "s4", "s5"]
 
 
 @dataclass(frozen=True)
@@ -296,6 +302,15 @@ class S4WindowSample:
     """Calendar-flag bucket forward returns + baseline for one symbol (S4)."""
 
     bucket_returns: dict[str, dict[str, list[float]]]
+    baseline_returns: dict[str, list[float]]
+    counts: dict[str, int]
+
+
+@dataclass(frozen=True)
+class S5WindowSample:
+    """Cross-sectional dispersion quantile regime forward returns + baseline (S5)."""
+
+    regime_returns: dict[str, dict[str, list[float]]]
     baseline_returns: dict[str, list[float]]
     counts: dict[str, int]
 
@@ -560,9 +575,67 @@ def _compute_s4_window_sample(
     return S4WindowSample(bucket_returns=by_bucket, baseline_returns=baseline, counts=counts)
 
 
+def _compute_s5_window_sample(
+    db: Session,
+    bars: list[DailyBar],
+    panel_universe: list[str],
+    *,
+    horizons: tuple[int, ...],
+    since: date | None,
+    until: date | None,
+) -> S5WindowSample | None:
+    """Expanding quantile regimes on cross-sectional return dispersion; labels equity days for one symbol."""
+    min_needed = max(horizons) + 5
+    if len(bars) < min_needed:
+        return None
+
+    settings = get_settings()
+    n_bk = max(2, min(20, int(settings.s5_regime_n_buckets)))
+    min_hist = max(2, int(settings.s5_regime_min_history_days))
+    min_xs = max(2, int(settings.s5_min_symbols_cross_section))
+    buf = max(1, int(settings.s5_load_buffer_calendar_days))
+    uni = list(dict.fromkeys(s.strip().upper() for s in panel_universe))
+    if len(uni) < min_xs:
+        return None
+
+    d_first, d_last = bars[0].d, bars[-1].d
+    load_start = d_first - timedelta(days=buf)
+    close_by = load_closes_by_symbol(db, uni, load_start=load_start, load_end=d_last)
+    feature_by_date = dispersion_feature_by_date(close_by, uni, min_symbols=min_xs)
+    regime_by_date = s5_regime_by_date(feature_by_date, min_history=min_hist, n_buckets=n_bk)
+    bucket_keys = s3_bucket_keys(n_bk)
+    by_reg: dict[str, dict[str, list[float]]] = {k: {str(h): [] for h in horizons} for k in bucket_keys}
+    baseline: dict[str, list[float]] = {str(h): [] for h in horizons}
+    counts: dict[str, int] = {k: 0 for k in bucket_keys}
+    price_one = _price_close_dict(bars)
+    dates = [b.d for b in bars]
+
+    for i in range(len(bars)):
+        d = dates[i]
+        if since is not None and d < since:
+            continue
+        if until is not None and d > until:
+            continue
+        forwards: dict[int, float] = {}
+        for h in horizons:
+            fr = compute_forward_return("_series", d, h, price_one)
+            if fr is not None:
+                forwards[h] = fr
+        for h, fr in forwards.items():
+            baseline[str(h)].append(fr)
+        lab = regime_by_date.get(d)
+        if lab is None or lab not in by_reg:
+            continue
+        counts[lab] = counts.get(lab, 0) + 1
+        for h, fr in forwards.items():
+            by_reg[lab][str(h)].append(fr)
+
+    return S5WindowSample(regime_returns=by_reg, baseline_returns=baseline, counts=counts)
+
+
 @dataclass(frozen=True)
 class DailyStrategySymbolDataAssessment:
-    """Result of a read-only data sufficiency check for S1–S4 daily strategy eval."""
+    """Result of a read-only data sufficiency check for S1–S5 daily strategy eval."""
 
     symbol: str
     status: Literal["ready", "missing_stock", "insufficient_history"]
@@ -585,6 +658,9 @@ def daily_strategy_min_valid_bars(strategy: StrategyMeritId) -> int:
         return max(horizons) + 5
     if strategy == "s4":
         return max(horizons) + 5
+    if strategy == "s5":
+        min_hist = max(2, int(settings.s5_regime_min_history_days))
+        return max(horizons) + 5 + min_hist
     ma_w = max(2, settings.daily_strategy_gap_ma_window)
     return ma_w + max(horizons) + 5
 
@@ -595,10 +671,13 @@ def assess_daily_strategy_symbol_data(
     strategy: StrategyMeritId,
     eval_start: date | None,
     eval_end: date | None,
+    *,
+    panel_universe: Sequence[str] | None = None,
 ) -> DailyStrategySymbolDataAssessment:
     """Check whether ``price_data`` and ``stocks`` support evaluation for one symbol.
 
-    Uses the same feature windows as merit / single-symbol eval (S1–S4 compute paths).
+    Uses the same feature windows as merit / single-symbol eval (S1–S5 compute paths).
+    For ``strategy=="s5"``, pass ``panel_universe`` (full symbol list); the subject must be included.
     """
     symu = symbol.strip().upper()
     stock_repo = StockRepository(db)
@@ -696,6 +775,104 @@ def assess_daily_strategy_symbol_data(
             until=eval_end,
         )
         if s3_sample is None:
+            return DailyStrategySymbolDataAssessment(
+                symbol=symu,
+                status="insufficient_history",
+                message=_price_data_hint(db, symu, len(rows), len(bars)),
+                min_bars_required=min_need,
+                valid_bar_count=len(bars),
+                raw_price_row_count=len(rows),
+            )
+        return DailyStrategySymbolDataAssessment(
+            symbol=symu,
+            status="ready",
+            message=None,
+            min_bars_required=min_need,
+            valid_bar_count=len(bars),
+            raw_price_row_count=len(rows),
+        )
+
+    if strategy == "s5":
+        min_xs = max(2, int(settings.s5_min_symbols_cross_section))
+        min_hist = max(2, int(settings.s5_regime_min_history_days))
+        buf = max(1, int(settings.s5_load_buffer_calendar_days))
+        panel = list(dict.fromkeys(s.strip().upper() for s in (panel_universe or [symu])))
+        if len(bars) < min_need:
+            return DailyStrategySymbolDataAssessment(
+                symbol=symu,
+                status="insufficient_history",
+                message=_price_data_hint(db, symu, len(rows), len(bars)),
+                min_bars_required=min_need,
+                valid_bar_count=len(bars),
+                raw_price_row_count=len(rows),
+            )
+        if len(panel) < min_xs:
+            return DailyStrategySymbolDataAssessment(
+                symbol=symu,
+                status="insufficient_history",
+                message=f"S5: panel size {len(panel)} < s5_min_symbols_cross_section ({min_xs})",
+                min_bars_required=min_need,
+                valid_bar_count=len(bars),
+                raw_price_row_count=len(rows),
+            )
+        if symu not in panel:
+            return DailyStrategySymbolDataAssessment(
+                symbol=symu,
+                status="insufficient_history",
+                message="S5: subject symbol must be included in panel_universe",
+                min_bars_required=min_need,
+                valid_bar_count=len(bars),
+                raw_price_row_count=len(rows),
+            )
+        for p in panel:
+            if stock_repo.get(p) is None:
+                return DailyStrategySymbolDataAssessment(
+                    symbol=symu,
+                    status="insufficient_history",
+                    message=f"S5: panel symbol {p!r} missing from stocks table",
+                    min_bars_required=min_need,
+                    valid_bar_count=len(bars),
+                    raw_price_row_count=len(rows),
+                )
+        for p in panel:
+            rows_p = repo.list_for_stock(p)
+            bars_p = bars_from_price_rows(rows_p)
+            if len(bars_p) < min_need:
+                return DailyStrategySymbolDataAssessment(
+                    symbol=symu,
+                    status="insufficient_history",
+                    message=f"S5 panel member {p}: {_price_data_hint(db, p, len(rows_p), len(bars_p))}",
+                    min_bars_required=min_need,
+                    valid_bar_count=len(bars),
+                    raw_price_row_count=len(rows),
+                )
+        d_first, d_last = bars[0].d, bars[-1].d
+        load_start = d_first - timedelta(days=buf)
+        close_by = load_closes_by_symbol(db, panel, load_start=load_start, load_end=d_last)
+        feat = dispersion_feature_by_date(close_by, panel, min_symbols=min_xs)
+        n_qual = count_nonnull_features(feat, since=eval_start, until=eval_end)
+        if n_qual < min_hist:
+            return DailyStrategySymbolDataAssessment(
+                symbol=symu,
+                status="insufficient_history",
+                message=(
+                    f"S5: insufficient non-null dispersion history in panel "
+                    f"({n_qual} days with feature <= eval_end, need {min_hist})"
+                ),
+                min_bars_required=min_need,
+                valid_bar_count=len(bars),
+                raw_price_row_count=len(rows),
+            )
+        horizons = _parse_horizons_setting(settings.daily_strategy_horizons)
+        s5_sample = _compute_s5_window_sample(
+            db,
+            bars,
+            panel,
+            horizons=horizons,
+            since=eval_start,
+            until=eval_end,
+        )
+        if s5_sample is None:
             return DailyStrategySymbolDataAssessment(
                 symbol=symu,
                 status="insufficient_history",
@@ -1681,6 +1858,168 @@ def run_s3_merit_rolling_report(
     }
 
 
+def run_s5_merit_report(
+    db: Session,
+    symbols: list[str],
+    eval_start: date,
+    eval_end: date,
+) -> dict[str, Any]:
+    """Pooled S5 cross-sectional dispersion quantile regimes over a fixed window + baseline + checklist.
+
+    The merit symbol list is the **panel**: each symbol is evaluated with the same universe.
+    """
+    settings = get_settings()
+    horizons = _parse_horizons_setting(settings.daily_strategy_horizons)
+    min_ev = max(1, settings.daily_strategy_merit_min_events_per_regime)
+    conc_max = float(settings.daily_strategy_merit_concentration_top5_max_pct)
+    n_bk = max(2, min(20, int(settings.s5_regime_n_buckets)))
+    bucket_keys = s3_bucket_keys(n_bk)
+    panel = list(dict.fromkeys(s.strip().upper() for s in symbols))
+
+    repo = PriceDataRepository(db)
+    pooled_regime: dict[str, dict[str, list[float]]] = {k: {str(h): [] for h in horizons} for k in bucket_keys}
+    pooled_base: dict[str, list[float]] = {str(h): [] for h in horizons}
+    pooled_counts: dict[str, int] = {k: 0 for k in bucket_keys}
+    regime_symbol_events: dict[str, dict[str, int]] = {k: {} for k in bucket_keys}
+    skipped: list[dict[str, str]] = []
+
+    for sym in panel:
+        symu = sym.strip().upper()
+        rows = repo.list_for_stock(symu)
+        bars = bars_from_price_rows(rows)
+        sample = _compute_s5_window_sample(
+            db,
+            bars,
+            panel,
+            horizons=horizons,
+            since=eval_start,
+            until=eval_end,
+        )
+        if sample is None:
+            skipped.append(
+                {
+                    "symbol": symu,
+                    "reason": "insufficient_bars_or_no_eval_days",
+                    "hint": _price_data_hint(db, symu, len(rows), len(bars)),
+                }
+            )
+            continue
+        for reg in bucket_keys:
+            pooled_counts[reg] += sample.counts.get(reg, 0)
+            for sy in sample.regime_returns[reg]:
+                pooled_regime[reg][sy].extend(sample.regime_returns[reg][sy])
+            n_ev = sample.counts.get(reg, 0)
+            if n_ev:
+                regime_symbol_events[reg][symu] = regime_symbol_events[reg].get(symu, 0) + n_ev
+        for hk in pooled_base:
+            pooled_base[hk].extend(sample.baseline_returns.get(hk, []))
+
+    baseline_metrics = {hk: metrics_from_returns(rs) for hk, rs in pooled_base.items()}
+    regime_metrics: dict[str, Any] = {}
+    vs_baseline: dict[str, Any] = {}
+    conc_by_regime: dict[str, float] = {}
+    for reg, hmap in pooled_regime.items():
+        regime_metrics[reg] = {hk: metrics_from_returns(rs) for hk, rs in hmap.items()}
+        vs_baseline[reg] = {}
+        conc_by_regime[reg] = _top5_concentration(regime_symbol_events[reg])
+        for hk in hmap:
+            rm = regime_metrics[reg][hk]
+            bm = baseline_metrics.get(hk, {})
+            ravg = rm.get("avg_return_pct", 0.0)
+            bavg = bm.get("avg_return_pct", 0.0)
+            vs_baseline[reg][hk] = {
+                "avg_excess_vs_baseline_pct": round(ravg - bavg, 4),
+                "baseline_avg_return_pct": bavg,
+            }
+
+    checklist_failures: list[str] = []
+    for reg in bucket_keys:
+        for hk in map(str, horizons):
+            rm = regime_metrics[reg][hk]
+            n = rm.get("evaluable_count", 0)
+            if n < min_ev:
+                checklist_failures.append(f"{reg} horizon {hk}: evaluable_count {n} < {min_ev}")
+            med = rm.get("median_return_pct")
+            avg = rm.get("avg_return_pct")
+            if n >= 10 and med is not None and avg is not None and med * avg < 0:
+                checklist_failures.append(f"{reg} horizon {hk}: median and avg disagree in sign")
+        n_sym = len({s for s in regime_symbol_events[reg] if regime_symbol_events[reg][s] > 0})
+        if n_sym > 1 and conc_by_regime[reg] > conc_max and pooled_counts.get(reg, 0) > 0:
+            checklist_failures.append(f"{reg}: top-5 symbol concentration {conc_by_regime[reg]} > {conc_max}")
+
+    return {
+        "kind": "s5_merit_report",
+        "eval_window": {"start": str(eval_start), "end": str(eval_end)},
+        "symbols_requested": panel,
+        "symbols_with_data": sorted({s for ev in regime_symbol_events.values() for s in ev}),
+        "symbols_skipped": skipped,
+        "params": {
+            "s5_min_symbols_cross_section": int(settings.s5_min_symbols_cross_section),
+            "s5_regime_min_history_days": int(settings.s5_regime_min_history_days),
+            "s5_regime_n_buckets": n_bk,
+            "merit_min_events_per_regime": min_ev,
+            "merit_concentration_top5_max_pct": conc_max,
+        },
+        "horizons": list(horizons),
+        "pooled_counts": pooled_counts,
+        "concentration_top5_by_regime": conc_by_regime,
+        "baseline_metrics": baseline_metrics,
+        "by_regime": regime_metrics,
+        "vs_baseline_avg_pct": vs_baseline,
+        "checklist": {
+            "pass": len(checklist_failures) == 0,
+            "failures": checklist_failures,
+            "note": "Minimum bar from SIGNAL_EVALUATION_CHECKLIST; passing does not imply tradable edge.",
+        },
+    }
+
+
+def run_s5_merit_rolling_report(
+    db: Session,
+    symbols: list[str],
+    eval_start: date,
+    eval_end: date,
+    *,
+    n_splits: int,
+    split_mode: SplitMode = "calendar",
+    trading_calendar_symbols: Sequence[str] | None = None,
+) -> dict[str, Any]:
+    """Rolling S5 merit (calendar or trading splits)."""
+    n_splits = max(1, int(n_splits))
+    cal_syms = (
+        list(trading_calendar_symbols) if trading_calendar_symbols is not None else [s.strip().upper() for s in symbols]
+    )
+    windows, mode_used = _merit_rolling_windows(db, eval_start, eval_end, n_splits, split_mode, cal_syms)
+    settings = get_settings()
+    min_ev = max(1, settings.daily_strategy_merit_min_events_per_regime)
+    horizons = _parse_horizons_setting(settings.daily_strategy_horizons)
+    n_bk = max(2, min(20, int(settings.s5_regime_n_buckets)))
+    bucket_keys = s3_bucket_keys(n_bk)
+
+    split_payloads: list[dict[str, Any]] = []
+    for ws, we in windows:
+        rep = run_s5_merit_report(db, symbols, ws, we)
+        split_payloads.append({"eval_window": {"start": str(ws), "end": str(we)}, "report": rep})
+
+    rollup = _rollup_s3_merit_rolling(
+        split_payloads,
+        min_events_per_bucket=min_ev,
+        horizons=horizons,
+        bucket_keys=bucket_keys,
+    )
+
+    return {
+        "kind": "s5_merit_report_rolling",
+        "n_splits": len(windows),
+        "split_mode_requested": split_mode,
+        "split_mode_used": mode_used,
+        "parent_window": {"start": str(eval_start), "end": str(eval_end)},
+        "windows": [f"{a}..{b}" for a, b in windows],
+        "splits": split_payloads,
+        "rollup": rollup,
+    }
+
+
 def _strategy_merit_bundle_summary(
     strategy: StrategyMeritId,
     single: dict[str, Any],
@@ -1781,6 +2120,19 @@ def run_strategy_merit_bundle(
         rolling = None
         if rs >= 2:
             rolling = run_s4_merit_rolling_report(
+                db,
+                symbols,
+                eval_start,
+                eval_end,
+                n_splits=rs,
+                split_mode=split_mode,
+                trading_calendar_symbols=cal_override,
+            )
+    elif strategy == "s5":
+        single = run_s5_merit_report(db, symbols, eval_start, eval_end)
+        rolling = None
+        if rs >= 2:
+            rolling = run_s5_merit_rolling_report(
                 db,
                 symbols,
                 eval_start,
@@ -2064,6 +2416,70 @@ def run_s3_evaluation(
     }
 
 
+def run_s5_evaluation(
+    db: Session,
+    symbol: str,
+    since: date | None,
+    until: date | None,
+    *,
+    panel_universe: Sequence[str] | None = None,
+) -> dict[str, Any]:
+    """S5: expanding quantile regimes on cross-sectional return dispersion vs forward returns for one symbol."""
+    settings = get_settings()
+    horizons = _parse_horizons_setting(settings.daily_strategy_horizons)
+    symu = symbol.strip().upper()
+    panel = list(dict.fromkeys(s.strip().upper() for s in (panel_universe or [symu])))
+
+    repo = PriceDataRepository(db)
+    rows = repo.list_for_stock(symu)
+    bars = bars_from_price_rows(rows)
+    min_needed = daily_strategy_min_valid_bars("s5")
+    if len(bars) < min_needed:
+        logger.warning(
+            "S5: insufficient bars for %s (%s valid / %s raw rows, need %s)",
+            symu,
+            len(bars),
+            len(rows),
+            min_needed,
+        )
+        hint = _price_data_hint(db, symu, len(rows), len(bars))
+        return _empty_summary("S5_cross_sectional_dispersion", symu, since, until, horizons, hint=hint)
+
+    sample = _compute_s5_window_sample(db, bars, panel, horizons=horizons, since=since, until=until)
+    if sample is None:
+        return _empty_summary(
+            "S5_cross_sectional_dispersion",
+            symu,
+            since,
+            until,
+            horizons,
+            hint="S5: insufficient panel history, bars, or eval window (see s5_* config and panel_universe).",
+        )
+
+    summary_by: dict[str, Any] = {}
+    for reg_key, hmap in sample.regime_returns.items():
+        summary_by[reg_key] = {}
+        for hk, rs in hmap.items():
+            summary_by[reg_key][hk] = metrics_from_returns(rs)
+
+    n_bk = max(2, min(20, int(settings.s5_regime_n_buckets)))
+
+    return {
+        "strategy": "S5_cross_sectional_dispersion",
+        "symbol": symu,
+        "date_range": {"start": str(since) if since else None, "end": str(until) if until else None},
+        "params": {
+            "panel_universe": panel,
+            "s5_min_symbols_cross_section": int(settings.s5_min_symbols_cross_section),
+            "s5_regime_min_history_days": int(settings.s5_regime_min_history_days),
+            "s5_regime_n_buckets": n_bk,
+        },
+        "horizons": list(horizons),
+        "counts": sample.counts,
+        "by_regime": summary_by,
+    }
+
+
 def _empty_summary(
     strategy: str,
     symbol: str,
@@ -2083,7 +2499,7 @@ def _empty_summary(
     }
     if hint:
         base["hint"] = hint
-    if "S1" in strategy or strategy.startswith("S3"):
+    if "S1" in strategy or strategy.startswith("S3") or strategy.startswith("S5"):
         base["by_regime"] = {}
     else:
         base["by_bucket"] = {}

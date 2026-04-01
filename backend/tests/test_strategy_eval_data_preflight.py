@@ -70,6 +70,17 @@ def test_daily_strategy_min_valid_bars_s3_uses_horizons_only(monkeypatch: pytest
 
 
 @pytest.mark.unit
+def test_daily_strategy_min_valid_bars_s5_includes_regime_history(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DAILY_STRATEGY_HORIZONS", "1,5")
+    monkeypatch.setenv("S5_REGIME_MIN_HISTORY_DAYS", "20")
+    get_settings.cache_clear()
+    try:
+        assert daily_strategy_min_valid_bars("s5") == 5 + 5 + 20  # max(h)+5+min_hist
+    finally:
+        get_settings.cache_clear()
+
+
+@pytest.mark.unit
 def test_daily_strategy_min_valid_bars_s4_matches_s3_horizon_floor(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DAILY_STRATEGY_HORIZONS", "1,5")
     get_settings.cache_clear()
@@ -125,6 +136,48 @@ def test_assess_ready_s2(monkeypatch: pytest.MonkeyPatch) -> None:
 
         a = assess_daily_strategy_symbol_data(db, "BBB", "s2", date(2024, 2, 1), date(2024, 3, 1))
         assert a.status == "ready"
+    finally:
+        db.close()
+        get_settings.cache_clear()
+
+
+@pytest.mark.unit
+def test_preflight_check_s5_multi_symbol_panel(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DAILY_STRATEGY_HORIZONS", "1")
+    monkeypatch.setenv("S5_MIN_SYMBOLS_CROSS_SECTION", "3")
+    monkeypatch.setenv("S5_REGIME_MIN_HISTORY_DAYS", "5")
+    monkeypatch.setenv("S5_REGIME_N_BUCKETS", "4")
+    monkeypatch.setenv("S5_LOAD_BUFFER_CALENDAR_DAYS", "40")
+    get_settings.cache_clear()
+    db = _session()
+    try:
+        for j, sym in enumerate(("S5A", "S5B", "S5C")):
+            db.add(Stock(symbol=sym, name=sym, sector=None, market_cap=None))
+            for i in range(80):
+                d = date(2024, 1, 2) + timedelta(days=i)
+                c = 100.0 + 0.1 * i + j * 0.05 * i
+                db.add(
+                    PriceData(
+                        stock_symbol=sym,
+                        date=d,
+                        open=c,
+                        high=c + 0.5,
+                        low=c - 0.5,
+                        close=c,
+                        volume=1_000_000,
+                    )
+                )
+        db.commit()
+        r = run_strategy_eval_data_preflight(
+            db,
+            ["S5A", "S5B", "S5C"],
+            "s5",
+            date(2024, 2, 1),
+            date(2024, 4, 1),
+            mode="check",
+        )
+        assert r.all_ready is True
+        assert r.errors == []
     finally:
         db.close()
         get_settings.cache_clear()
