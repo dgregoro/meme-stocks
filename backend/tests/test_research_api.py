@@ -6,15 +6,11 @@ import csv
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
-from fastapi.testclient import TestClient
 
 from backend.app.config import get_settings
-from backend.app.data.database import Base, engine
-from backend.app.main import create_app
-from backend.app.services.scheduler_service import SchedulerService
 
 
 def _make_minimal_dataset(path: str, n_rows: int = 50) -> None:
@@ -52,17 +48,6 @@ def _make_minimal_dataset(path: str, n_rows: int = 50) -> None:
                     0.01 * (i % 3 - 1),
                 ]
             )
-
-
-@pytest.fixture
-def test_app():
-    """Create test FastAPI app with mock scheduler."""
-    Base.metadata.create_all(engine)
-    mock_scheduler = MagicMock(spec=SchedulerService)
-    app = create_app(scheduler_for_testing=mock_scheduler)
-    with TestClient(app) as client:
-        yield app, mock_scheduler, client
-    Base.metadata.drop_all(engine)
 
 
 @pytest.mark.unit

@@ -149,6 +149,19 @@ def test_run_volume_spike_evaluation_no_events(monkeypatch: pytest.MonkeyPatch) 
     Base.metadata.create_all(bind=engine)
     db = sessionmaker(bind=engine)()
     try:
+        db.add(Stock(symbol="NV", name="N", sector=None, market_cap=None))
+        db.add(
+            PriceData(
+                stock_symbol="NV",
+                date=date(2024, 1, 2),
+                open=1.0,
+                high=1.0,
+                low=1.0,
+                close=1.0,
+                volume=1,
+            )
+        )
+        db.commit()
         ev, prices, hz = run_volume_spike_evaluation(db)
         assert ev == []
         assert prices == {}
@@ -172,6 +185,19 @@ def test_horizons_env_invalid_falls_back(monkeypatch: pytest.MonkeyPatch) -> Non
     Base.metadata.create_all(bind=engine)
     db = sessionmaker(bind=engine)()
     try:
+        db.add(Stock(symbol="HV", name="H", sector=None, market_cap=None))
+        db.add(
+            PriceData(
+                stock_symbol="HV",
+                date=date(2024, 1, 2),
+                open=1.0,
+                high=1.0,
+                low=1.0,
+                close=1.0,
+                volume=1,
+            )
+        )
+        db.commit()
         _e, _p, hz = run_volume_spike_evaluation(db)
         assert hz == (1, 3, 5)
     finally:

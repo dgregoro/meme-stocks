@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date
+from typing import Any
 
 import pytest
 from sqlalchemy import create_engine
@@ -63,9 +64,23 @@ def test_suite_leg_b_must_be_in_symbols() -> None:
 
 
 @pytest.mark.unit
-def test_suite_skips_s7_without_ack() -> None:
+def test_suite_skips_s7_without_ack(monkeypatch: pytest.MonkeyPatch) -> None:
+    def _fake_merit_bundle(
+        _db: Session,
+        strategy: str,
+        _symbols: list[str],
+        _eval_start: date,
+        _eval_end: date,
+        **_: Any,
+    ) -> dict[str, Any]:
+        return {"kind": "strategy_merit_bundle", "strategy": strategy}
+
     db = _session()
     try:
+        monkeypatch.setattr(
+            "backend.app.services.research_strategy_suite.run_strategy_merit_bundle",
+            _fake_merit_bundle,
+        )
         out = run_research_strategy_suite_and_persist(
             db,
             ["AAA", "BBB"],

@@ -780,6 +780,19 @@ def test_run_strategy_merit_bundle_s6_requires_leg_b(monkeypatch: pytest.MonkeyP
     get_settings.cache_clear()
     db = _session()
     try:
+        db.add(Stock(symbol="X", name="X", sector=None, market_cap=None))
+        db.add(
+            PriceData(
+                stock_symbol="X",
+                date=date(2024, 1, 2),
+                open=1.0,
+                high=1.0,
+                low=1.0,
+                close=1.0,
+                volume=1,
+            )
+        )
+        db.commit()
         with pytest.raises(ValueError, match="pair_leg_b"):
             run_strategy_merit_bundle(
                 db,

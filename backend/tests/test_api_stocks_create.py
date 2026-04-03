@@ -1,31 +1,10 @@
 from __future__ import annotations
 
-import pytest
-from fastapi.testclient import TestClient
 
-from backend.app.data.database import Base, SessionLocal, engine
-from backend.app.main import create_app
-
-
-@pytest.fixture
-def db_session():
-    """Create a test database session."""
-    Base.metadata.create_all(engine)
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-        Base.metadata.drop_all(engine)
-
-
-def test_create_stock() -> None:
+def test_create_stock(isolated_omit_scheduler_client):
     """Test creating a new stock."""
-    Base.metadata.create_all(engine)
-    app = create_app(omit_scheduler=True)
-    client = TestClient(app)
+    client, _MainSession = isolated_omit_scheduler_client
 
-    # Unique symbol avoids 409 when other tests share the same DB file
     sym = "TST1"
     response = client.post(
         "/api/stocks",
@@ -43,27 +22,20 @@ def test_create_stock() -> None:
     assert data["name"] == "Test Corp."
     assert data["sector"] == "Retail"
 
-    # Verify it was saved
     get_response = client.get(f"/api/stocks/{sym}")
     assert get_response.status_code == 200
     assert get_response.json()["symbol"] == sym
 
-    Base.metadata.drop_all(engine)
 
-
-def test_create_stock_duplicate() -> None:
+def test_create_stock_duplicate(isolated_omit_scheduler_client):
     """Test creating a duplicate stock returns 409."""
-    Base.metadata.create_all(engine)
-    app = create_app(omit_scheduler=True)
-    client = TestClient(app)
+    client, _MainSession = isolated_omit_scheduler_client
 
-    # Create first stock
     client.post(
         "/api/stocks",
         json={"symbol": "GME", "name": "GameStop", "sector": "Retail"},
     )
 
-    # Try to create duplicate
     response = client.post(
         "/api/stocks",
         json={"symbol": "GME", "name": "GameStop", "sector": "Retail"},
@@ -72,14 +44,10 @@ def test_create_stock_duplicate() -> None:
     assert response.status_code == 409
     assert "already exists" in response.json()["detail"]["message"]
 
-    Base.metadata.drop_all(engine)
 
-
-def test_create_stock_symbol_uppercase() -> None:
+def test_create_stock_symbol_uppercase(isolated_omit_scheduler_client):
     """Test that stock symbol is converted to uppercase."""
-    Base.metadata.create_all(engine)
-    app = create_app(omit_scheduler=True)
-    client = TestClient(app)
+    client, _MainSession = isolated_omit_scheduler_client
 
     response = client.post(
         "/api/stocks",
@@ -87,6 +55,4 @@ def test_create_stock_symbol_uppercase() -> None:
     )
 
     assert response.status_code == 201
-    assert response.json()["symbol"] == "GME"  # Should be uppercase
-
-    Base.metadata.drop_all(engine)
+    assert response.json()["symbol"] == "GME"

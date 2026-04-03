@@ -3,26 +3,11 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from typing import Generator
 
-import pytest
 from sqlalchemy.orm import Session
 
-from backend.app.data.database import Base, SessionLocal, engine
 from backend.app.data.repositories.job_execution_repo import JobExecutionRepository
 from backend.app.models.job_run_history import JobRunHistory
-
-
-@pytest.fixture
-def db_session() -> Generator[Session, None, None]:
-    """Create a test database session."""
-    Base.metadata.create_all(engine)
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-        Base.metadata.drop_all(engine)
 
 
 def test_get_last_success_returns_latest_successful_run(db_session: Session) -> None:

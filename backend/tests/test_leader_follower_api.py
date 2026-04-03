@@ -18,7 +18,24 @@ from backend.app.models.leader_debug_evaluation import LeaderDebugEvaluation
 from backend.app.models.leader_event import LeaderEvent
 from backend.app.models.leader_follower_candidate import LeaderFollowerCandidate
 from backend.app.models.leader_follower_signal import LeaderFollowerSignal
+from backend.app.models.price_data import PriceData
 from backend.app.models.stock import Stock
+
+
+def _seed_min_research_footprint(db: Session) -> None:
+    db.add(Stock(symbol="XXX", name="X", sector=None, market_cap=None))
+    db.add(
+        PriceData(
+            stock_symbol="XXX",
+            date=date(2024, 1, 2),
+            open=1.0,
+            high=1.0,
+            low=1.0,
+            close=1.0,
+            volume=1,
+        )
+    )
+    db.commit()
 
 
 def _create_test_app() -> tuple[TestClient, Session]:
@@ -720,9 +737,18 @@ def test_leader_near_miss_empty_when_none() -> None:
 
 
 @pytest.mark.unit
+def test_evaluation_summary_database_unready() -> None:
+    client, _ = _create_test_app()
+    resp = client.get("/api/leader-follower/evaluation/summary")
+    assert resp.status_code == 503
+    assert resp.json().get("error_type") == "DATABASE_UNREADY"
+
+
+@pytest.mark.unit
 def test_evaluation_summary_empty() -> None:
     """GET /api/leader-follower/evaluation/summary returns zeros when no signals."""
-    client, _ = _create_test_app()
+    client, db = _create_test_app()
+    _seed_min_research_footprint(db)
     resp = client.get("/api/leader-follower/evaluation/summary")
     assert resp.status_code == 200
     data = resp.json()
@@ -781,7 +807,8 @@ def test_evaluation_summary_with_signal_and_prices() -> None:
 @pytest.mark.unit
 def test_evaluation_pairs_and_signals_empty() -> None:
     """GET /evaluation/pairs and /evaluation/signals return empty lists when no signals."""
-    client, _ = _create_test_app()
+    client, db = _create_test_app()
+    _seed_min_research_footprint(db)
     resp_pairs = client.get("/api/leader-follower/evaluation/pairs")
     assert resp_pairs.status_code == 200
     assert resp_pairs.json()["pairs"] == []
@@ -860,7 +887,8 @@ def _seed_evaluation_data(db: Session) -> None:
 @pytest.mark.unit
 def test_pairs_ranked_empty() -> None:
     """GET /pairs/ranked returns empty when no signals."""
-    client, _ = _create_test_app()
+    client, db = _create_test_app()
+    _seed_min_research_footprint(db)
     resp = client.get("/api/leader-follower/pairs/ranked")
     assert resp.status_code == 200
     data = resp.json()
@@ -917,7 +945,8 @@ def test_pairs_ranked_invalid_sort_by() -> None:
 @pytest.mark.unit
 def test_pairs_filtered_empty() -> None:
     """GET /pairs/filtered returns empty when no signals."""
-    client, _ = _create_test_app()
+    client, db = _create_test_app()
+    _seed_min_research_footprint(db)
     resp = client.get("/api/leader-follower/pairs/filtered")
     assert resp.status_code == 200
     data = resp.json()

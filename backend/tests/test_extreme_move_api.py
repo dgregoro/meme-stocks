@@ -13,7 +13,25 @@ from sqlalchemy.pool import StaticPool
 from backend.app.data.database import Base, get_session
 from backend.app.main import create_app
 from backend.app.models.extreme_move_event import ExtremeMoveEvent
+from backend.app.models.price_data import PriceData
 from backend.app.models.stock import Stock
+
+
+def _seed_min_research_footprint(db: Session) -> None:
+    """One symbol + one OHLCV row so evaluation passes DB-universe guard."""
+    db.add(Stock(symbol="XXX", name="X", sector=None, market_cap=None))
+    db.add(
+        PriceData(
+            stock_symbol="XXX",
+            date=date(2024, 1, 2),
+            open=1.0,
+            high=1.0,
+            low=1.0,
+            close=1.0,
+            volume=1,
+        )
+    )
+    db.commit()
 
 
 def _create_test_app() -> tuple[TestClient, Session]:
@@ -86,8 +104,19 @@ def test_extreme_move_events_invalid_date() -> None:
 
 
 @pytest.mark.integration
-def test_extreme_move_evaluation_summary_empty() -> None:
+def test_extreme_move_evaluation_summary_database_unready() -> None:
     client, _db = _create_test_app()
+    resp = client.get("/api/extreme-move/evaluation/summary")
+    assert resp.status_code == 503
+    body = resp.json()
+    assert body.get("error_type") == "DATABASE_UNREADY"
+    assert body.get("details", {}).get("stock_count") == 0
+
+
+@pytest.mark.integration
+def test_extreme_move_evaluation_summary_empty() -> None:
+    client, db = _create_test_app()
+    _seed_min_research_footprint(db)
     resp = client.get("/api/extreme-move/evaluation/summary")
     assert resp.status_code == 200
     data = resp.json()
@@ -97,7 +126,8 @@ def test_extreme_move_evaluation_summary_empty() -> None:
 
 @pytest.mark.integration
 def test_extreme_move_evaluation_by_magnitude_empty() -> None:
-    client, _db = _create_test_app()
+    client, db = _create_test_app()
+    _seed_min_research_footprint(db)
     resp = client.get("/api/extreme-move/evaluation/by-magnitude")
     assert resp.status_code == 200
     assert resp.json()["by_magnitude"] == {}
@@ -107,6 +137,22 @@ def test_extreme_move_evaluation_by_magnitude_empty() -> None:
 def test_extreme_move_evaluation_by_magnitude_with_event() -> None:
     client, db = _create_test_app()
     db.add(Stock(symbol="BBB", name="B", sector="Tech", market_cap=None))
+    for d, c in (
+        (date(2024, 3, 14), 100.0),
+        (date(2024, 3, 15), 106.5),
+        (date(2024, 3, 18), 108.0),
+    ):
+        db.add(
+            PriceData(
+                stock_symbol="BBB",
+                date=d,
+                open=c,
+                high=c + 0.5,
+                low=c - 0.5,
+                close=c,
+                volume=1_000_000,
+            )
+        )
     db.commit()
     ev = ExtremeMoveEvent(
         symbol="BBB",
@@ -130,6 +176,22 @@ def test_extreme_move_evaluation_by_magnitude_with_event() -> None:
 def test_extreme_move_evaluation_by_magnitude_volume() -> None:
     client, db = _create_test_app()
     db.add(Stock(symbol="CCC", name="C", sector="Tech", market_cap=None))
+    for d, c in (
+        (date(2024, 3, 28), 100.0),
+        (date(2024, 4, 1), 94.0),
+        (date(2024, 4, 2), 95.0),
+    ):
+        db.add(
+            PriceData(
+                stock_symbol="CCC",
+                date=d,
+                open=c,
+                high=c + 0.5,
+                low=c - 0.5,
+                close=c,
+                volume=1_000_000,
+            )
+        )
     db.commit()
     ev = ExtremeMoveEvent(
         symbol="CCC",

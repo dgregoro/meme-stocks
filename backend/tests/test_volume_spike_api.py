@@ -12,8 +12,25 @@ from sqlalchemy.pool import StaticPool
 
 from backend.app.data.database import Base, get_session
 from backend.app.main import create_app
+from backend.app.models.price_data import PriceData
 from backend.app.models.stock import Stock
 from backend.app.models.volume_spike_event import VolumeSpikeEvent
+
+
+def _seed_min_research_footprint(db: Session) -> None:
+    db.add(Stock(symbol="XXX", name="X", sector=None, market_cap=None))
+    db.add(
+        PriceData(
+            stock_symbol="XXX",
+            date=date(2024, 1, 2),
+            open=1.0,
+            high=1.0,
+            low=1.0,
+            close=1.0,
+            volume=1,
+        )
+    )
+    db.commit()
 
 
 def _create_test_app() -> tuple[TestClient, Session]:
@@ -89,8 +106,17 @@ def test_volume_spike_events_invalid_date() -> None:
 
 
 @pytest.mark.integration
-def test_volume_spike_evaluation_summary_empty() -> None:
+def test_volume_spike_evaluation_summary_database_unready() -> None:
     client, _db = _create_test_app()
+    resp = client.get("/api/volume-spike/evaluation/summary")
+    assert resp.status_code == 503
+    assert resp.json().get("error_type") == "DATABASE_UNREADY"
+
+
+@pytest.mark.integration
+def test_volume_spike_evaluation_summary_empty() -> None:
+    client, db = _create_test_app()
+    _seed_min_research_footprint(db)
     resp = client.get("/api/volume-spike/evaluation/summary")
     assert resp.status_code == 200
     data = resp.json()

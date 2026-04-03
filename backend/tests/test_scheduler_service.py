@@ -4,25 +4,13 @@ from datetime import date, datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
+from sqlalchemy.orm import sessionmaker
 
-from backend.app.data.database import Base, SessionLocal, engine
 from backend.app.data.repositories.job_execution_repo import JobExecutionRepository
 from backend.app.data.repositories.stock_repo import StockRepository
 from backend.app.models.job_run_history import JobRunHistory  # noqa: F401 - ensure table created
 from backend.app.models.stock import Stock
 from backend.app.services.scheduler_service import SchedulerService
-
-
-@pytest.fixture
-def db_session():
-    """Create a test database session."""
-    Base.metadata.create_all(engine)
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-        Base.metadata.drop_all(engine)
 
 
 @pytest.fixture
@@ -115,9 +103,23 @@ def test_collect_price_data(mock_yahoo_class, db_session, sample_stock):
     assert len(prices) == 2
 
 
+@patch("backend.app.services.scheduler_service.SessionLocal")
 @patch("backend.app.services.scheduler_service.YahooFinanceService")
-def test_catch_up_runs_missed_jobs(mock_yahoo_class, db_session, sample_stock):
-    """Test that catch-up runs missed jobs."""
+def test_catch_up_runs_missed_jobs(
+    mock_yahoo_class,
+    mock_scheduler_session_local,
+    db_session,
+    sample_stock,
+    isolated_sqlite_engine,
+):
+    """Test that catch-up runs missed jobs (scheduler uses same isolated DB as test session)."""
+    MainSession = sessionmaker(
+        bind=isolated_sqlite_engine,
+        autocommit=False,
+        autoflush=False,
+    )
+    mock_scheduler_session_local.side_effect = lambda: MainSession()
+
     scheduler = SchedulerService()
 
     price_stats = {"symbols": 0, "rows_inserted": 0, "provider": "yfinance"}

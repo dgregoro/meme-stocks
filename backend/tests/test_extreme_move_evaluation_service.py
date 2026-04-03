@@ -186,6 +186,19 @@ def test_run_extreme_move_evaluation_no_events(monkeypatch: pytest.MonkeyPatch) 
     Base.metadata.create_all(bind=engine)
     db = sessionmaker(bind=engine)()
     try:
+        db.add(Stock(symbol="NE", name="N", sector=None, market_cap=None))
+        db.add(
+            PriceData(
+                stock_symbol="NE",
+                date=date(2024, 1, 2),
+                open=1.0,
+                high=1.0,
+                low=1.0,
+                close=1.0,
+                volume=1,
+            )
+        )
+        db.commit()
         ev, prices, hz = run_extreme_move_evaluation(db)
         assert ev == []
         assert prices == {}
@@ -209,6 +222,19 @@ def test_extreme_move_horizons_invalid_env_falls_back(monkeypatch: pytest.Monkey
     Base.metadata.create_all(bind=engine)
     db = sessionmaker(bind=engine)()
     try:
+        db.add(Stock(symbol="HZ", name="H", sector=None, market_cap=None))
+        db.add(
+            PriceData(
+                stock_symbol="HZ",
+                date=date(2024, 1, 2),
+                open=1.0,
+                high=1.0,
+                low=1.0,
+                close=1.0,
+                volume=1,
+            )
+        )
+        db.commit()
         _e, _p, hz = run_extreme_move_evaluation(db)
         assert hz == (1, 3, 5)
     finally:
@@ -283,6 +309,19 @@ def test_run_h2_quarterly_stability_no_train_events() -> None:
     Base.metadata.create_all(bind=engine)
     db = sessionmaker(bind=engine)()
     try:
+        db.add(Stock(symbol="H2", name="H", sector=None, market_cap=None))
+        db.add(
+            PriceData(
+                stock_symbol="H2",
+                date=date(2024, 1, 2),
+                open=1.0,
+                high=1.0,
+                low=1.0,
+                close=1.0,
+                volume=1,
+            )
+        )
+        db.commit()
         out = run_h2_quarterly_stability_extreme_down(db, train_end_exclusive=date(2025, 2, 3))
         assert out["verdict"] == "inconclusive"
         assert out["quarters"] == []
