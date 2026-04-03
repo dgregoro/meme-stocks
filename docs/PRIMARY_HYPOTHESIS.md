@@ -102,22 +102,22 @@ Follow in order; do not treat “event-only” aggregates as a full H1 test unti
 
 1. **Freeze the experiment** ✅ **Recorded 2026-04-03** (rule-freeze table + configuration snapshot). Annotated tag **`h1-freeze-2026-04-03`** created on the freeze commit.
 
-2. **Data and signals**  
+2. **Data and signals**
    Ensure stocks and OHLCV exist for all leaders/followers. Build `leader_follower_signal` rows over your study window (e.g. `python -m backend.app.cli backfill leader-follower` with dates from `--help`). Until you have enough events, you are in the “underpowered” branch of the kill criteria—that is a valid outcome.
 
-3. **Event-arm metrics (existing code)**  
+3. **Event-arm metrics (existing code)**
    Use `run_evaluation` / `aggregate_by_pair` in `leader_follower_evaluation_service` for **event-day** follower forward returns. This is the **treatment** arm only—not yet excess vs B1.
 
-4. **Baseline B1 (required for H1)**  
+4. **Baseline B1 (required for H1)**
    For each event, compute follower forward return on the event day vs the baseline from **matched non-event** days (same DOW; same regime when defined). Implement as a script, notebook, or service helper with tests; until this exists, **do not** claim H1 is tested.
 
-5. **Costs and execution read**  
+5. **Costs and execution read**
    Apply the **same** round-trip cost assumption as in research defaults (and align with paper sim if you use it: `python -m backend.app.cli simulate leader-follower`, verifying `--cost_pct` units in `--help`). Compare **net** excess vs B1 on **hold-out** only for the main decision.
 
-6. **Hold-out and stability**  
+6. **Hold-out and stability**
    Use strict time splits (train / validate / test or rolling windows). Tune only on train; **report** validate/test. Use walk-forward / robustness CLIs where they match this study (`optimize leader-follower`, `robustness leader-follower` — see `--help`).
 
-7. **Decide**  
+7. **Decide**
    Apply the kill criteria above. **Kill** means this **wording** of H1 is retired (document why), not that the whole repository is abandoned.
 
 ---
