@@ -16,6 +16,7 @@ from typing import Any, Literal, Sequence, cast
 from sqlalchemy.orm import Session
 
 from backend.app.config import get_settings
+from backend.app.services.research_eval_db_guard import require_research_eval_db_has_prices
 from backend.app.data.repositories.price_data_repo import PriceDataRepository
 from backend.app.data.repositories.vol_term_structure_repo import VolTermStructureRepository
 from backend.app.services.research_execution.window_splits import (
@@ -2455,6 +2456,7 @@ def run_strategy_merit_bundle(
 
     Use this as the default automation entrypoint for S1–S6 before deeper manual review.
     """
+    require_research_eval_db_has_prices(db)
     rs = int(rolling_splits)
     cal_override = list(trading_calendar_symbols) if trading_calendar_symbols is not None else None
     pair_b_u = str(pair_leg_b).strip().upper() if pair_leg_b and str(pair_leg_b).strip() else None

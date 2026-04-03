@@ -14,6 +14,7 @@ from backend.app.data.repositories.extreme_move_event_repo import ExtremeMoveEve
 from backend.app.data.repositories.price_data_repo import PriceDataRepository
 from backend.app.models.extreme_move_event import ExtremeMoveEvent
 from backend.app.services.leader_follower_evaluation_service import compute_forward_return
+from backend.app.services.research_eval_db_guard import require_research_eval_db_has_prices
 from backend.app.services.research_execution.costs import round_trip_cost_pct_from_bps
 
 DEFAULT_HORIZONS = (1, 3, 5)
@@ -78,6 +79,7 @@ def run_extreme_move_evaluation(
     symbol: str | None = None,
     limit: int = 500,
 ) -> tuple[list[ExtremeMoveEvent], dict[str, list[tuple[date, float]]], tuple[int, ...]]:
+    require_research_eval_db_has_prices(db)
     repo = ExtremeMoveEventRepository(db)
     price_repo = PriceDataRepository(db)
     horizons = _parse_horizons()
@@ -279,6 +281,8 @@ def run_h2_quarterly_stability_extreme_down(
         raise ValueError("horizon_k must be >= 1")
     if min_evaluable < 1:
         raise ValueError("min_evaluable must be >= 1")
+
+    require_research_eval_db_has_prices(db)
 
     settings = get_settings()
     cost_pct = round_trip_cost_pct_from_bps(float(settings.research_default_round_trip_cost_bps))

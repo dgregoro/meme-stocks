@@ -5,6 +5,7 @@ from __future__ import annotations
 import typer
 
 import backend.app.cli.orm_imports  # noqa: F401
+from backend.app.services.research_eval_db_guard import ResearchEvalDatabaseEmptyError
 from backend.app.cli.commands.backfill import register_backfill
 from backend.app.cli.commands.build_dataset import register_build_dataset
 from backend.app.cli.commands.evaluate import register_evaluate
@@ -35,7 +36,15 @@ register_strategies(app)
 
 
 def main() -> None:
-    app()
+    try:
+        app()
+    except ResearchEvalDatabaseEmptyError as e:
+        typer.secho(str(e), err=True, fg=typer.colors.RED)
+        typer.secho(
+            f"(stock_count={e.stock_count}, price_row_count={e.price_row_count})",
+            err=True,
+        )
+        raise typer.Exit(1) from e
 
 
 if __name__ == "__main__":

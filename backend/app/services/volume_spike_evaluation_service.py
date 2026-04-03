@@ -13,6 +13,7 @@ from backend.app.data.repositories.price_data_repo import PriceDataRepository
 from backend.app.data.repositories.volume_spike_event_repo import VolumeSpikeEventRepository
 from backend.app.models.volume_spike_event import VolumeSpikeEvent
 from backend.app.services.leader_follower_evaluation_service import compute_forward_return
+from backend.app.services.research_eval_db_guard import require_research_eval_db_has_prices
 
 DEFAULT_HORIZONS = (1, 3, 5)
 
@@ -77,6 +78,7 @@ def run_volume_spike_evaluation(
     limit: int = 500,
 ) -> tuple[list[VolumeSpikeEvent], dict[str, list[tuple[date, float]]], tuple[int, ...]]:
     """Load events and price series needed for forward returns."""
+    require_research_eval_db_has_prices(db)
     repo = VolumeSpikeEventRepository(db)
     price_repo = PriceDataRepository(db)
     horizons = _parse_horizons()

@@ -6,8 +6,9 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .config import get_settings
@@ -59,7 +60,9 @@ from .api import research as research_api
 from .api import stock_groups as stock_groups_api
 from .api import volume_spike as volume_spike_api
 from .api import extreme_move as extreme_move_api
+from .services.research_eval_db_guard import ResearchEvalDatabaseEmptyError
 from .services.scheduler_service import SchedulerService
+from .utils.api_errors import api_error
 
 
 def _make_lifespan(
@@ -139,6 +142,23 @@ def create_app(
         debug=False,
         lifespan=_make_lifespan(scheduler_for_testing, omit_scheduler),
     )
+
+    @app.exception_handler(ResearchEvalDatabaseEmptyError)
+    async def research_eval_db_empty_handler(
+        _request: Request,
+        exc: ResearchEvalDatabaseEmptyError,
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=503,
+            content=api_error(
+                "DATABASE_UNREADY",
+                str(exc),
+                {
+                    "stock_count": exc.stock_count,
+                    "price_row_count": exc.price_row_count,
+                },
+            ),
+        )
 
     @app.get("/health", tags=["system"])
     async def health() -> dict[str, str]:
