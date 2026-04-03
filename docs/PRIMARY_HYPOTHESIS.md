@@ -2,7 +2,7 @@
 
 **Status:** Operator commitment for the **leader–follower** lane. Aligns with [`PURPOSE.md`](PURPOSE.md) (hypothesis → measurable edge or kill → execution).
 
-**Last updated:** April 3, 2026
+**Last updated:** April 3, 2026 (Step 2 run logged below)
 
 ---
 
@@ -102,8 +102,18 @@ Follow in order; do not treat “event-only” aggregates as a full H1 test unti
 
 1. **Freeze the experiment** ✅ **Recorded 2026-04-03** (rule-freeze table + configuration snapshot). Annotated tag **`h1-freeze-2026-04-03`** created on the freeze commit.
 
-2. **Data and signals**
-   Ensure stocks and OHLCV exist for all leaders/followers. Build `leader_follower_signal` rows over your study window (e.g. `python -m backend.app.cli backfill leader-follower` with dates from `--help`). Until you have enough events, you are in the “underpowered” branch of the kill criteria—that is a valid outcome.
+2. **Data and signals** ✅ **Completed 2026-04-03** for the window below (see **Step 2 run log**).
+   Ensure stocks and OHLCV exist for all leaders/followers. Persist signals in **`leader_follower_signals`** over your study window (`python -m backend.app.cli backfill leader-follower --start … --end …`). `seed stocks` and `seed stock-groups` must be run first so the group universe is non-empty. Until you have enough events, you are in the “underpowered” branch of the kill criteria—that is a valid outcome.
+
+### Step 2 run log (environment: `deployment/.env`, `DATABASE_URL=sqlite:///./data/app.db`)
+
+| Step | Command / outcome |
+|------|-------------------|
+| Seed | `seed stocks` → 63 symbols; `seed stock-groups` → groups populated |
+| Prices | `backfill daily-prices --start 2024-01-02 --end 2025-12-31` → **31,878** `price_data` rows, 63 symbols |
+| Replay | `backfill leader-follower --start 2024-01-02 --end 2025-12-31` → **522** trading days processed, **0** skipped, **5,692** signals, **835** leader events; signal dates **2024-01-02 .. 2025-12-19** |
+
+**Note:** An earlier attempt through 2026-03-27 hit API/DB errors (`Failed to list price data`, `Failed to get all symbols from stock groups`) after the local DB had no **`stocks`** rows; re-running **`seed stocks`** then prices then replay produced a clean result. Revisit **2026** bars later if you extend the calendar window.
 
 3. **Event-arm metrics (existing code)**
    Use `run_evaluation` / `aggregate_by_pair` in `leader_follower_evaluation_service` for **event-day** follower forward returns. This is the **treatment** arm only—not yet excess vs B1.
