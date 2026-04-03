@@ -14,15 +14,66 @@ from backend.app.data.repositories.leader_follower_signal_repo import LeaderFoll
 from backend.app.data.repositories.price_data_repo import PriceDataRepository
 from backend.app.models.leader_follower_signal import LeaderFollowerSignal
 from backend.app.models.price_data import PriceData
+from backend.app.models.stock import Stock
+from backend.app.config import get_settings
 from backend.app.services.leader_follower_evaluation_service import (
     aggregate_summary,
+    build_b1_excess_pair_aggregates,
     build_event_arm_pair_aggregates,
+    collect_b1_control_returns,
     compute_duplicate_overlap,
     compute_forward_return,
     evaluate_signal,
     get_entry_price,
     run_evaluation,
 )
+
+
+@pytest.mark.unit
+def test_collect_b1_control_returns_excludes_event_and_leader_days() -> None:
+    """B1 pool: same weekday, in window, not signal day, not leader-event days."""
+    # Two Tuesdays: Feb 4 and Feb 11 2026; event on Feb 11; leader fired Feb 11 only.
+    price_by_symbol = {
+        "QCOM": [
+            (date(2026, 2, 4), 100.0),
+            (date(2026, 2, 5), 101.0),
+            (date(2026, 2, 11), 100.0),
+            (date(2026, 2, 12), 102.0),
+        ]
+    }
+    leader_days = {date(2026, 2, 11)}
+    event_date = date(2026, 2, 11)
+    ctr = collect_b1_control_returns(
+        "QCOM",
+        event_date,
+        1,
+        price_by_symbol,
+        leader_days,
+        date(2026, 2, 1),
+        date(2026, 2, 28),
+    )
+    assert ctr == [1.0]  # (101/100 - 1)*100
+
+
+@pytest.mark.unit
+def test_collect_b1_control_returns_empty_when_no_controls() -> None:
+    """Only Tuesday in window is the event day -> no controls."""
+    price_by_symbol = {
+        "QCOM": [
+            (date(2026, 2, 11), 100.0),
+            (date(2026, 2, 12), 102.0),
+        ]
+    }
+    ctr = collect_b1_control_returns(
+        "QCOM",
+        date(2026, 2, 11),
+        1,
+        price_by_symbol,
+        {date(2026, 2, 11)},
+        date(2026, 2, 11),
+        date(2026, 2, 11),
+    )
+    assert ctr == []
 
 
 @pytest.mark.unit
@@ -101,7 +152,7 @@ def test_compute_duplicate_overlap_repeats() -> None:
 
 @pytest.mark.integration
 def test_run_evaluation_empty_db() -> None:
-    """No signals returns empty list."""
+    """No signals returns empty list when stocks and price_data exist (universe guard satisfied)."""
     import backend.app.models.stock  # noqa: F401 — register ``stocks`` for FK create_all
 
     engine = create_engine(
@@ -115,10 +166,148 @@ def test_run_evaluation_empty_db() -> None:
     SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
     db = SessionLocal()
     try:
+        db.add(Stock(symbol="LF", name="L", sector=None, market_cap=None))
+        db.add(
+            PriceData(
+                stock_symbol="LF",
+                date=date(2026, 1, 2),
+                open=1.0,
+                high=1.0,
+                low=1.0,
+                close=1.0,
+                volume=1,
+            )
+        )
+        db.commit()
         signals, price_by_symbol, horizons = run_evaluation(db)
         assert signals == []
         assert price_by_symbol == {}
         assert horizons == (1, 3, 5)
+    finally:
+        db.close()
+
+
+@pytest.mark.integration
+def test_build_b1_excess_pair_aggregates_empty_db() -> None:
+    """No signals yields B1 report with zero count."""
+    import backend.app.models.stock  # noqa: F401 — register ``stocks`` for FK create_all
+
+    engine = create_engine(
+        "sqlite:///:memory:",
+        future=True,
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.drop_all(bind=engine)
+    Base.metadata.create_all(bind=engine)
+    SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    db = SessionLocal()
+    try:
+        db.add(Stock(symbol="B1", name="B", sector=None, market_cap=None))
+        db.add(
+            PriceData(
+                stock_symbol="B1",
+                date=date(2026, 1, 2),
+                open=1.0,
+                high=1.0,
+                low=1.0,
+                close=1.0,
+                volume=1,
+            )
+        )
+        db.commit()
+        rep = build_b1_excess_pair_aggregates(db, date(2026, 1, 1), date(2026, 1, 31), limit=None)
+        assert rep["kind"] == "leader_follower_b1_excess"
+        assert rep["signal_count"] == 0
+        assert rep["pairs"] == []
+        assert rep["costs"]["round_trip_cost_bps"] == get_settings().research_default_round_trip_cost_bps
+        assert "evaluation_context" in rep
+    finally:
+        db.close()
+
+
+@pytest.mark.integration
+def test_build_b1_excess_pair_aggregates_one_signal_known_excess() -> None:
+    """Event 1d return 4% vs one control Tuesday 1% -> excess 3%."""
+    from backend.app.models.stock import Stock
+
+    engine = create_engine(
+        "sqlite:///:memory:",
+        future=True,
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.drop_all(bind=engine)
+    Base.metadata.create_all(bind=engine)
+    SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    db = SessionLocal()
+    try:
+        for sym in ("INTC", "QCOM"):
+            db.add(Stock(symbol=sym, name=sym, sector="Tech", market_cap=None))
+        db.commit()
+
+        price_repo = PriceDataRepository(db)
+        for d, c in [
+            (date(2026, 2, 4), 100.0),
+            (date(2026, 2, 5), 101.0),
+            (date(2026, 2, 11), 100.0),
+            (date(2026, 2, 12), 104.0),
+        ]:
+            price_repo.add(
+                PriceData(
+                    stock_symbol="QCOM",
+                    date=d,
+                    open=c - 0.5,
+                    high=c + 0.5,
+                    low=c - 0.5,
+                    close=c,
+                    volume=1_000_000,
+                )
+            )
+        db.commit()
+
+        signal_repo = LeaderFollowerSignalRepository(db)
+        signal_repo.add(
+            LeaderFollowerSignal(
+                leader_symbol="INTC",
+                follower_symbol="QCOM",
+                group_id="semis",
+                signal_date=date(2026, 2, 11),
+                strength_score=1.0,
+                leader_return_pct=5.0,
+                leader_volume_ratio=1.5,
+            )
+        )
+        db.commit()
+
+        rep = build_b1_excess_pair_aggregates(db, date(2026, 2, 1), date(2026, 2, 28), limit=None)
+        assert rep["signal_count"] == 1
+        h1 = rep["by_horizon"]["1d"]
+        assert h1["evaluable_excess_count"] == 1
+        assert h1["avg_excess_pct"] == 3.0
+        assert h1["avg_event_return_pct"] == 4.0
+        assert h1["avg_baseline_mean_pct"] == 1.0
+        cost_pct = get_settings().research_default_round_trip_cost_bps / 100.0
+        assert h1["avg_net_event_return_pct"] == round(4.0 - cost_pct, 4)
+        assert h1["avg_net_baseline_mean_pct"] == round(1.0 - cost_pct, 4)
+        assert h1["avg_net_excess_pct"] == 3.0
+        assert h1["median_net_excess_pct"] == 3.0
+        assert rep["costs"]["source"] == "research_default_round_trip_cost_bps"
+        assert len(rep["pairs"]) == 1
+        assert rep["pairs"][0]["1d"]["avg_excess_pct"] == 3.0
+        assert rep["pairs"][0]["1d"]["avg_net_excess_pct"] == 3.0
+
+        rep_zero = build_b1_excess_pair_aggregates(
+            db, date(2026, 2, 1), date(2026, 2, 28), limit=None, round_trip_cost_bps=0.0
+        )
+        assert rep_zero["costs"]["source"] == "parameter"
+        assert rep_zero["by_horizon"]["1d"]["avg_net_event_return_pct"] == 4.0
+        assert rep_zero["by_horizon"]["1d"]["avg_net_baseline_mean_pct"] == 1.0
+
+        rep_hold = build_b1_excess_pair_aggregates(
+            db, date(2026, 2, 1), date(2026, 2, 28), limit=None, window_role="holdout"
+        )
+        assert rep_hold["evaluation_context"]["window_role"] == "holdout"
     finally:
         db.close()
 
@@ -139,6 +328,19 @@ def test_build_event_arm_pair_aggregates_empty_db() -> None:
     SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
     db = SessionLocal()
     try:
+        db.add(Stock(symbol="EA", name="E", sector=None, market_cap=None))
+        db.add(
+            PriceData(
+                stock_symbol="EA",
+                date=date(2026, 1, 2),
+                open=1.0,
+                high=1.0,
+                low=1.0,
+                close=1.0,
+                volume=1,
+            )
+        )
+        db.commit()
         rep = build_event_arm_pair_aggregates(db, date(2026, 1, 1), date(2026, 1, 31), limit=None)
         assert rep["kind"] == "leader_follower_event_arm"
         assert rep["signal_count"] == 0
