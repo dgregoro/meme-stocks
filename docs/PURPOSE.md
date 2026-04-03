@@ -28,6 +28,7 @@ Build a **personal, data-driven trading research system** that turns **hypothesi
 | `docs/ROADMAP.md` | **Scheduled work** — phases and tasks |
 | `.specify/memory/constitution.md` | **Engineering AS-IS** — patterns and principles |
 | `docs/CAUSAL_RESEARCH.md` | **Research methodology** — leakage, lead-lag, baselines |
+| `docs/PRIMARY_HYPOTHESIS.md` | **Preregistered** primary hypothesis (H1), baseline **B1**, kill criteria |
 
 If PRD language reads more “retail product” than this file, treat **PURPOSE** as the operator’s strategic intent and **PRD** as what is implemented and constrained in code—update both when they intentionally diverge or converge.
 
@@ -35,4 +36,4 @@ If PRD language reads more “retail product” than this file, treat **PURPOSE*
 
 ## Last updated
 
-March 29, 2026
+April 3, 2026
