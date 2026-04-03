@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import pytest
 
+from pydantic import ValidationError
+
 from backend.app.config import Settings, get_settings
 
 
@@ -52,3 +54,14 @@ def test_settings_can_be_overridden_via_environment(
     assert settings.api_port == 9000
     assert settings.log_level == "DEBUG"
     assert settings.database_url == "sqlite:///./test.db"
+
+
+def test_settings_s4_calendar_month_end_mode_trading(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("S4_CALENDAR_MONTH_END_MODE", "TRADING")
+    s = Settings()
+    assert s.s4_calendar_month_end_mode == "trading"
+
+
+def test_settings_s4_calendar_month_end_mode_invalid() -> None:
+    with pytest.raises(ValidationError):
+        Settings(s4_calendar_month_end_mode="invalid")

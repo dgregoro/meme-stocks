@@ -129,6 +129,26 @@ def test_build_merit_run_row_bundle() -> None:
 
 
 @pytest.mark.unit
+def test_build_merit_run_row_s7() -> None:
+    rep = {
+        "kind": "s7_rule_discovery_result",
+        "eval_window": {"start": "2024-02-01", "end": "2024-06-30"},
+        "symbols_requested": ["SPY"],
+        "feature_matrix_version": "s7_v1",
+        "protocol": {"train_end": "2024-04-15"},
+        "envelope": {},
+        "top_rules": [],
+        "warnings": [],
+    }
+    row = build_merit_run_row(rep)
+    assert row.report_kind == "s7_rule_discovery_result"
+    assert row.strategy_id == "s7"
+    assert row.symbol_count == 1
+    assert row.checklist_pass is None
+    assert row.rolling_pass is None
+
+
+@pytest.mark.unit
 def test_try_persist_skips_when_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DAILY_STRATEGY_MERIT_PERSIST_RUNS", "false")
     get_settings.cache_clear()

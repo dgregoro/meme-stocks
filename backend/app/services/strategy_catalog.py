@@ -87,8 +87,8 @@ STRATEGY_DEFINITIONS: tuple[StrategyDefinition, ...] = (
         "Rule discovery on daily features",
         "Search over rules with strict hold-out and complexity limits (high overfitting risk).",
         "Daily feature matrix",
-        "planned",
-        None,
+        "implemented",
+        "evaluate daily-strategy suite-all … --ack-s7-overfitting-risk | research rule-discovery …",
     ),
 )
 

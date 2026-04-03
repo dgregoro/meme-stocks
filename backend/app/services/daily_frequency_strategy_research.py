@@ -29,7 +29,10 @@ from backend.app.services.s4_calendar_flags import (
     is_calendar_month_end,
     is_opex_week,
     is_quarter_end_calendar,
+    is_trading_month_end_at_index,
+    is_trading_quarter_end_at_index,
     s4_bucket_label,
+    s4_merit_skip_min_events_check,
 )
 from backend.app.services.s3_vol_term_regime import (
     compute_s3_feature,
@@ -571,10 +574,16 @@ def _compute_s4_window_sample(
             baseline[str(h)].append(fr)
 
         opex = is_opex_week(d) if inc_o else False
-        m_end = is_calendar_month_end(d) if inc_m else False
-        q_end = is_quarter_end_calendar(d) if inc_q else False
-        if not (opex or m_end or q_end):
-            continue
+        mode = str(getattr(st, "s4_calendar_month_end_mode", "calendar") or "calendar").strip().lower()
+        use_trading_month = mode == "trading"
+        if use_trading_month:
+            m_end = is_trading_month_end_at_index(dates, i) if inc_m else False
+            q_end = is_trading_quarter_end_at_index(dates, i) if inc_q else False
+        else:
+            m_end = is_calendar_month_end(d) if inc_m else False
+            q_end = is_quarter_end_calendar(d) if inc_q else False
+        # Every session day maps to exactly one cal_abc bucket; cal_000 = no enabled flag is true
+        # (baseline-style days). Skipping those days left cal_*00 with evaluable_count 0 (gap bug).
         label = s4_bucket_label(
             opex_week=opex,
             month_end=m_end,
@@ -1757,6 +1766,7 @@ def run_s4_merit_report(
     inc_o = bool(getattr(settings, "s4_include_opex_week", True))
     inc_m = bool(getattr(settings, "s4_include_calendar_month_end", True))
     inc_q = bool(getattr(settings, "s4_include_quarter_end_calendar", True))
+    s4_me_mode = str(getattr(settings, "s4_calendar_month_end_mode", "calendar") or "calendar").strip().lower()
 
     repo = PriceDataRepository(db)
     pooled_bucket: dict[str, dict[str, list[float]]] = {k: {str(h): [] for h in horizons} for k in S4_BUCKET_KEYS}
@@ -1820,7 +1830,9 @@ def run_s4_merit_report(
         for hk in map(str, horizons):
             bm_k = bucket_metrics[bkt][hk]
             n = bm_k.get("evaluable_count", 0)
-            if n < min_ev:
+            if n < min_ev and not s4_merit_skip_min_events_check(
+                bkt, n, include_month_end=inc_m, include_quarter_end=inc_q
+            ):
                 checklist_failures.append(f"{bkt} horizon {hk}: evaluable_count {n} < {min_ev}")
             med = bm_k.get("median_return_pct")
             avg = bm_k.get("avg_return_pct")
@@ -1840,6 +1852,7 @@ def run_s4_merit_report(
             "s4_include_opex_week": inc_o,
             "s4_include_calendar_month_end": inc_m,
             "s4_include_quarter_end_calendar": inc_q,
+            "s4_calendar_month_end_mode": s4_me_mode,
             "merit_min_events_per_bucket": min_ev,
             "merit_concentration_top5_max_pct": conc_max,
         },
@@ -1852,7 +1865,9 @@ def run_s4_merit_report(
         "checklist": {
             "pass": len(checklist_failures) == 0,
             "failures": checklist_failures,
-            "note": "Minimum bar from SIGNAL_EVALUATION_CHECKLIST; passing does not imply tradable edge.",
+            "note": "Minimum bar from SIGNAL_EVALUATION_CHECKLIST; passing does not imply tradable edge. "
+            "S4: min-events check skipped for impossible labels (e.g. cal_001/cal_101 when month+quarter "
+            "flags are both enabled) and for bucket/horizon pairs with zero evaluable returns.",
         },
     }
 
@@ -2685,6 +2700,7 @@ def run_s4_evaluation(
     inc_o = bool(getattr(settings, "s4_include_opex_week", True))
     inc_m = bool(getattr(settings, "s4_include_calendar_month_end", True))
     inc_q = bool(getattr(settings, "s4_include_quarter_end_calendar", True))
+    s4_me_mode = str(getattr(settings, "s4_calendar_month_end_mode", "calendar") or "calendar").strip().lower()
 
     repo = PriceDataRepository(db)
     rows_buf = repo.list_for_stock(symbol)
@@ -2734,6 +2750,7 @@ def run_s4_evaluation(
             "s4_include_opex_week": inc_o,
             "s4_include_calendar_month_end": inc_m,
             "s4_include_quarter_end_calendar": inc_q,
+            "s4_calendar_month_end_mode": s4_me_mode,
         },
         "horizons": list(horizons),
         "counts": sample.counts,

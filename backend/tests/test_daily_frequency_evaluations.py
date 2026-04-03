@@ -648,6 +648,63 @@ def test_run_s4_merit_report_pooled(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.unit
+def test_s4_merit_cal_000_has_evaluable_forward_returns(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Regression: plain calendar days must map to cal_000 (previously skipped, evaluable_count always 0)."""
+    monkeypatch.setenv("DAILY_STRATEGY_HORIZONS", "1,5,10")
+    monkeypatch.setenv("DAILY_STRATEGY_MERIT_MIN_EVENTS_PER_REGIME", "50")
+    get_settings.cache_clear()
+    db = _session()
+    try:
+        db.add(Stock(symbol="M4C0", name="M", sector=None, market_cap=None))
+        _seed_ohlcv(db, "M4C0", date(2024, 1, 2), 220)
+        db.commit()
+        rep = run_s4_merit_report(db, ["M4C0"], date(2024, 2, 1), date(2024, 8, 20))
+        cal0_h1 = rep["by_bucket"]["cal_000"]["1"]
+        assert cal0_h1.get("evaluable_count", 0) >= 50
+        bad = [f for f in rep["checklist"]["failures"] if "cal_000" in f and "evaluable_count" in f]
+        assert not bad, bad
+        impossible = [
+            f for f in rep["checklist"]["failures"] if ("cal_001" in f or "cal_101" in f) and "evaluable_count" in f
+        ]
+        assert not impossible, impossible
+    finally:
+        db.close()
+        get_settings.cache_clear()
+
+
+@pytest.mark.unit
+def test_s4_window_sample_trading_month_end_counts_session_not_calendar_eom() -> None:
+    """Trading month-end uses bar series; Mar 28 → Apr 1 counts as month-end without Mar 31 bar."""
+    from backend.app.config import Settings
+
+    from backend.app.services.daily_frequency_strategy_research import DailyBar, _compute_s4_window_sample
+
+    def mk(d: date) -> DailyBar:
+        return DailyBar(d=d, open=100.0, high=100.0, low=100.0, close=100.0, volume=1)
+
+    bars = [
+        mk(date(2024, 3, 25)),
+        mk(date(2024, 3, 26)),
+        mk(date(2024, 3, 27)),
+        mk(date(2024, 3, 28)),
+        mk(date(2024, 4, 1)),
+        mk(date(2024, 4, 2)),
+    ]
+    st_tr = Settings(
+        s4_include_opex_week=False,
+        s4_include_calendar_month_end=True,
+        s4_include_quarter_end_calendar=False,
+        s4_calendar_month_end_mode="trading",
+    )
+    st_cal = st_tr.model_copy(update={"s4_calendar_month_end_mode": "calendar"})
+    sample_tr = _compute_s4_window_sample(bars, horizons=(1,), since=None, until=None, settings=st_tr)
+    sample_cal = _compute_s4_window_sample(bars, horizons=(1,), since=None, until=None, settings=st_cal)
+    assert sample_tr is not None and sample_cal is not None
+    assert sample_tr.counts.get("cal_010", 0) >= 1
+    assert sample_cal.counts.get("cal_010", 0) == 0
+
+
+@pytest.mark.unit
 def test_run_s4_merit_rolling_calendar(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DAILY_STRATEGY_HORIZONS", "1")
     monkeypatch.setenv("DAILY_STRATEGY_MERIT_MIN_EVENTS_PER_REGIME", "1")

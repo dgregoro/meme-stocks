@@ -71,6 +71,8 @@ def _strategy_id_from_report(report: dict[str, Any]) -> str:
         return "s5"
     if isinstance(kind, str) and kind.startswith("s6_"):
         return "s6"
+    if kind == "s7_rule_discovery_result":
+        return "s7"
     return "unknown"
 
 

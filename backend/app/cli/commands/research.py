@@ -214,3 +214,151 @@ def register_research(app: typer.Typer) -> None:
 
         if result.errors:
             typer.echo(f"Warning: {len(result.errors)} error(s) during cap lookup; see JSON", err=True)
+
+    rule_discovery_app = typer.Typer(
+        help="S7 — rule discovery on daily features (strict hold-out; requires --ack-overfitting-risk to search).",
+    )
+    research_app.add_typer(rule_discovery_app, name="rule-discovery")
+
+    @rule_discovery_app.command("build-matrix")
+    def research_rule_discovery_build_matrix(
+        symbol: str = typer.Option(..., "--symbol", "-s", help="Ticker"),
+        start: str = typer.Option(..., "--start", help="First calendar date (YYYY-MM-DD)"),
+        end: str = typer.Option(..., "--end", help="Last calendar date (YYYY-MM-DD)"),
+        output: str = typer.Option(
+            ...,
+            "--output",
+            "-o",
+            help="Write CSV feature matrix (sidecar .meta.json next to it)",
+        ),
+    ) -> None:
+        """Build deterministic S7 daily feature matrix from DB OHLCV (spec 025)."""
+        from backend.app.config import get_settings
+        from backend.app.data.database import SessionLocal, init_db
+        from backend.app.data.repositories.price_data_repo import PriceDataRepository
+        from backend.app.services.daily_frequency_strategy_research import bars_from_price_rows
+        from backend.app.services.s7_rule_discovery import (
+            build_feature_rows_from_bars,
+            write_feature_matrix_csv,
+        )
+
+        start_d = parse_cli_date(start)
+        end_d = parse_cli_date(end)
+        if start_d > end_d:
+            typer.echo("Error: --start must be on or before --end", err=True)
+            raise typer.Exit(1)
+
+        sym = symbol.strip().upper()
+        init_db()
+        db = SessionLocal()
+        try:
+            rows_db = PriceDataRepository(db).list_for_stock(sym)
+            bars_all = bars_from_price_rows(rows_db)
+            bars = [b for b in bars_all if start_d <= b.d <= end_d]
+            if len(bars) < get_settings().s7_vol_z_window + 10:
+                typer.echo(
+                    f"Error: insufficient bars for {sym} in [{start_d}, {end_d}] "
+                    f"({len(bars)} rows; widen range or backfill)",
+                    err=True,
+                )
+                raise typer.Exit(2)
+            w = get_settings().s7_vol_z_window
+            feat = build_feature_rows_from_bars(bars, vol_z_window=w)
+            if not feat:
+                typer.echo("Error: no feature rows (check data quality / vol window)", err=True)
+                raise typer.Exit(2)
+            outp = write_feature_matrix_csv(
+                output,
+                feat,
+                symbol=sym,
+                meta_extra={"cli_start": str(start_d), "cli_end": str(end_d)},
+            )
+            typer.echo(json.dumps({"wrote": str(outp), "n_rows": len(feat)}, indent=2, default=str))
+        finally:
+            db.close()
+
+    @rule_discovery_app.command("run-search")
+    def research_rule_discovery_run_search(
+        matrix: str = typer.Option(
+            ...,
+            "--matrix",
+            "-m",
+            help="Feature matrix CSV from build-matrix (expects sidecar .meta.json for symbol)",
+        ),
+        train_end: str = typer.Option(
+            ...,
+            "--train-end",
+            help="Last train date inclusive (YYYY-MM-DD); rows after this are hold-out for reporting",
+        ),
+        symbol: str | None = typer.Option(
+            None,
+            "--symbol",
+            "-s",
+            help="Override symbol if .meta.json is missing",
+        ),
+        ack_overfitting_risk: bool = typer.Option(
+            False,
+            "--ack-overfitting-risk",
+            help="Required acknowledgement: search has high false-discovery risk; no warranty of edge",
+        ),
+        no_persist: bool = typer.Option(
+            False,
+            "--no-persist",
+            help="Do not store this run in daily_strategy_merit_runs",
+        ),
+    ) -> None:
+        """Enumerate a bounded rule space on train quantiles; score hold-out trades (JSON)."""
+        from backend.app.config import get_settings
+        from backend.app.data.database import SessionLocal, init_db
+        from backend.app.data.repositories.price_data_repo import PriceDataRepository
+        from backend.app.services.daily_frequency_strategy_research import bars_from_price_rows
+        from backend.app.services.daily_strategy_merit_persistence import try_persist_merit_report
+        from backend.app.services.s7_rule_discovery import read_feature_matrix_csv, run_rule_search
+
+        if not ack_overfitting_risk:
+            typer.echo(
+                "Error: refuse to run without --ack-overfitting-risk "
+                "(S7 has high multiple-testing / overfitting hazard).",
+                err=True,
+            )
+            raise typer.Exit(1)
+
+        path = Path(matrix)
+        train_end_d = parse_cli_date(train_end)
+        feat_rows, meta = read_feature_matrix_csv(path)
+        sym = (symbol or meta.get("symbol") or "").strip().upper()
+        if not sym:
+            typer.echo(
+                'Error: missing symbol (pass --symbol or ensure .meta.json next to matrix has "symbol")',
+                err=True,
+            )
+            raise typer.Exit(1)
+
+        init_db()
+        db = SessionLocal()
+        try:
+            rows_db = PriceDataRepository(db).list_for_stock(sym)
+            bars = bars_from_price_rows(rows_db)
+            if len(bars) < get_settings().s7_vol_z_window + 5:
+                typer.echo(f"Error: insufficient price history in DB for {sym}", err=True)
+                raise typer.Exit(2)
+            out = run_rule_search(
+                bars=bars,
+                feature_rows=feat_rows,
+                train_end=train_end_d,
+                ack_overfitting_risk=True,
+                symbol=sym,
+            )
+            if out.get("error"):
+                typer.echo(json.dumps(out, indent=2, default=str))
+                raise typer.Exit(2)
+            rid = try_persist_merit_report(db, out, skip=no_persist)
+            if rid is not None:
+                typer.echo(
+                    f"Recorded S7 run id={rid} (daily_strategy_merit_runs). "
+                    f"Show: python -m backend.app.cli strategies merit-runs show --id {rid}",
+                    err=True,
+                )
+            typer.echo(json.dumps(out, indent=2, default=str))
+        finally:
+            db.close()

@@ -190,6 +190,16 @@ class Settings(BaseSettings):
     s4_include_opex_week: bool = True
     s4_include_calendar_month_end: bool = True
     s4_include_quarter_end_calendar: bool = True
+    # calendar = last calendar day of month; trading = last observed bar in month vs next bar
+    s4_calendar_month_end_mode: str = "calendar"
+
+    @field_validator("s4_calendar_month_end_mode")
+    @classmethod
+    def s4_calendar_month_end_mode_ok(cls, v: str) -> str:
+        x = (v or "calendar").strip().lower()
+        if x not in ("calendar", "trading"):
+            raise ValueError("s4_calendar_month_end_mode must be 'calendar' or 'trading'")
+        return x
 
     # Daily-frequency S5: cross-sectional return dispersion panel (023); expanding quantile regimes
     s5_min_symbols_cross_section: int = 10
@@ -203,6 +213,17 @@ class Settings(BaseSettings):
     s6_regime_min_history_days: int = 252
     s6_regime_n_buckets: int = 4
     s6_load_buffer_calendar_days: int = 400
+
+    # Daily-frequency S7: rule discovery on daily features (spec 025); gated CLI; not in eval-bundle
+    s7_vol_z_window: int = 20
+    s7_search_feature_names: str = "ret_1,gap_pct,vol_z"
+    s7_search_quantiles: str = "0.33,0.67"
+    s7_max_rule_conditions: int = 2
+    s7_max_candidate_rules: int = 400
+    s7_complexity_penalty: float = 0.02  # percent points penalized per extra condition beyond 1
+    s7_forward_horizon_days: int = 3
+    s7_top_rules_reported: int = 10
+    s7_min_hold_out_feature_rows: int = 5
 
     # Default round-trip cost for documentation / ResearchRunEnvelope (actual sims use their own fields)
     research_default_round_trip_cost_bps: float = 10.0

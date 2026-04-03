@@ -165,7 +165,9 @@ def register_evaluate(app: typer.Typer) -> None:
     evaluate_app = typer.Typer(help="On-demand research evaluation summaries (read-only).")
     app.add_typer(evaluate_app, name="evaluate")
 
-    daily_strat = typer.Typer(help="Daily OHLCV strategies (S1–S6); see docs/STRATEGY_TESTING_PLAN.md.")
+    daily_strat = typer.Typer(
+        help="Daily research strategies (S1–S7); see docs/STRATEGY_TESTING_PLAN.md.",
+    )
     evaluate_app.add_typer(daily_strat, name="daily-strategy")
 
     @daily_strat.command("eval-bundle")
@@ -332,6 +334,192 @@ def register_evaluate(app: typer.Typer) -> None:
                 )
             _persist_merit_output(db, bundle, no_persist=no_persist)
             _emit_strategy_merit_bundle_stdout_jsonl(bundle, append_jsonl=append_jsonl)
+        finally:
+            db.close()
+
+    @daily_strat.command("suite-all")
+    def evaluate_daily_strategy_suite_all(
+        start: str = typer.Option(
+            ..., "--start", help="Merit eval window start (YYYY-MM-DD); S7 features use same range"
+        ),
+        end: str = typer.Option(..., "--end", help="Merit eval window end (YYYY-MM-DD)"),
+        train_end: str = typer.Option(
+            ...,
+            "--train-end",
+            help="S7: last train date inclusive (must leave hold-out rows in the feature matrix)",
+        ),
+        leg_b: str = typer.Option(
+            ...,
+            "--leg-b",
+            help="S6 leg B ticker (must be present in the symbol list)",
+        ),
+        symbols: str | None = typer.Option(
+            None,
+            "--symbols",
+            help="Comma-separated tickers (omit if using --all-stocks or --symbols-file)",
+        ),
+        symbols_file: str | None = typer.Option(
+            None,
+            "--symbols-file",
+            help="Path to tickers (one per line)",
+        ),
+        all_stocks: bool = typer.Option(
+            False,
+            "--all-stocks",
+            help="Use every symbol in the stocks table (S6 leg-b must still be in that set)",
+        ),
+        s7_symbol: str | None = typer.Option(
+            None,
+            "--s7-symbol",
+            help="S7 subject symbol (default: first ticker in the resolved list)",
+        ),
+        rolling_splits: int = typer.Option(
+            1,
+            "--rolling-splits",
+            help="Merit bundle rolling splits for each of S1–S6 (1 = single window only)",
+            min=1,
+            max=24,
+        ),
+        split_mode: str = typer.Option(
+            "trading",
+            "--split-mode",
+            help="calendar or trading (same as eval-bundle)",
+        ),
+        trading_calendar_symbols: str | None = typer.Option(
+            None,
+            "--trading-calendar-symbols",
+            help="Comma tickers for trading-day union when --split-mode trading",
+        ),
+        ensure_data: bool = typer.Option(
+            False,
+            "--ensure-data",
+            help="Before each S1–S6 preflight: seed/backfill via strategy preflight (requires API keys where needed)",
+        ),
+        no_persist: bool = typer.Option(
+            False,
+            "--no-persist",
+            help="Do not insert into daily_strategy_merit_runs",
+        ),
+        ack_s7_overfitting_risk: bool = typer.Option(
+            False,
+            "--ack-s7-overfitting-risk",
+            help="Required: run S7 rule search and persist (high false-discovery risk)",
+        ),
+    ) -> None:
+        """Run S1–S6 merit bundles plus S7 rule search; persist each to ``daily_strategy_merit_runs`` (unless --no-persist)."""
+        from backend.app.data.repositories.stock_repo import StockRepository
+        from backend.app.services.daily_frequency_strategy_research import SplitMode
+        from backend.app.services.research_strategy_suite import run_research_strategy_suite_and_persist
+
+        if not ack_s7_overfitting_risk:
+            typer.echo(
+                "Error: suite-all includes S7; pass --ack-s7-overfitting-risk "
+                "(or use eval-bundle per strategy without S7).",
+                err=True,
+            )
+            raise typer.Exit(1)
+
+        start_d = parse_cli_date(start)
+        end_d = parse_cli_date(end)
+        train_end_d = parse_cli_date(train_end)
+        leg_b_u = leg_b.strip().upper()
+
+        sm = split_mode.strip().lower()
+        if sm not in ("calendar", "trading"):
+            typer.echo("Error: --split-mode must be calendar or trading", err=True)
+            raise typer.Exit(1)
+        split_mode_t = cast(SplitMode, sm)
+
+        if start_d > end_d:
+            typer.echo("Error: --start must be on or before --end", err=True)
+            raise typer.Exit(1)
+        if symbols and symbols_file:
+            typer.echo("Error: pass either --symbols or --symbols-file, not both", err=True)
+            raise typer.Exit(1)
+        if all_stocks and (symbols or symbols_file):
+            typer.echo(
+                "Error: --all-stocks cannot be combined with --symbols or --symbols-file",
+                err=True,
+            )
+            raise typer.Exit(1)
+        if not all_stocks and not symbols and not symbols_file:
+            typer.echo("Error: pass --symbols, --symbols-file, or --all-stocks", err=True)
+            raise typer.Exit(1)
+
+        init_db()
+        db = SessionLocal()
+        try:
+            if all_stocks:
+                sym_list = [s.symbol for s in StockRepository(db).list()]
+            elif symbols_file is not None:
+                sf = Path(symbols_file)
+                if not sf.is_file():
+                    typer.echo(f"Error: --symbols-file not found: {sf}", err=True)
+                    raise typer.Exit(1)
+                sym_list = load_symbols_from_path(sf)
+                if not sym_list:
+                    typer.echo("Error: --symbols-file is empty", err=True)
+                    raise typer.Exit(1)
+            else:
+                if symbols is None:
+                    typer.echo("Error: --symbols required unless --all-stocks or --symbols-file", err=True)
+                    raise typer.Exit(1)
+                sym_list = [s.strip().upper() for s in symbols.split(",") if s.strip()]
+
+            if leg_b_u not in sym_list:
+                typer.echo(f"Error: --leg-b {leg_b_u} must be in the symbol list", err=True)
+                raise typer.Exit(1)
+
+            for strat in ("s1", "s2", "s3", "s4", "s5", "s6"):
+                _daily_strategy_preflight_phase(
+                    db,
+                    sym_list,
+                    strat,
+                    start_d,
+                    end_d,
+                    preflight_only=False,
+                    ensure_data=ensure_data,
+                    all_stocks=all_stocks,
+                    pair_leg_b=leg_b_u if strat == "s6" else None,
+                )
+
+            cal_override = None
+            if trading_calendar_symbols:
+                cal_override = [s.strip().upper() for s in trading_calendar_symbols.split(",") if s.strip()]
+
+            try:
+                summary = run_research_strategy_suite_and_persist(
+                    db,
+                    sym_list,
+                    start_d,
+                    end_d,
+                    leg_b=leg_b_u,
+                    s7_train_end=train_end_d,
+                    s7_symbol=s7_symbol.strip().upper() if s7_symbol and s7_symbol.strip() else None,
+                    rolling_splits=rolling_splits,
+                    split_mode=split_mode_t,
+                    trading_calendar_symbols=cal_override,
+                    ack_s7_overfitting_risk=True,
+                    no_persist=no_persist,
+                )
+            except ValueError as exc:
+                typer.echo(f"Error: {exc}", err=True)
+                raise typer.Exit(1)
+
+            for sid, rid in (summary.get("merit_run_ids") or {}).items():
+                if rid is not None:
+                    typer.echo(
+                        f"Recorded {sid} → daily_strategy_merit_runs id={rid} "
+                        f"(show: python -m backend.app.cli strategies merit-runs show --id {rid})",
+                        err=True,
+                    )
+
+            s7_info = summary.get("s7") or {}
+            if s7_info.get("error"):
+                typer.echo(json.dumps(summary, indent=2, default=str))
+                raise typer.Exit(2)
+
+            typer.echo(json.dumps(summary, indent=2, default=str))
         finally:
             db.close()
 

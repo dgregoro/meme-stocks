@@ -11,8 +11,12 @@ from backend.app.services.s4_calendar_flags import (
     is_calendar_month_end,
     is_opex_week,
     is_quarter_end_calendar,
+    is_trading_month_end_at_index,
+    is_trading_quarter_end_at_index,
     monday_of_iso_week_containing,
     s4_bucket_label,
+    s4_impossible_bucket_keys,
+    s4_merit_skip_min_events_check,
     third_friday,
 )
 
@@ -86,3 +90,36 @@ def test_s4_bucket_label_all_enabled() -> None:
         )
         == "cal_100"
     )
+
+
+@pytest.mark.unit
+def test_is_trading_month_end_at_index() -> None:
+    ds = [date(2024, 3, 27), date(2024, 3, 28), date(2024, 4, 1)]
+    assert is_trading_month_end_at_index(ds, 0) is False
+    assert is_trading_month_end_at_index(ds, 1) is True
+    assert is_trading_month_end_at_index(ds, 2) is False
+
+
+@pytest.mark.unit
+def test_is_trading_quarter_end_march() -> None:
+    ds = [date(2024, 3, 27), date(2024, 3, 28), date(2024, 4, 1)]
+    assert is_trading_quarter_end_at_index(ds, 1) is True
+    ds2 = [date(2024, 4, 29), date(2024, 4, 30), date(2024, 5, 1)]
+    assert is_trading_quarter_end_at_index(ds2, 1) is False
+
+
+@pytest.mark.unit
+def test_s4_impossible_bucket_keys_only_with_month_and_quarter() -> None:
+    assert s4_impossible_bucket_keys(include_month_end=True, include_quarter_end=True) == frozenset(
+        {"cal_001", "cal_101"}
+    )
+    assert s4_impossible_bucket_keys(include_month_end=True, include_quarter_end=False) == frozenset()
+    assert s4_impossible_bucket_keys(include_month_end=False, include_quarter_end=True) == frozenset()
+
+
+@pytest.mark.unit
+def test_s4_merit_skip_min_events_impossible_and_empty() -> None:
+    assert s4_merit_skip_min_events_check("cal_001", 0, include_month_end=True, include_quarter_end=True) is True
+    assert s4_merit_skip_min_events_check("cal_101", 99, include_month_end=True, include_quarter_end=True) is True
+    assert s4_merit_skip_min_events_check("cal_010", 0, include_month_end=True, include_quarter_end=True) is True
+    assert s4_merit_skip_min_events_check("cal_010", 5, include_month_end=True, include_quarter_end=True) is False

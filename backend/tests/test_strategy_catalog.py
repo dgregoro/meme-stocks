@@ -35,6 +35,9 @@ def test_build_strategy_list_rows_defaults() -> None:
     assert s3.evidence == "not_tested"
     assert s4.tooling == "implemented"
     assert s4.cli_hint is not None
+    s7 = next(r for r in rows if r.strategy_id == "S7")
+    assert s7.tooling == "implemented"
+    assert s7.cli_hint and "suite-all" in s7.cli_hint
 
 
 @pytest.mark.unit
