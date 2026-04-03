@@ -79,7 +79,8 @@ Defaults work for local dev. Create `.env` at project root if you want logging p
 ```bash
 LOG_LEVEL=INFO
 LOG_FILE=logs/app.log   # yfinance/pandas noise saved here, not printed to terminal
-DATABASE_URL=sqlite:///./data/app.db
+# DATABASE_URL: omit to use <repo-root>/data/app.db (absolute path; cwd-safe). If you still set
+# sqlite:///./data/app.db, it is rewritten to that same file. Use a different path only for Postgres or a second SQLite file.
 
 # Scheduling (optional, defaults shown)
 PRICE_COLLECTION_INTERVAL_MINUTES=15
@@ -156,7 +157,7 @@ All settings are in `backend/app/config.py`. Key variables:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `LOG_LEVEL` | `INFO` | Logging verbosity |
-| `DATABASE_URL` | `sqlite:///./data/app.db` | SQLite database path |
+| `DATABASE_URL` | *(computed)* `<repo>/data/app.db` | SQLite URL; legacy `sqlite:///./data/app.db` in `.env` is anchored to repo root |
 | `PRICE_COLLECTION_INTERVAL_MINUTES` | `15` | Price update interval |
 | `NOTIFICATION_CHECK_INTERVAL_MINUTES` | `30` | Notification scan interval |
 | `DAILY_ANALYSIS_HOUR` | `16` | Hour (24h) for daily analysis |

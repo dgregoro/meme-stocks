@@ -1,0 +1,14 @@
+{
+  "base_config": {
+    "entry_mode": "next_open",
+    "exit_mode": "fixed_days",
+    "holding_days": 3,
+    "max_positions_per_event": 2,
+    "per_trade_cost_pct": 0.1
+  },
+  "candidates": [{}],
+  "ranking": {
+    "method": "rolling_robustness_v1",
+    "min_trades_validate": 5
+  }
+}
