@@ -2,7 +2,7 @@
 
 **Status:** Operator commitment for the **leader–follower** lane. Aligns with [`PURPOSE.md`](PURPOSE.md) (hypothesis → measurable edge or kill → execution).
 
-**Last updated:** April 3, 2026 (Step 2 run logged below)
+**Last updated:** April 3, 2026 (Steps 2–3 run logs below)
 
 ---
 
@@ -115,8 +115,19 @@ Follow in order; do not treat “event-only” aggregates as a full H1 test unti
 
 **Note:** An earlier attempt through 2026-03-27 hit API/DB errors (`Failed to list price data`, `Failed to get all symbols from stock groups`) after the local DB had no **`stocks`** rows; re-running **`seed stocks`** then prices then replay produced a clean result. Revisit **2026** bars later if you extend the calendar window.
 
-3. **Event-arm metrics (existing code)**
-   Use `run_evaluation` / `aggregate_by_pair` in `leader_follower_evaluation_service` for **event-day** follower forward returns. This is the **treatment** arm only—not yet excess vs B1.
+3. **Event-arm metrics (existing code)** ✅ **CLI recorded 2026-04-03** (`evaluate leader-follower-aggregates`; see Step 3 log).
+   Use `run_evaluation` / `aggregate_by_pair` (or the CLI below) for **event-day** follower forward returns. This is the **treatment** arm only—not yet excess vs B1.
+
+### Step 3 run log (same DB / window as Step 2)
+
+| Field | Value |
+|--------|--------|
+| Command | `python -m backend.app.cli evaluate leader-follower-aggregates --start 2024-01-02 --end 2025-12-31` (omit `--limit` for all signals in range) |
+| Signals | **5,692** |
+| Distinct (leader, follower) pairs | **767** |
+| Horizons | **1, 3, 5** (trading days; from `leader_follower_evaluation_horizons`) |
+
+Full JSON includes per-pair `signal_count`, `1d` / `3d` / `5d` **win_rate** and **avg_return_pct** (treatment only).
 
 4. **Baseline B1 (required for H1)**
    For each event, compute follower forward return on the event day vs the baseline from **matched non-event** days (same DOW; same regime when defined). Implement as a script, notebook, or service helper with tests; until this exists, **do not** claim H1 is tested.
