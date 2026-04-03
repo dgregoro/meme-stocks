@@ -404,13 +404,16 @@ def run_evaluation(
     until_date: date | None = None,
     leader: str | None = None,
     follower: str | None = None,
-    limit: int = 500,
+    limit: int | None = 500,
 ) -> tuple[
     list[LeaderFollowerSignal],
     dict[str, list[tuple[date, float]]],
     tuple[int, ...],
 ]:
-    """Load signals and price data for evaluation. Returns (signals, price_by_symbol, horizons)."""
+    """Load signals and price data for evaluation. Returns (signals, price_by_symbol, horizons).
+
+    ``limit`` ``None`` loads all matching signals (ordered newest first). Non-``None`` caps count.
+    """
     signal_repo = LeaderFollowerSignalRepository(db)
     price_repo = PriceDataRepository(db)
     signals = signal_repo.list_signals(
@@ -429,3 +432,38 @@ def run_evaluation(
     end = max_d + buf
     price_by_symbol = _load_price_by_symbol(price_repo, symbols, min_d, end)
     return (list(signals), price_by_symbol, _get_horizons())
+
+
+def build_event_arm_pair_aggregates(
+    db: Session,
+    since_date: date | None = None,
+    until_date: date | None = None,
+    *,
+    leader: str | None = None,
+    follower: str | None = None,
+    limit: int | None = None,
+) -> dict[str, Any]:
+    """Treatment-arm-only pair aggregates (event-day follower forwards).
+
+    Used for H1 Step 3. Does **not** compute baseline B1. ``limit`` ``None`` = all matching
+    signals (repository order: newest first).
+    """
+    signals, price_by, horizons = run_evaluation(
+        db,
+        since_date,
+        until_date,
+        leader,
+        follower,
+        limit,
+    )
+    pairs = aggregate_by_pair(signals, price_by, horizons)
+    return {
+        "kind": "leader_follower_event_arm",
+        "since": str(since_date) if since_date else None,
+        "until": str(until_date) if until_date else None,
+        "leader_filter": leader,
+        "follower_filter": follower,
+        "signal_count": len(signals),
+        "horizons": list(horizons),
+        "pairs": pairs,
+    }

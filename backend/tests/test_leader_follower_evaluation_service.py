@@ -16,6 +16,7 @@ from backend.app.models.leader_follower_signal import LeaderFollowerSignal
 from backend.app.models.price_data import PriceData
 from backend.app.services.leader_follower_evaluation_service import (
     aggregate_summary,
+    build_event_arm_pair_aggregates,
     compute_duplicate_overlap,
     compute_forward_return,
     evaluate_signal,
@@ -101,12 +102,15 @@ def test_compute_duplicate_overlap_repeats() -> None:
 @pytest.mark.integration
 def test_run_evaluation_empty_db() -> None:
     """No signals returns empty list."""
+    import backend.app.models.stock  # noqa: F401 — register ``stocks`` for FK create_all
+
     engine = create_engine(
         "sqlite:///:memory:",
         future=True,
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
+    Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
     SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
     db = SessionLocal()
@@ -115,6 +119,31 @@ def test_run_evaluation_empty_db() -> None:
         assert signals == []
         assert price_by_symbol == {}
         assert horizons == (1, 3, 5)
+    finally:
+        db.close()
+
+
+@pytest.mark.integration
+def test_build_event_arm_pair_aggregates_empty_db() -> None:
+    """No signals yields event-arm report with zero count and empty pairs."""
+    import backend.app.models.stock  # noqa: F401 — register ``stocks`` for FK create_all
+
+    engine = create_engine(
+        "sqlite:///:memory:",
+        future=True,
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.drop_all(bind=engine)
+    Base.metadata.create_all(bind=engine)
+    SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    db = SessionLocal()
+    try:
+        rep = build_event_arm_pair_aggregates(db, date(2026, 1, 1), date(2026, 1, 31), limit=None)
+        assert rep["kind"] == "leader_follower_event_arm"
+        assert rep["signal_count"] == 0
+        assert rep["pairs"] == []
+        assert rep["horizons"] == [1, 3, 5]
     finally:
         db.close()
 

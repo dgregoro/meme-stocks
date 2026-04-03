@@ -1487,6 +1487,60 @@ def register_evaluate(app: typer.Typer) -> None:
         finally:
             db.close()
 
+    @evaluate_app.command("leader-follower-aggregates")
+    def evaluate_leader_follower_aggregates(
+        start: str | None = typer.Option(
+            None,
+            "--start",
+            "-s",
+            help="signal_date >= (YYYY-MM-DD); omit for no lower bound",
+        ),
+        end: str | None = typer.Option(
+            None,
+            "--end",
+            "-e",
+            help="signal_date <= (YYYY-MM-DD); omit for no upper bound",
+        ),
+        leader: str | None = typer.Option(None, "--leader", help="Filter by leader symbol"),
+        follower: str | None = typer.Option(None, "--follower", help="Filter by follower symbol"),
+        limit: int | None = typer.Option(
+            None,
+            "--limit",
+            help="Max signals (newest first). Omit for no cap (full window; may be slow).",
+        ),
+    ) -> None:
+        """H1 Step 3: JSON report of event-day follower forward returns by (leader, follower) pair.
+
+        Treatment arm only; baseline B1 is not computed. See docs/PRIMARY_HYPOTHESIS.md.
+        """
+        from backend.app.services.leader_follower_evaluation_service import (
+            build_event_arm_pair_aggregates,
+        )
+
+        start_d = parse_cli_date(start) if start else None
+        end_d = parse_cli_date(end) if end else None
+        if start_d is not None and end_d is not None and start_d > end_d:
+            typer.echo("Error: --start must be on or before --end", err=True)
+            raise typer.Exit(1)
+
+        leader_u = leader.strip().upper() if leader and leader.strip() else None
+        follower_u = follower.strip().upper() if follower and follower.strip() else None
+
+        init_db()
+        db = SessionLocal()
+        try:
+            report = build_event_arm_pair_aggregates(
+                db,
+                start_d,
+                end_d,
+                leader=leader_u,
+                follower=follower_u,
+                limit=limit,
+            )
+            typer.echo(json.dumps(report, indent=2, default=str))
+        finally:
+            db.close()
+
     @evaluate_app.command("volume-spike")
     def evaluate_volume_spike(
         start: str | None = typer.Option(None, "--start", "-s", help="Filter event_date >= (YYYY-MM-DD)"),
