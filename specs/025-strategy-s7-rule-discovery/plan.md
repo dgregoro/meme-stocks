@@ -5,4 +5,4 @@
 3. Implement evaluation only **after** protocol is reviewed (likely separate research command namespace).
 4. Do **not** add to `eval-bundle` until ROADMAP explicitly approves.
 
-**Current state:** Spec placeholder only.
+**Current state:** MVP implemented — `backend/app/services/s7_rule_discovery.py`, `research rule-discovery build-matrix` / `run-search --ack-overfitting-risk`. Still **not** in `eval-bundle` until explicitly approved.

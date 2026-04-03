@@ -206,7 +206,7 @@ if alignment_score > COMBINED_SIGNAL_THRESHOLD and confidence > 0.7:
 | 3.19 | Strategy catalog CLI (`strategies list` + optional evidence JSON) | ad hoc research tooling | ✅ Implemented |
 | 3.20 | Persist merit / eval-bundle runs (`daily_strategy_merit_runs`; `strategies merit-runs`) | ad hoc research tooling | ✅ Implemented |
 | 3.21 | Shared `research_execution` package (costs, metrics, window splits, `ResearchRunEnvelope`) | [specs/020-shared-research-execution](specs/020-shared-research-execution/README.md) | ✅ Implemented (core); follow-up slices planned in spec |
-| 3.22 | Daily strategy **S4**–**S7** research CLI tracks (calendar, dispersion, pairs, rules) | [022 S4](specs/022-strategy-s4-calendar-events/spec.md), [023 S5](specs/023-strategy-s5-cross-sectional-dispersion/spec.md), [024 S6](specs/024-strategy-s6-slow-pairs/spec.md), [025 S7](specs/025-strategy-s7-rule-discovery/spec.md) | S4 ✅; **S5** ✅; **S6** ✅ (`s6` / `s6-merit` / `eval-bundle --strategy s6 --leg-b`); S7 spec only |
+| 3.22 | Daily strategy **S4**–**S7** research CLI tracks (calendar, dispersion, pairs, rules) | [022 S4](specs/022-strategy-s4-calendar-events/spec.md), [023 S5](specs/023-strategy-s5-cross-sectional-dispersion/spec.md), [024 S6](specs/024-strategy-s6-slow-pairs/spec.md), [025 S7](specs/025-strategy-s7-rule-discovery/spec.md) | S4 ✅; **S5** ✅; **S6** ✅ (`s6` / `s6-merit` / `eval-bundle --strategy s6 --leg-b`); **S7** ✅ (`research rule-discovery build-matrix` / `run-search --ack-overfitting-risk`; not in `eval-bundle`) |
 
 ### 3.7 Leader-Follower Signal Detection ✅
 
