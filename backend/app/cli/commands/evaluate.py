@@ -1541,6 +1541,78 @@ def register_evaluate(app: typer.Typer) -> None:
         finally:
             db.close()
 
+    @evaluate_app.command("leader-follower-b1")
+    def evaluate_leader_follower_b1(
+        start: str | None = typer.Option(
+            None,
+            "--start",
+            "-s",
+            help="signal_date >= (YYYY-MM-DD); omit for no lower bound",
+        ),
+        end: str | None = typer.Option(
+            None,
+            "--end",
+            "-e",
+            help="signal_date <= (YYYY-MM-DD); omit for no upper bound",
+        ),
+        leader: str | None = typer.Option(None, "--leader", help="Filter by leader symbol"),
+        follower: str | None = typer.Option(None, "--follower", help="Filter by follower symbol"),
+        limit: int | None = typer.Option(
+            None,
+            "--limit",
+            help="Max signals (newest first). Omit for no cap (full window; may be slow).",
+        ),
+        round_trip_cost_bps: float | None = typer.Option(
+            None,
+            "--round-trip-cost-bps",
+            help="Round-trip cost in bps (one per leg). Default: research_default_round_trip_cost_bps.",
+        ),
+        holdout: bool = typer.Option(
+            False,
+            "--holdout",
+            help="Mark JSON evaluation_context.window_role=holdout; use --start/--end as hold-out dates.",
+        ),
+    ) -> None:
+        """H1 Steps 4–5: B1 baseline, gross/net excess (JSON). See docs/PRIMARY_HYPOTHESIS.md.
+
+        Step 5: net arms use the same cost model as research_execution / simulate --cost_pct.
+        Treatment-only aggregates: ``leader-follower-aggregates``.
+        """
+        from backend.app.services.leader_follower_evaluation_service import (
+            build_b1_excess_pair_aggregates,
+        )
+
+        start_d = parse_cli_date(start) if start else None
+        end_d = parse_cli_date(end) if end else None
+        if start_d is not None and end_d is not None and start_d > end_d:
+            typer.echo("Error: --start must be on or before --end", err=True)
+            raise typer.Exit(1)
+
+        leader_u = leader.strip().upper() if leader and leader.strip() else None
+        follower_u = follower.strip().upper() if follower and follower.strip() else None
+        if holdout:
+            typer.echo(
+                "Note: --holdout tags JSON only; ensure --start/--end match your preregistered hold-out.",
+                err=True,
+            )
+
+        init_db()
+        db = SessionLocal()
+        try:
+            report = build_b1_excess_pair_aggregates(
+                db,
+                start_d,
+                end_d,
+                leader=leader_u,
+                follower=follower_u,
+                limit=limit,
+                round_trip_cost_bps=round_trip_cost_bps,
+                window_role="holdout" if holdout else None,
+            )
+            typer.echo(json.dumps(report, indent=2, default=str))
+        finally:
+            db.close()
+
     @evaluate_app.command("volume-spike")
     def evaluate_volume_spike(
         start: str | None = typer.Option(None, "--start", "-s", help="Filter event_date >= (YYYY-MM-DD)"),
@@ -1642,5 +1714,95 @@ def register_evaluate(app: typer.Typer) -> None:
                         default=str,
                     )
                 )
+        finally:
+            db.close()
+
+    @evaluate_app.command("extreme-move-quarterly-stability")
+    def evaluate_extreme_move_quarterly_stability(
+        train_end: str = typer.Option(
+            "2025-02-03",
+            "--train-end",
+            help="Train window is event_date < this day (H2: hold-out start)",
+        ),
+        horizon: int = typer.Option(
+            5,
+            "--horizon",
+            help="Forward horizon in trading days (H2 primary K=5)",
+            min=1,
+        ),
+        min_n: int = typer.Option(
+            20,
+            "--min-n",
+            help="Minimum evaluable extreme_down events per quarter to enter majority vote",
+            min=1,
+        ),
+    ) -> None:
+        """H2 Step 7 prereg: train-only calendar quarters, mean net for extreme_down (docs/H2_HYPOTHESIS.md)."""
+        from backend.app.services.extreme_move_evaluation_service import (
+            run_h2_quarterly_stability_extreme_down,
+        )
+
+        train_end_d = parse_cli_date(train_end)
+        init_db()
+        db = SessionLocal()
+        try:
+            out = run_h2_quarterly_stability_extreme_down(
+                db,
+                train_end_exclusive=train_end_d,
+                horizon_k=horizon,
+                min_evaluable=min_n,
+            )
+            typer.echo(json.dumps(out, indent=2, default=str))
+            v = out.get("verdict")
+            b = out.get("brittle_per_majority_rule")
+            typer.echo(
+                f"H2 quarterly stability verdict: {v} (brittle_per_majority_rule={b})",
+                err=True,
+            )
+        finally:
+            db.close()
+
+    @evaluate_app.command("extreme-move-quarterly-stability")
+    def evaluate_extreme_move_quarterly_stability(
+        train_end: str = typer.Option(
+            "2025-02-03",
+            "--train-end",
+            help="Train window is event_date < this day (H2: hold-out start)",
+        ),
+        horizon: int = typer.Option(
+            5,
+            "--horizon",
+            help="Forward horizon in trading days (H2 primary K=5)",
+            min=1,
+        ),
+        min_n: int = typer.Option(
+            20,
+            "--min-n",
+            help="Minimum evaluable extreme_down events per quarter to enter majority vote",
+            min=1,
+        ),
+    ) -> None:
+        """H2 Step 7 prereg: train-only calendar quarters, mean net for extreme_down (docs/H2_HYPOTHESIS.md)."""
+        from backend.app.services.extreme_move_evaluation_service import (
+            run_h2_quarterly_stability_extreme_down,
+        )
+
+        train_end_d = parse_cli_date(train_end)
+        init_db()
+        db = SessionLocal()
+        try:
+            out = run_h2_quarterly_stability_extreme_down(
+                db,
+                train_end_exclusive=train_end_d,
+                horizon_k=horizon,
+                min_evaluable=min_n,
+            )
+            typer.echo(json.dumps(out, indent=2, default=str))
+            v = out.get("verdict")
+            b = out.get("brittle_per_majority_rule")
+            typer.echo(
+                f"H2 quarterly stability verdict: {v} (brittle_per_majority_rule={b})",
+                err=True,
+            )
         finally:
             db.close()

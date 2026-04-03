@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 
 import pytest
 from sqlalchemy import create_engine
@@ -22,7 +22,11 @@ from backend.app.services.extreme_move_evaluation_service import (
     aggregate_evaluation_by_magnitude_volume,
     aggregate_evaluation_by_volume,
     aggregate_extreme_move_summary,
+    calendar_quarter_bounds,
+    h2_stability_brittle_verdict,
+    iter_train_calendar_quarters,
     run_extreme_move_evaluation,
+    run_h2_quarterly_stability_extreme_down,
 )
 
 
@@ -227,6 +231,137 @@ def test_aggregate_extreme_by_symbol_and_type_flat() -> None:
     flat = aggregate_by_type_flat([ev], prices, horizons=(1,))
     full = aggregate_extreme_move_summary([ev], prices, horizons=(1,))
     assert flat == full["by_event_type"]
+
+
+@pytest.mark.unit
+def test_calendar_quarter_bounds_q1_q4() -> None:
+    s, e = calendar_quarter_bounds(2024, 1)
+    assert s == date(2024, 1, 1) and e == date(2024, 3, 31)
+    s, e = calendar_quarter_bounds(2024, 3)
+    assert s == date(2024, 7, 1) and e == date(2024, 9, 30)
+    s, e = calendar_quarter_bounds(2024, 4)
+    assert s == date(2024, 10, 1) and e == date(2024, 12, 31)
+
+
+@pytest.mark.unit
+def test_iter_train_calendar_quarters_respects_exclusive_train_end() -> None:
+    rows = iter_train_calendar_quarters(date(2025, 2, 3))
+    labels = [r[0] for r in rows]
+    assert "2024-Q4" in labels
+    assert "2025-Q1" not in labels
+    assert rows[-1][0] == "2024-Q4"
+
+
+@pytest.mark.unit
+def test_h2_stability_brittle_majority_rule() -> None:
+    assert h2_stability_brittle_verdict(eligible_quarters=0, eligible_non_positive_net=0) is False
+    assert h2_stability_brittle_verdict(eligible_quarters=3, eligible_non_positive_net=2) is True
+    assert h2_stability_brittle_verdict(eligible_quarters=3, eligible_non_positive_net=1) is False
+    assert h2_stability_brittle_verdict(eligible_quarters=4, eligible_non_positive_net=2) is False
+    assert h2_stability_brittle_verdict(eligible_quarters=4, eligible_non_positive_net=3) is True
+
+
+def _weekdays_from(start: date, n: int) -> list[date]:
+    out: list[date] = []
+    d = start
+    while len(out) < n:
+        if d.weekday() < 5:
+            out.append(d)
+        d += timedelta(days=1)
+    return out
+
+
+@pytest.mark.unit
+def test_run_h2_quarterly_stability_no_train_events() -> None:
+    engine = create_engine(
+        "sqlite:///:memory:",
+        future=True,
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.drop_all(bind=engine)
+    Base.metadata.create_all(bind=engine)
+    db = sessionmaker(bind=engine)()
+    try:
+        out = run_h2_quarterly_stability_extreme_down(db, train_end_exclusive=date(2025, 2, 3))
+        assert out["verdict"] == "inconclusive"
+        assert out["quarters"] == []
+        assert out.get("note")
+    finally:
+        db.close()
+
+
+@pytest.mark.unit
+def test_run_h2_quarterly_stability_two_eligible_quarters(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("RESEARCH_DEFAULT_ROUND_TRIP_COST_BPS", "10")
+    get_settings.cache_clear()
+    engine = create_engine(
+        "sqlite:///:memory:",
+        future=True,
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.drop_all(bind=engine)
+    Base.metadata.create_all(bind=engine)
+    db = sessionmaker(bind=engine)()
+    try:
+        db.add(Stock(symbol="S", name="S", sector=None, market_cap=None))
+        # 2024-Q1: 20 rising days -> positive 1d forward
+        q1_days = _weekdays_from(date(2024, 1, 2), 22)
+        # 2024-Q2: 20 falling days -> negative 1d forward
+        q2_days = _weekdays_from(date(2024, 4, 2), 22)
+
+        def add_bar(d: date, close: float) -> None:
+            db.add(
+                PriceData(
+                    stock_symbol="S",
+                    date=d,
+                    open=close,
+                    high=close + 0.1,
+                    low=close - 0.1,
+                    close=close,
+                    volume=1_000_000,
+                )
+            )
+
+        for i, d in enumerate(q1_days[:21]):
+            add_bar(d, 100.0 + i * 0.5)
+        for d in q1_days[:20]:
+            db.add(
+                ExtremeMoveEvent(
+                    symbol="S",
+                    event_date=d,
+                    return_pct=-6.0,
+                    event_type="extreme_down",
+                )
+            )
+        for i, d in enumerate(q2_days[:21]):
+            add_bar(d, 200.0 - i * 0.5)
+        for d in q2_days[:20]:
+            db.add(
+                ExtremeMoveEvent(
+                    symbol="S",
+                    event_date=d,
+                    return_pct=-6.0,
+                    event_type="extreme_down",
+                )
+            )
+        db.commit()
+
+        out = run_h2_quarterly_stability_extreme_down(
+            db,
+            train_end_exclusive=date(2025, 2, 3),
+            horizon_k=1,
+            min_evaluable=20,
+        )
+        assert out["eligible_quarter_count"] >= 2
+        assert out["verdict"] in ("brittle", "not_brittle", "inconclusive")
+        qs = {r["quarter"]: r for r in out["quarters"]}
+        assert qs["2024-Q1"]["evaluable_count"] >= 20
+        assert qs["2024-Q2"]["evaluable_count"] >= 20
+    finally:
+        db.close()
+        get_settings.cache_clear()
 
 
 @pytest.mark.unit

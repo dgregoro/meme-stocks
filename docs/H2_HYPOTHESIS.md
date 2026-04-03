@@ -116,7 +116,7 @@ H2 uses the **same calendar segment as H1** (`docs/PRIMARY_HYPOTHESIS.md`) so ho
 4. **Net returns** — Compute **mean net** at **K=5** from per-event forwards and **10 bps** cost (spreadsheet or small script); or extend evaluation service later with first-class **net** fields (out of scope unless you add it in a tracked commit).
 5. **Costs** — Fixed **10 bps** round-trip unless freeze records an override.
 6. **Hold-out** — Run evaluation **only** on the preregistered window; never tune that window’s dates to maximize metrics.
-7. **Stability** — Run preregistered rolling / multi-split design (e.g. repeat evaluate on **train** slices only for exploratory work; hold-out remains untouched).
+7. **Stability** — **`python3 -m backend.app.cli evaluate extreme-move-quarterly-stability --train-end 2025-02-03 --horizon 5 --min-n 20`** (trains on **`event_date` &lt; train-end** only). Saves JSON if you redirect stdout; stderr prints **verdict** (`not_brittle` / `brittle` / `inconclusive`).
 8. **Decide** — Table mapping § Kill criteria → evidence → **kill / continue / narrow** (same discipline as H1 Step 7).
 
 ### Step 2 run log (template)
@@ -138,6 +138,18 @@ Hold-out **`extreme_down`** only, **K = 5**, **`research_default_round_trip_cost
 | Mean **net** **5d** | **+0.5086%** |
 
 **Step 7** still required: map kill criteria, stability quarters, and explicit **pass / kill / narrow** — this table is **not** a final decision.
+
+### Step 7 run log (quarterly stability)
+
+| Field | Value |
+|--------|--------|
+| Command | **`evaluate extreme-move-quarterly-stability --train-end 2025-02-03 --horizon 5 --min-n 20`** |
+| Workspace note | CI / fresh clones may have an **empty** `data/app.db` → **`verdict: inconclusive`**, **`eligible_quarter_count: 0`**. Re-run after **`backfill daily-prices`** and **`backfill extreme-move`** on the same DB. |
+| **Eligible quarters** (N≥20 per quarter) | *(fill after a populated DB run)* |
+| **Brittle** (strict majority of eligible quarters with mean net K=5 ≤ 0) | *(fill)* |
+| **Verdict** | `not_brittle` \| `brittle` \| `inconclusive` — *(fill)* |
+
+Full JSON (when run): optional path `data/research/h2_quarterly_stability_train_lt_2025-02-03.json`.
 
 ---
 
