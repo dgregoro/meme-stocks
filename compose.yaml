@@ -34,6 +34,7 @@ services:
     environment:
       - PYTHONPATH=/app
       # LOG_FILE=data/logs/app.log  # uncomment to persist yfinance logs in data volume
+      # Resolves to /app/data/app.db in-container (WORKDIR /app; see Containerfile layout).
       - DATABASE_URL=sqlite:///./data/app.db
       - SERVING_FRONTEND=true
     # Reddit credentials: deployment/.env (env_file above)

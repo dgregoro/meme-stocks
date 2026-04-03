@@ -4,12 +4,13 @@ import pytest
 
 from pydantic import ValidationError
 
-from backend.app.config import Settings, get_settings
+from backend.app.config import Settings, default_sqlite_database_url, get_settings
 
 
 def test_get_settings_uses_defaults_when_env_not_set(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    get_settings.cache_clear()
     # Ensure related environment variables are cleared
     monkeypatch.delenv("API_HOST", raising=False)
     monkeypatch.delenv("API_PORT", raising=False)
@@ -22,7 +23,8 @@ def test_get_settings_uses_defaults_when_env_not_set(
     assert settings.api_port == 8000
     assert settings.log_level == "INFO"
     assert settings.log_file == "logs/app.log"
-    assert settings.database_url.startswith("sqlite:///")
+    assert settings.database_url == default_sqlite_database_url()
+    assert settings.database_url.endswith("/data/app.db")
     # Analysis thresholds should have sane defaults
     assert settings.sentiment_positive_threshold == 0.3
     assert settings.sentiment_negative_threshold == -0.2
@@ -54,6 +56,16 @@ def test_settings_can_be_overridden_via_environment(
     assert settings.api_port == 9000
     assert settings.log_level == "DEBUG"
     assert settings.database_url == "sqlite:///./test.db"
+
+
+def test_legacy_database_url_relative_data_app_db_is_anchored(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``.env`` often sets sqlite:///./data/app.db; that must not depend on cwd."""
+    monkeypatch.setenv("DATABASE_URL", "sqlite:///./data/app.db")
+    settings = Settings()
+    assert settings.database_url == default_sqlite_database_url()
+    assert "/data/app.db" in settings.database_url
 
 
 def test_settings_s4_calendar_month_end_mode_trading(monkeypatch: pytest.MonkeyPatch) -> None:

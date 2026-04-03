@@ -1,9 +1,27 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from pathlib import Path
 
-from pydantic import ValidationError, field_validator, model_validator
+from pydantic import Field, ValidationError, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def repository_root() -> Path:
+    """Project root: contains ``data/app.db``.
+
+    This file is ``<repo>/backend/app/config.py``; ``Path.parents[2]`` is ``<repo>``.
+    """
+    return Path(__file__).resolve().parents[2]
+
+
+def default_sqlite_database_url() -> str:
+    """Absolute SQLite URL for ``<repo>/data/app.db`` (independent of process cwd)."""
+    path = (repository_root() / "data" / "app.db").resolve()
+    return f"sqlite:///{path.as_posix()}"
+
+
+_LEGACY_CWD_RELATIVE_APP_DB = "sqlite:///./data/app.db"
 
 
 class Settings(BaseSettings):
@@ -19,7 +37,7 @@ class Settings(BaseSettings):
     app_version: str = "dev"  # Set at build (APP_VERSION) for deploy health validation
     log_file: str = "logs/app.log"  # Third-party noise (yfinance, etc.) written here, not terminal
 
-    database_url: str = "sqlite:///./data/app.db"
+    database_url: str = Field(default_factory=default_sqlite_database_url)
 
     # Analysis thresholds (can be tuned via environment)
     sentiment_positive_threshold: float = 0.3
@@ -264,6 +282,14 @@ class Settings(BaseSettings):
         if not 0 <= v <= 100:
             raise ValueError("RSI thresholds must be between 0 and 100")
         return v
+
+    @model_validator(mode="after")
+    def anchor_legacy_sqlite_app_db_path(self) -> "Settings":
+        """Resolve ``sqlite:///./data/app.db`` to repository ``data/app.db`` (avoids cwd confusion)."""
+        url = (self.database_url or "").strip()
+        if url == _LEGACY_CWD_RELATIVE_APP_DB:
+            self.database_url = default_sqlite_database_url()
+        return self
 
     @model_validator(mode="after")
     def rsi_oversold_less_than_overbought(self) -> "Settings":
