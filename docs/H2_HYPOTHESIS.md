@@ -2,7 +2,7 @@
 
 **Status:** **Frozen (Step 1)** — **2026-03-30**; git tag **`h2-freeze-2026-03-30`** on the commit that records this freeze. Do not treat results as confirmatory until that tag exists locally (and is pushed if you rely on remote history).
 
-**Last updated:** 2026-03-30
+**Last updated:** 2026-04-03 (Step 2–7 evaluation re-run on repopulated `data/app.db`; JSON artifacts under `data/research/`)
 
 ---
 
@@ -119,37 +119,49 @@ H2 uses the **same calendar segment as H1** (`docs/PRIMARY_HYPOTHESIS.md`) so ho
 7. **Stability** — **`python3 -m backend.app.cli evaluate extreme-move-quarterly-stability --train-end 2025-02-03 --horizon 5 --min-n 20`** (trains on **`event_date` &lt; train-end** only). Saves JSON if you redirect stdout; stderr prints **verdict** (`not_brittle` / `brittle` / `inconclusive`).
 8. **Decide** — Table mapping § Kill criteria → evidence → **kill / continue / narrow** (same discipline as H1 Step 7).
 
-### Step 2 run log (template)
+### Step 2 run log (**2026-04-03**, `deployment/.env` + anchored `data/app.db`)
 
 | Step | Command / outcome |
 |------|-------------------|
-| Prices | No **`backfill daily-prices`** in this session — existing **`price_data`** spanned **2023-12-26 → 2025-12-31** (**31 878** rows, **63** symbols). |
-| Events | **`backfill extreme-move --start 2023-12-26 --end 2025-12-31`** → **1 586** events upserted (**813** total **`extreme_down`** rows in DB after run). |
-| Hold-out eval | **`evaluate extreme-move --start 2025-02-03 --end 2025-05-30 --limit 2000`** → **480** events in window (**275** **`extreme_down`**, **205** **`extreme_up`**) with full forward paths at **1/3/5**d. JSON: `data/research/h2_holdout_eval_2025-02-03_2025-05-30.json`. |
+| Seed | **`seed stocks`** → **63** symbols (idempotent). |
+| Prices | **`backfill daily-prices --start 2024-01-02 --end 2025-12-31`** → **31 878** `price_data` rows, **63** symbols. |
+| Events | **`backfill extreme-move --start 2024-01-02 --end 2025-12-31`** → **1 585** events upserted (processing stats); **813** total **`extreme_down`** rows in DB after run. |
+| Hold-out eval | **`evaluate extreme-move --start 2025-02-03 --end 2025-05-30 --limit 2000`** → **480** events (**275** **`extreme_down`**, **205** **`extreme_up`**) with full forward paths at **1/3/5**d. JSON: `data/research/h2_holdout_eval_2025-02-03_2025-05-30.json`. |
 
 ### Step 3–4 snapshot (gross CLI → net by hand)
 
 Hold-out **`extreme_down`** only, **K = 5**, **`research_default_round_trip_cost_bps = 10`** ⇒ subtract **0.10** from reported **`avg_return_pct`** (same convention as merit / H1 helpers: **bps / 100** as percentage points).
 
-| Metric | Value (this run, local DB) |
+| Metric | Value (**2026-04-03** hold-out JSON; matches prior 2026-03 template run) |
 |--------|----------------------------|
 | **N** (evaluable **5d**) | **275** |
 | Mean **gross** **5d** | **+0.6086%** |
 | Mean **net** **5d** | **+0.5086%** |
 
-**Step 7** still required: map kill criteria, stability quarters, and explicit **pass / kill / narrow** — this table is **not** a final decision.
+**Step 7** (below) completes the preregistered stability gate; **Step 8** is an operator judgment on kill §§57–61, not automatic acceptance.
 
-### Step 7 run log (quarterly stability)
+### Step 7 run log (quarterly stability) — **2026-04-03**
 
 | Field | Value |
 |--------|--------|
 | Command | **`evaluate extreme-move-quarterly-stability --train-end 2025-02-03 --horizon 5 --min-n 20`** |
-| Workspace note | CI / fresh clones may have an **empty** `data/app.db` → **`verdict: inconclusive`**, **`eligible_quarter_count: 0`**. Re-run after **`backfill daily-prices`** and **`backfill extreme-move`** on the same DB. |
-| **Eligible quarters** (N≥20 per quarter) | *(fill after a populated DB run)* |
-| **Brittle** (strict majority of eligible quarters with mean net K=5 ≤ 0) | *(fill)* |
-| **Verdict** | `not_brittle` \| `brittle` \| `inconclusive` — *(fill)* |
+| Workspace note | Evaluation CLI now **fails fast** if `stocks` or `price_data` is empty (`DATABASE_UNREADY` / exit **1**). Seed + backfill before this step. |
+| **Eligible quarters** (N≥20 per quarter, `extreme_down`, mean net **K=5**) | **4** — **2024-Q1** (44, net **−0.767%**), **2024-Q2** (82, net **+2.648%**), **2024-Q3** (143, net **−0.852%**), **2024-Q4** (65, net **+0.340%**) |
+| **Brittle** (`eligible_mean_net_non_positive_count` > half of eligible) | **false** (**2** of **4** quarters with mean net ≤ 0; strict majority **not** met) |
+| **Verdict** | **`not_brittle`** |
 
-Full JSON (when run): optional path `data/research/h2_quarterly_stability_train_lt_2025-02-03.json`.
+Full JSON: `data/research/h2_quarterly_stability_train_lt_2025-02-03.json` (stdout includes trailing stderr line with verdict).
+
+### Step 8 — Preliminary kill-criteria read (**2026-04-03**, operator; not a legal/financial recommendation)
+
+| § | Criterion (summary) | Evidence (this repopulated DB) | Triggered? |
+|---|---------------------|--------------------------------|------------|
+| **§58** | Hold-out **&lt; 80** evaluable `extreme_down` | **275** | **No** |
+| **§59** | Mean **net** at **K=5** ≤ **0** (or tiny edge) | **+0.5086%** | **No** (mean **&gt; 0**; map “per day” vs §59 in a short note if you tighten the rule) |
+| **§60** | Stability (preregistered quarters) **brittle** | **`not_brittle`** | **No** |
+| **§61** | 8-week decision timebox | (freeze **2026-03-30** + **56** days → **2026-05-25**) | **Pending** |
+
+**Narrowing / follow-ups (optional):** median **5d** on hold-out `extreme_down` is **slightly negative** (−0.1315% gross in JSON) while the **mean** is positive — document dispersion in any external write-up. Re-run if you change the DB window, thresholds, or cost assumption.
 
 ---
 
