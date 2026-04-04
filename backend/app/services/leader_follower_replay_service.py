@@ -8,12 +8,13 @@ from __future__ import annotations
 
 import logging
 from datetime import date, datetime, timedelta, timezone
-from typing import Any, cast, SupportsIndex
+from typing import Any, SupportsIndex, cast
 
 from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
 from backend.app.clients.alpaca_data_client import AlpacaDataClient
+from backend.app.data.repositories.job_execution_repo import JobExecutionRepository
 from backend.app.config import get_settings
 from backend.app.data.repositories.price_data_repo import PriceDataRepository
 from backend.app.data.repositories.stock_group_repo import StockGroupRepository
@@ -26,6 +27,9 @@ from backend.app.utils.errors import ExternalAPIError
 logger = logging.getLogger(__name__)
 
 LOOKBACK_DAYS = 10  # Ensure enough bars for MIN_BARS_FOR_LEADER + buffer
+
+# Job name for ``job_run_history`` rows created during historical replay (one row per day).
+LEADER_FOLLOWER_REPLAY_JOB_NAME = "leader_follower_replay"
 
 
 def expand_backfill_symbols_with_regime_benchmarks(group_symbols: list[str], extra_symbols_csv: str) -> list[str]:
@@ -256,20 +260,53 @@ def run_backfill(
     missing_warnings: list[str] = []
     errors: list[str] = []
 
+    job_repo = JobExecutionRepository(db)
+
     for d in trading_days:
+        run_id: int | None = None
+        started_at = datetime.now(timezone.utc)
         try:
-            metrics = run_detection_for_date(db, d, run_id=None, idempotent=persist and not replace_range)
+            if persist and not dry_run:
+                run_id = job_repo.insert_run_start(LEADER_FOLLOWER_REPLAY_JOB_NAME, started_at=started_at)
+                db.commit()
+            metrics = run_detection_for_date(db, d, run_id=run_id, idempotent=persist and not replace_range)
             total_leaders += int(cast(SupportsIndex, metrics.get("leader_events_detected", 0) or 0))
             total_candidates += int(cast(SupportsIndex, metrics.get("follower_candidates_found", 0) or 0))
             total_signals += int(cast(SupportsIndex, metrics.get("signals_emitted", 0) or 0))
             total_skipped += int(cast(SupportsIndex, metrics.get("signals_skipped_duplicate", 0) or 0))
             days_processed += 1
+            if run_id is not None:
+                finished_at = datetime.now(timezone.utc)
+                duration = (finished_at - started_at).total_seconds()
+                leaders = int(cast(SupportsIndex, metrics.get("leader_events_detected", 0) or 0))
+                signals = int(cast(SupportsIndex, metrics.get("signals_emitted", 0) or 0))
+                near_miss = int(cast(SupportsIndex, metrics.get("near_miss_count", 0) or 0))
+                summary = f"replay {d}: {leaders} leaders, {signals} signals, {near_miss} near-miss"
+                job_repo.complete_run(
+                    run_id,
+                    success=True,
+                    run_at=finished_at,
+                    duration_seconds=duration,
+                    summary=summary,
+                    metrics=metrics,
+                )
             if dry_run:
                 db.rollback()
             else:
                 db.commit()
         except Exception as exc:
             db.rollback()
+            if run_id is not None:
+                finished_at = datetime.now(timezone.utc)
+                duration = (finished_at - started_at).total_seconds()
+                job_repo.complete_run(
+                    run_id,
+                    success=False,
+                    run_at=finished_at,
+                    duration_seconds=duration,
+                    error_message=str(exc)[:500],
+                )
+                db.commit()
             errors.append(f"{d}: {exc}")
             logger.warning("Replay failed for %s: %s", d, exc)
             days_skipped += 1

@@ -25,10 +25,12 @@ from backend.app.services.leader_follower_evaluation_service import (
     rank_pairs,
     run_evaluation,
 )
+from backend.app.services.leader_follower_replay_service import LEADER_FOLLOWER_REPLAY_JOB_NAME
 
 router = APIRouter(prefix="/api/leader-follower", tags=["leader-follower"])
 
 LEADER_FOLLOWER_JOB = "leader_follower_detection"
+LEADER_FOLLOWER_RUN_JOB_NAMES = (LEADER_FOLLOWER_JOB, LEADER_FOLLOWER_REPLAY_JOB_NAME)
 
 EmptyReason = Literal["no_run", "failed", "stock_groups_empty", "no_leaders", "no_candidates", "no_confirmations", "ok"]
 
@@ -112,7 +114,7 @@ class StatusResponse(BaseModel):
 def get_status(db: Session = Depends(get_session)) -> StatusResponse:
     """One-stop diagnostic: last run, stage counts, empty_reason."""
     job_repo = JobExecutionRepository(db)
-    runs = job_repo.list_recent_runs(job_name=LEADER_FOLLOWER_JOB, limit=1)
+    runs = job_repo.list_recent_runs(limit=1, job_names=LEADER_FOLLOWER_RUN_JOB_NAMES)
     last_run = runs[0] if runs else None
 
     if last_run is None:
@@ -185,10 +187,10 @@ def list_runs(
     """Recent job runs with full metrics for leader-follower detection."""
     job_repo = JobExecutionRepository(db)
     runs = job_repo.list_recent_runs(
-        job_name=LEADER_FOLLOWER_JOB,
         limit=limit,
         since_date=since_date,
         until_date=until_date,
+        job_names=LEADER_FOLLOWER_RUN_JOB_NAMES,
     )
     items = []
     for h in runs:
@@ -386,7 +388,7 @@ def _signal_to_item(signal: Any) -> SignalItem:
 def _build_signals_diagnostics(db: Session) -> SignalsDiagnostics:
     """Build diagnostics from last run for empty signals case."""
     job_repo = JobExecutionRepository(db)
-    runs = job_repo.list_recent_runs(job_name=LEADER_FOLLOWER_JOB, limit=1)
+    runs = job_repo.list_recent_runs(limit=1, job_names=LEADER_FOLLOWER_RUN_JOB_NAMES)
     last_run = runs[0] if runs else None
 
     if last_run is None:

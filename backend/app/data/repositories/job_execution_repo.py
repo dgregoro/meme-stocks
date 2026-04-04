@@ -231,12 +231,19 @@ class JobExecutionRepository:
         limit: int = 200,
         since_date: date | None = None,
         until_date: date | None = None,
+        *,
+        job_names: Sequence[str] | None = None,
     ) -> Sequence[JobRunHistory]:
-        """Return the last `limit` runs, most recent first. If job_name set, filter by job.
+        """Return the last `limit` runs, most recent first.
+
+        If ``job_names`` is set, filter to those job names (``job_name`` is ignored).
+        Else if ``job_name`` is set, filter to that single name.
         If since_date/until_date set, filter run_at to that date range (inclusive).
         """
         stmt = select(JobRunHistory).order_by(JobRunHistory.run_at.desc()).limit(limit)
-        if job_name is not None:
+        if job_names is not None:
+            stmt = stmt.where(JobRunHistory.job_name.in_(job_names))
+        elif job_name is not None:
             stmt = stmt.where(JobRunHistory.job_name == job_name)
         if since_date is not None:
             since_dt = datetime.combine(since_date, time.min, tzinfo=timezone.utc)

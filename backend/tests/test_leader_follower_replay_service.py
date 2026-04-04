@@ -7,17 +7,20 @@ from typing import cast
 from unittest.mock import patch
 
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 # Import main to ensure all models are registered (LeaderEvent has FK to job_run_history)
 from backend.app.main import create_app  # noqa: F401
 from backend.app.data.database import Base
+from backend.app.models.leader_debug_evaluation import LeaderDebugEvaluation
+from backend.app.models.job_run_history import JobRunHistory
 from backend.app.models.price_data import PriceData
 from backend.app.models.stock import Stock
 from backend.app.models.stock_group import StockGroup
 from backend.app.services.leader_follower_replay_service import (
+    LEADER_FOLLOWER_REPLAY_JOB_NAME,
     LOOKBACK_DAYS,
     _parse_bar_date,
     _trading_days,
@@ -200,6 +203,75 @@ def test_run_backfill_dry_run_with_mock_alpaca() -> None:
         assert "leaders_detected" in result
         assert "signals_emitted" in result
         assert result["errors"] == []
+    finally:
+        db.close()
+
+
+@pytest.mark.integration
+def test_run_backfill_persist_writes_replay_job_and_leader_debug_rows() -> None:
+    """Non-dry-run backfill records one job_run_history row per day and leader_debug_evaluations."""
+    engine = create_engine(
+        "sqlite:///:memory:",
+        future=True,
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.drop_all(bind=engine)
+    Base.metadata.create_all(bind=engine)
+    SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    db = SessionLocal()
+    try:
+        db.add(Stock(symbol="AAPL", name="Apple", sector="Tech", market_cap=None))
+        db.add(Stock(symbol="MSFT", name="Microsoft", sector="Tech", market_cap=None))
+        db.add(StockGroup(group_id="tech", stock_symbol="AAPL"))
+        db.add(StockGroup(group_id="tech", stock_symbol="MSFT"))
+        db.commit()
+
+        from backend.app.data.repositories.price_data_repo import PriceDataRepository
+
+        price_repo = PriceDataRepository(db)
+        for d in [
+            date(2024, 5, 20),
+            date(2024, 5, 21),
+            date(2024, 5, 22),
+            date(2024, 5, 23),
+            date(2024, 5, 24),
+            date(2024, 6, 3),
+        ]:
+            for sym in ["AAPL", "MSFT"]:
+                if price_repo.get_for_date(sym, d) is None:
+                    db.add(
+                        PriceData(
+                            stock_symbol=sym,
+                            date=d,
+                            open=100,
+                            high=101,
+                            low=99,
+                            close=100,
+                            volume=1_000_000,
+                        )
+                    )
+        db.commit()
+
+        def _noop_backfill(_db, symbols, start, end):
+            return {"rows_inserted": 0, "symbols_fetched": len(symbols), "errors": []}
+
+        with patch(
+            "backend.app.services.leader_follower_replay_service.backfill_price_data_from_alpaca",
+            side_effect=_noop_backfill,
+        ):
+            result = run_backfill(db, date(2024, 6, 3), date(2024, 6, 3), dry_run=False, persist=True)
+
+        assert result["days_processed"] == 1
+        assert result["errors"] == []
+        n_jobs = db.execute(
+            select(func.count())
+            .select_from(JobRunHistory)
+            .where(JobRunHistory.job_name == LEADER_FOLLOWER_REPLAY_JOB_NAME)
+        ).scalar_one()
+        assert n_jobs == 1
+        n_debug = db.execute(select(func.count()).select_from(LeaderDebugEvaluation)).scalar_one()
+        assert n_debug == 2
     finally:
         db.close()
 

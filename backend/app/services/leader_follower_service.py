@@ -319,51 +319,20 @@ def create_signals(
     return (created, skipped) if idempotent else created
 
 
-def run_detection(db: Session, run_id: int | None = None) -> dict[str, object]:
-    """Run full leader-follower detection pipeline. Returns metrics dict."""
-    from backend.app.data.repositories.leader_follower_signal_repo import LeaderFollowerSignalRepository
-    from backend.app.data.repositories.price_data_repo import PriceDataRepository
-    from backend.app.data.repositories.stock_group_repo import StockGroupRepository
-    from backend.app.data.repositories.stock_repo import StockRepository
+def _persist_debug_evaluations_and_candidate_map(
+    db: Session,
+    event_date: dt.date,
+    run_id: int | None,
+    leader_events: list[LeaderEvent],
+    evaluations: list[dict[str, object]],
+    stock_group_repo: StockGroupRepository,
+    price_repo: PriceDataRepository,
+) -> tuple[dict[int, list[tuple[str, str]]], int, int]:
+    """Persist leader debug evaluations and follower candidates when ``run_id`` is set.
 
-    settings = get_settings()
-    stock_repo = StockRepository(db)
-    price_repo = PriceDataRepository(db)
-    stock_group_repo = StockGroupRepository(db)
-    signal_repo = LeaderFollowerSignalRepository(db)
-
-    grouped_symbols = stock_group_repo.get_all_symbols()
-    grouped_leader_universe_size = len(grouped_symbols)
-
-    if not grouped_symbols:
-        universe_size = len(stock_repo.list())
-        return {
-            "input_universe_size": universe_size,
-            "grouped_leader_universe_size": 0,
-            "leader_events_detected": 0,
-            "follower_candidates_found": 0,
-            "signals_emitted": 0,
-            "symbols_skipped": 0,
-            "errors_count": 0,
-        }
-
-    event_date = compute_event_date(price_repo, stock_repo)
-    if event_date is None:
-        universe_size = len(stock_repo.list())
-        return {
-            "input_universe_size": universe_size,
-            "grouped_leader_universe_size": grouped_leader_universe_size,
-            "leader_events_detected": 0,
-            "follower_candidates_found": 0,
-            "signals_emitted": 0,
-            "symbols_skipped": 0,
-            "errors_count": 0,
-        }
-
-    universe_size = len(stock_repo.list())
-    leader_events, evaluations = detect_leaders(db, event_date, grouped_symbols, run_id=run_id)
-
-    # Persist evaluations and compute near_miss_count when run_id is set
+    Returns ``(candidates_map, total_candidates, near_miss_count)``. When ``run_id`` is
+    None, skips persistence and returns ``near_miss_count`` of 0.
+    """
     near_miss_count = 0
     if run_id is not None:
         from backend.app.data.repositories.leader_debug_repo import LeaderDebugRepository
@@ -427,6 +396,63 @@ def run_detection(db: Session, run_id: int | None = None) -> dict[str, object]:
                 )
                 candidate_repo.add(c)
 
+    return candidates_map, total_candidates, near_miss_count
+
+
+def run_detection(db: Session, run_id: int | None = None) -> dict[str, object]:
+    """Run full leader-follower detection pipeline. Returns metrics dict."""
+    from backend.app.data.repositories.leader_follower_signal_repo import LeaderFollowerSignalRepository
+    from backend.app.data.repositories.price_data_repo import PriceDataRepository
+    from backend.app.data.repositories.stock_group_repo import StockGroupRepository
+    from backend.app.data.repositories.stock_repo import StockRepository
+
+    settings = get_settings()
+    stock_repo = StockRepository(db)
+    price_repo = PriceDataRepository(db)
+    stock_group_repo = StockGroupRepository(db)
+    signal_repo = LeaderFollowerSignalRepository(db)
+
+    grouped_symbols = stock_group_repo.get_all_symbols()
+    grouped_leader_universe_size = len(grouped_symbols)
+
+    if not grouped_symbols:
+        universe_size = len(stock_repo.list())
+        return {
+            "input_universe_size": universe_size,
+            "grouped_leader_universe_size": 0,
+            "leader_events_detected": 0,
+            "follower_candidates_found": 0,
+            "signals_emitted": 0,
+            "symbols_skipped": 0,
+            "errors_count": 0,
+        }
+
+    event_date = compute_event_date(price_repo, stock_repo)
+    if event_date is None:
+        universe_size = len(stock_repo.list())
+        return {
+            "input_universe_size": universe_size,
+            "grouped_leader_universe_size": grouped_leader_universe_size,
+            "leader_events_detected": 0,
+            "follower_candidates_found": 0,
+            "signals_emitted": 0,
+            "symbols_skipped": 0,
+            "errors_count": 0,
+        }
+
+    universe_size = len(stock_repo.list())
+    leader_events, evaluations = detect_leaders(db, event_date, grouped_symbols, run_id=run_id)
+
+    candidates_map, total_candidates, near_miss_count = _persist_debug_evaluations_and_candidate_map(
+        db,
+        event_date,
+        run_id,
+        leader_events,
+        evaluations,
+        stock_group_repo,
+        price_repo,
+    )
+
     signals_emitted = create_signals(
         leader_events,
         candidates_map,
@@ -463,6 +489,10 @@ def run_detection_for_date(
 
     Uses event_date explicitly (skips compute_event_date). When idempotent=True,
     create_signals skips existing signals and returns (created, skipped).
+
+    When ``run_id`` is set, persists ``LeaderDebugEvaluation`` and
+    ``LeaderFollowerCandidate`` rows (same as :func:`run_detection`) and includes
+    ``near_miss_count`` in the returned metrics.
     """
     from backend.app.data.repositories.leader_follower_signal_repo import LeaderFollowerSignalRepository
     from backend.app.data.repositories.price_data_repo import PriceDataRepository
@@ -487,20 +517,16 @@ def run_detection_for_date(
             "event_date": event_date.isoformat(),
         }
 
-    leader_events, _ = detect_leaders(db, event_date, grouped_symbols, run_id=run_id)
-    allowed_pairs = _get_allowed_pairs_for_signals(db, event_date)
-    candidates_map: dict[int, list[tuple[str, str]]] = {}
-    total_candidates = 0
-    for event in leader_events:
-        candidates = select_follower_candidates(event, stock_group_repo, price_repo, event_date)
-        if allowed_pairs is not None:
-            candidates = [
-                (follower_symbol, group_id)
-                for follower_symbol, group_id in candidates
-                if (event.leader_symbol, follower_symbol) in allowed_pairs
-            ]
-        candidates_map[event.id] = candidates
-        total_candidates += len(candidates)
+    leader_events, evaluations = detect_leaders(db, event_date, grouped_symbols, run_id=run_id)
+    candidates_map, total_candidates, near_miss_count = _persist_debug_evaluations_and_candidate_map(
+        db,
+        event_date,
+        run_id,
+        leader_events,
+        evaluations,
+        stock_group_repo,
+        price_repo,
+    )
 
     result = create_signals(
         leader_events,
@@ -516,7 +542,7 @@ def run_detection_for_date(
         signals_emitted = result
         signals_skipped = 0
 
-    return {
+    out: dict[str, object] = {
         "input_universe_size": len(stock_repo.list()),
         "grouped_leader_universe_size": len(grouped_symbols),
         "leader_events_detected": len(leader_events),
@@ -525,6 +551,11 @@ def run_detection_for_date(
         "signals_skipped_duplicate": signals_skipped,
         "event_date": event_date.isoformat(),
     }
+    if run_id is not None:
+        out["near_miss_count"] = near_miss_count
+    if settings.leader_follower_debug_mode:
+        out["debug_mode"] = True
+    return out
 
 
 def load_symbol_to_primary_group_map(

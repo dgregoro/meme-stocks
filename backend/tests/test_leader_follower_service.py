@@ -829,6 +829,67 @@ def test_run_detection_with_run_id_persists_evaluations_and_near_miss_count() ->
 
 
 @pytest.mark.unit
+def test_run_detection_for_date_with_run_id_persists_evaluations_and_near_miss_count() -> None:
+    """Replay path: when run_id is set, same debug + near_miss behavior as run_detection."""
+    from backend.app.data.repositories.leader_debug_repo import LeaderDebugRepository
+    from backend.app.models.job_run_history import JobRunHistory
+
+    session = _create_test_session()
+    run = JobRunHistory(
+        job_name="leader_follower_replay",
+        run_at=datetime(2026, 3, 14, 12, 0, 0, tzinfo=timezone.utc),
+        success=True,
+        error_message=None,
+    )
+    session.add(run)
+    session.flush()
+    run_id = run.id
+
+    stock_repo = StockRepository(session)
+    stock_repo.add(Stock(symbol="GME", name="GameStop", sector="Retail", market_cap=None))
+    stock_repo.add(Stock(symbol="AMC", name="AMC", sector="Entertainment", market_cap=None))
+    group_repo = StockGroupRepository(session)
+    group_repo.add(StockGroup(group_id="meme", stock_symbol="GME"))
+    group_repo.add(StockGroup(group_id="meme", stock_symbol="AMC"))
+    session.commit()
+    _seed_price_bars(
+        session,
+        "GME",
+        [
+            (date(2026, 3, 10), 98, 100),
+            (date(2026, 3, 11), 99, 100),
+            (date(2026, 3, 12), 100, 100),
+            (date(2026, 3, 13), 101, 100),
+            (date(2026, 3, 14), 107, 200),
+        ],
+    )
+    _seed_price_bars(
+        session,
+        "AMC",
+        [
+            (date(2026, 3, 10), 10, 100),
+            (date(2026, 3, 11), 10, 100),
+            (date(2026, 3, 12), 10, 100),
+            (date(2026, 3, 13), 10, 100),
+            (date(2026, 3, 14), 10.4, 130),
+        ],
+    )
+    session.commit()
+
+    with patch("backend.app.services.leader_follower_service.get_settings") as mock:
+        mock.return_value.leader_return_threshold_pct = 5.0
+        mock.return_value.leader_volume_spike_threshold = 1.5
+        mock.return_value.leader_follower_debug_mode = False
+        mock.return_value.leader_follower_cooldown_days = 1
+        metrics = run_detection_for_date(session, date(2026, 3, 14), run_id=run_id)
+    session.commit()
+
+    assert metrics.get("near_miss_count") == 1
+    debug_repo = LeaderDebugRepository(session)
+    assert len(debug_repo.list_by_run_id(run_id, limit=50)) == 2
+
+
+@pytest.mark.unit
 def test_detect_leaders_uses_debug_thresholds_when_debug_mode_enabled() -> None:
     """With leader_follower_debug_mode=True, relaxed thresholds (3%, 1.2x) are used."""
     session = _create_test_session()

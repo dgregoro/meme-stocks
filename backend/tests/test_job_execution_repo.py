@@ -93,6 +93,22 @@ def test_list_recent_runs_filter_by_job(db_session: Session) -> None:
     assert abs((rt_utc - t0).total_seconds()) < 1
 
 
+def test_list_recent_runs_filter_by_job_names(db_session: Session) -> None:
+    """list_recent_runs with job_names filters to the union of those jobs."""
+    t0 = datetime(2026, 3, 1, 10, 0, 0, tzinfo=timezone.utc)
+    t1 = datetime(2026, 3, 1, 11, 0, 0, tzinfo=timezone.utc)
+    t2 = datetime(2026, 3, 1, 12, 0, 0, tzinfo=timezone.utc)
+    db_session.add(JobRunHistory(job_name="job_a", run_at=t0, success=True, error_message=None))
+    db_session.add(JobRunHistory(job_name="job_b", run_at=t1, success=True, error_message=None))
+    db_session.add(JobRunHistory(job_name="job_c", run_at=t2, success=True, error_message=None))
+    db_session.commit()
+
+    repo = JobExecutionRepository(db_session)
+    runs = repo.list_recent_runs(limit=10, job_names=("job_a", "job_c"))
+    assert len(runs) == 2
+    assert {r.job_name for r in runs} == {"job_a", "job_c"}
+
+
 def test_record_run_with_success_and_error(db_session: Session) -> None:
     """record_run stores success and error_message."""
     repo = JobExecutionRepository(db_session)
