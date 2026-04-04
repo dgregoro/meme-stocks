@@ -1,0 +1,52 @@
+{
+  "archived_at_utc": "2026-04-04T01:34:49Z",
+  "purpose": "Reproducibility bundle for leader-follower H1 B1 hold-out and near-miss upgrade exploratory run.",
+  "git": {
+    "sha": "7810b58da906baca9f281e9633c8d521677dd8a9",
+    "branch": "main"
+  },
+  "reference_docs": [
+    "docs/PRIMARY_HYPOTHESIS.md (preregistered hold-out 2025-02-03 .. 2025-05-30; Step 5 B1; near-miss CLI descriptive only)"
+  ],
+  "environment_note": "JSON was generated with DATABASE_URL and credentials as set in the operator environment (typically deployment/.env). Do not commit secrets. Default app DB path in repo: data/app.db.",
+  "artifacts": [
+    {
+      "file": "b1_holdout.json",
+      "description": "H1 Step 5: B1 excess vs DOW-matched non-event days; hold-out window; 10 bps round-trip default unless overridden in env.",
+      "command": "python -m backend.app.cli evaluate leader-follower-b1 --start 2025-02-03 --end 2025-05-30 --holdout"
+    },
+    {
+      "file": "near_miss_upgrade_h5.json",
+      "description": "Exploratory: share of near-miss symbol-days with a qualified leader_events row within next H=5 price_data sessions; no B1 baseline.",
+      "command": "python -m backend.app.cli research leader-follower near-miss-upgrade --start 2024-01-02 --end 2025-12-31 --horizon 5"
+    },
+    {
+      "file": "db_row_counts.txt",
+      "description": "Table row counts from scripts/db_row_counts.py at archive time."
+    },
+    {
+      "file": "b1_holdout.stderr.log",
+      "description": "Typer informational note for --holdout (not part of JSON)."
+    },
+    {
+      "file": "near_miss_upgrade.stderr.log",
+      "description": "Stderr from near-miss CLI (usually empty)."
+    }
+  ],
+  "validation": {
+    "b1_holdout_summary": {
+      "signal_count": 948,
+      "by_horizon_avg_net_excess_pct": {
+        "1d": 0.2209,
+        "3d": 0.238,
+        "5d": 0.8503
+      }
+    },
+    "near_miss_upgrade_h5_summary": {
+      "runs_in_window": 522,
+      "eligible": 30468,
+      "upgrades_within_horizon": 3445,
+      "upgrade_rate": 0.11306944991466457
+    }
+  }
+}

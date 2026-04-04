@@ -1,0 +1,16 @@
+{
+  "since_date": "2024-01-02",
+  "until_date": "2025-12-31",
+  "horizon_sessions": 5,
+  "job_names": [
+    "leader_follower_replay",
+    "leader_follower_detection"
+  ],
+  "runs_in_window": 522,
+  "near_miss_rows_raw": 30783,
+  "near_miss_symbol_days_unique": 30783,
+  "eligible": 30468,
+  "incomplete_horizon": 315,
+  "upgrades_within_horizon": 3445,
+  "upgrade_rate": 0.11306944991466457
+}
