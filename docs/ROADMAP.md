@@ -112,6 +112,7 @@ Items consolidated from codebase analysis. Address when doing maintenance or bef
 | Pydantic validation on CreateTradeRequest | Added Literal, Field(gt=0) constraints |
 | SEC user agent | Added sec_user_agent to config |
 | Use status constants consistently | APIs now use status.HTTP_XXX consistently |
+| Leader-follower replay: near-miss / debug panel data | Persisting `backfill leader-follower` (non–dry-run) creates one `job_run_history` row per day with job name `leader_follower_replay`, plus `LeaderDebugEvaluation` and follower candidate rows (same rules as scheduled detection). `GET /api/leader-follower/runs` and status aggregate scheduled (`leader_follower_detection`) and replay runs by recency. **Research CLI:** `python -m backend.app.cli research leader-follower near-miss-upgrade --start YYYY-MM-DD --end YYYY-MM-DD --horizon H` reports eligible near-miss symbol-days and the share that show a qualified `leader_events` row within the next H `price_data` sessions (JSON). |
 
 #### Remaining
 

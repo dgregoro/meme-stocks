@@ -23,6 +23,53 @@ def register_research(app: typer.Typer) -> None:
     recipe_app = typer.Typer(help="Load and run declarative research recipes.")
     research_app.add_typer(recipe_app, name="recipe")
 
+    lf_research_app = typer.Typer(
+        help="Near-miss / leader-debug statistics from persisted replay or scheduled runs.",
+    )
+    research_app.add_typer(lf_research_app, name="leader-follower")
+
+    @lf_research_app.command("near-miss-upgrade")
+    def research_leader_follower_near_miss_upgrade(
+        start: str = typer.Option(..., "--start", "-s", help="Inclusive window start (YYYY-MM-DD)"),
+        end: str = typer.Option(..., "--end", "-e", help="Inclusive window end (YYYY-MM-DD)"),
+        horizon: int = typer.Option(
+            5,
+            "--horizon",
+            "-h",
+            help="Forward trading sessions (per symbol price_data calendar); must be 1..252",
+        ),
+    ) -> None:
+        """Share of near-miss symbol-days with a qualified leader event within H sessions (JSON)."""
+        from backend.app.data.database import SessionLocal, init_db
+        from backend.app.services.near_miss_leader_analysis_service import run_near_miss_upgrade_analysis
+        from backend.app.utils.errors import DataAccessError
+
+        since_d = parse_cli_date(start)
+        until_d = parse_cli_date(end)
+        if since_d > until_d:
+            typer.echo("Error: --start must be <= --end", err=True)
+            raise typer.Exit(1)
+
+        init_db()
+        db = SessionLocal()
+        try:
+            try:
+                out = run_near_miss_upgrade_analysis(
+                    db,
+                    since_date=since_d,
+                    until_date=until_d,
+                    horizon_sessions=horizon,
+                )
+            except ValueError as e:
+                typer.echo(f"Error: {e}", err=True)
+                raise typer.Exit(1) from e
+            except DataAccessError as e:
+                typer.echo(f"Error: {e}", err=True)
+                raise typer.Exit(2) from e
+            typer.echo(json.dumps(out, indent=2))
+        finally:
+            db.close()
+
     @recipe_app.command("run")
     def research_recipe_run(
         recipe_path: str = typer.Argument(..., help="Path to recipe YAML file"),
